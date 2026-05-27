@@ -21,6 +21,7 @@ import {
   pickExpectedVersion,
 } from '../../utils/document-version.js';
 import { buildWholeDocumentTargetedRegion } from '../../utils/document-write.js';
+import { batchIdentifiersSchema, normalizeBatchIdentifiers } from '../../utils/batch-input.js';
 import { FM } from '../../../constants/frontmatter-fields.js';
 import { computeHash } from '../../../storage/document-primitives.js';
 import type { DocumentToolDeps } from './deps.js';
@@ -37,8 +38,7 @@ export function registerRemoveDocumentTool(server: McpServer, deps: DocumentTool
           'Do not use this for reversible archive-only workflows; use archive_document. Do not expect a restore or trash lifecycle API from this tool. Do not use it for directories; use manage_directory for empty directory removal.\n\n' +
           'Example: remove_document({ "identifiers": ["Notes/old-plan.md", "Scratch/temp.md"] })',
         inputSchema: {
-          identifiers: z
-            .union([z.string(), z.array(z.string())])
+          identifiers: batchIdentifiersSchema
             .describe('One or more document identifiers: path, fq_id, or filename.'),
           expected_version: z.string().optional()
             .describe('Optional source file version_token precondition for opt-in conflict detection.'),
@@ -58,7 +58,7 @@ export function registerRemoveDocumentTool(server: McpServer, deps: DocumentTool
           const supabase = supabaseManager.getClient();
           const vaultRoot = config.instance.vault.path;
           const isBatch = Array.isArray(identifiers);
-          const ids = isBatch ? identifiers : [identifiers];
+          const ids = normalizeBatchIdentifiers(identifiers);
           const results: Array<Record<string, unknown>> = [];
           const warnings = ids.length > 5 ? [`bulk_removal: ${ids.length} items`] : [];
           const expectedVersion = pickExpectedVersion({ expected_version, if_match });
@@ -66,7 +66,8 @@ export function registerRemoveDocumentTool(server: McpServer, deps: DocumentTool
             ? resolveTrashRoot(vaultRoot, config.trashFolder.path)
             : null;
 
-          for (const id of ids) {
+          for (const item of ids) {
+            const id = item.identifier;
             try {
               if (typeof id !== 'string' || id.trim() === '') {
                 results.push({
@@ -91,7 +92,8 @@ export function registerRemoveDocumentTool(server: McpServer, deps: DocumentTool
               const relativePath = resolved.relativePath;
               const rawContent = await readFile(resolved.absPath, 'utf-8');
               const currentVersionToken = computeVersionToken(rawContent);
-              if (expectedVersion && expectedVersion !== currentVersionToken) {
+              const itemExpectedVersion = item.version_token ?? expectedVersion;
+              if (itemExpectedVersion && itemExpectedVersion !== currentVersionToken) {
                 results.push(buildVersionMismatchEnvelope({
                   identifier: id,
                   versionToken: currentVersionToken,

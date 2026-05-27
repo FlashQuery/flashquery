@@ -54,6 +54,7 @@ import {
   computeVersionToken,
   pickExpectedVersion,
 } from '../utils/document-version.js';
+import { batchIdentifierItemSchema, batchIdentifiersSchema, normalizeBatchIdentifiers } from '../utils/batch-input.js';
 
 type HeadingMatchInput = {
   heading?: string;
@@ -258,8 +259,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
       description:
         'Transitional macro-dependent helper retained until call_macro parity: add a wiki-style document link ([[Target Doc]]) to one or more source documents and return ordered JSON document identification results. Deduplicates automatically and returns status:"unchanged" per source when the link already exists. Resolve the single target by target_identifier and sources by identifiers. Optionally specify which frontmatter property to use (default: "links"; alternatives: "related", "parent", etc.). Removal gate: call_macro must cover this workflow before this transitional tool is removed.',
       inputSchema: {
-        identifiers: z
-          .union([z.string(), z.array(z.string())])
+        identifiers: batchIdentifiersSchema
           .describe('Source document identifier or identifiers — each accepts UUID, vault-relative path, or filename'),
         target_identifier: z
           .string()
@@ -291,7 +291,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
       try {
         const supabase = supabaseManager.getClient();
         const targetProperty = property ?? 'links';
-        const sourceIdentifiers = Array.isArray(identifiers) ? identifiers : [identifiers];
+        const sourceIdentifiers = normalizeBatchIdentifiers(identifiers);
 
         let targetResolved: Awaited<ReturnType<typeof resolveDocumentIdentifier>>;
         try {
@@ -322,13 +322,15 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const results: Array<Record<string, unknown>> = [];
         const expectedVersion = pickExpectedVersion({ expected_version, if_match });
 
-        for (const sourceIdentifier of sourceIdentifiers) {
+        for (const sourceItem of sourceIdentifiers) {
+          const sourceIdentifier = sourceItem.identifier;
           try {
             const sourceResolved = await resolveDocumentIdentifier(config, supabase, sourceIdentifier, logger);
             const conflict = await withAncestorDirectoryLocksShared(config, sourceResolved.absPath, async () =>
               withDocumentLock(config, sourceResolved.absPath, async () => {
             const raw = await readFile(sourceResolved.absPath, 'utf-8');
-            if (expectedVersion && expectedVersion !== computeVersionToken(raw)) {
+            const itemExpectedVersion = sourceItem.version_token ?? expectedVersion;
+            if (itemExpectedVersion && itemExpectedVersion !== computeVersionToken(raw)) {
               return versionMismatchPayload({
                 identifier: sourceIdentifier,
                 currentRaw: raw,
@@ -424,16 +426,25 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         'Add or remove tags on ordered document and memory targets in a single call. Pass targets: [{ entity_type, identifier }] to tag explicit documents or memories. Add is idempotent; removing a tag that does not exist is a silent no-op.',
       inputSchema: {
         targets: z
-          .array(z.object({
-            entity_type: z.enum(['document', 'memory']),
-            identifier: z.string(),
-            expected_version: z.string().optional(),
-            if_match: z.string().optional(),
-          }))
+          .array(z.union([
+            z.strictObject({
+              entity_type: z.literal('document'),
+              identifier: z.string(),
+              version_token: z.string().optional(),
+              expected_version: z.string().optional(),
+              if_match: z.string().optional(),
+            }),
+            z.strictObject({
+              entity_type: z.literal('memory'),
+              identifier: z.string(),
+              expected_version: z.string().optional(),
+              if_match: z.string().optional(),
+            }),
+          ]))
           .optional()
           .describe('Ordered targets to tag. Each target declares document or memory explicitly.'),
         identifiers: z
-          .union([z.string(), z.array(z.string())])
+          .union([z.string(), z.array(batchIdentifierItemSchema)])
           .optional()
           .describe(
             'One or more document identifiers — each can be a vault-relative path, fqc_id UUID, or filename. Use this OR memory_id.'
@@ -472,7 +483,11 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
         const normalizedTargets = targets ??
           (identifiers
-            ? (Array.isArray(identifiers) ? identifiers : [identifiers]).map((id) => ({ entity_type: 'document' as const, identifier: id }))
+            ? normalizeBatchIdentifiers(identifiers).map((item) => ({
+                entity_type: 'document' as const,
+                identifier: item.identifier,
+                ...(item.version_token === undefined ? {} : { version_token: item.version_token }),
+              }))
             : memory_id
               ? [{ entity_type: 'memory' as const, identifier: memory_id }]
               : []);
@@ -500,7 +515,10 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           if (target.entity_type === 'document') {
             const id = target.identifier;
             const expectedVersion = pickExpectedVersion({
-              expected_version: ('expected_version' in target ? target.expected_version : undefined) ?? expected_version,
+              expected_version:
+                ('version_token' in target ? target.version_token : undefined) ??
+                ('expected_version' in target ? target.expected_version : undefined) ??
+                expected_version,
               if_match: ('if_match' in target ? target.if_match : undefined) ?? if_match,
             });
             try {

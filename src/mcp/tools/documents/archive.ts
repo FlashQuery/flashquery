@@ -20,6 +20,7 @@ import {
   pickExpectedVersion,
 } from '../../utils/document-version.js';
 import { buildWholeDocumentTargetedRegion } from '../../utils/document-write.js';
+import { batchIdentifiersSchema, normalizeBatchIdentifiers } from '../../utils/batch-input.js';
 import { FM } from '../../../constants/frontmatter-fields.js';
 import { computeHash } from '../../../storage/document-primitives.js';
 import type { DocumentToolDeps } from './deps.js';
@@ -33,8 +34,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
         description:
           'Archive one or more documents by setting their status to \'archived\'. The file remains in the vault and its fqc_id is preserved — nothing is deleted. Accepts identifiers by path, fqc_id, or filename. Archived documents are excluded from search results. Use this when the user is done with a document but may want to reference it later.',
         inputSchema: {
-          identifiers: z
-            .union([z.string(), z.array(z.string())])
+          identifiers: batchIdentifiersSchema
             .describe(
               'One or more document identifiers — each can be a vault-relative path, fqc_id UUID, or filename. See identifier resolution rules.'
             ),
@@ -61,11 +61,12 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
         try {
           const supabase = supabaseManager.getClient();
           const isBatch = Array.isArray(identifiers);
-          const ids = isBatch ? identifiers : [identifiers];
+          const ids = normalizeBatchIdentifiers(identifiers);
           const results: Array<Record<string, unknown>> = [];
           const expectedVersion = pickExpectedVersion({ expected_version, if_match });
 
-          for (const id of ids) {
+          for (const item of ids) {
+            const id = item.identifier;
             try {
               if (typeof id !== 'string' || id.trim() === '') {
                 results.push({
@@ -83,7 +84,8 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
               const relativePath = resolved.relativePath;
               const rawContent = await readFile(resolved.absPath, 'utf-8');
               const currentVersionToken = computeVersionToken(rawContent);
-              if (expectedVersion && expectedVersion !== currentVersionToken) {
+              const itemExpectedVersion = item.version_token ?? expectedVersion;
+              if (itemExpectedVersion && itemExpectedVersion !== currentVersionToken) {
                 results.push(buildVersionMismatchEnvelope({
                   identifier: id,
                   versionToken: currentVersionToken,

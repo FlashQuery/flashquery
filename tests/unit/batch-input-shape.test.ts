@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { registerCompoundTools } from '../../src/mcp/tools/compound.js';
 import { registerDocumentTools } from '../../src/mcp/tools/documents.js';
+import { batchConflicted, batchFailed, batchSucceeded } from '../../src/mcp/utils/response-formats.js';
 
 vi.mock('../../src/storage/supabase.js', () => ({
   supabaseManager: { getClient: vi.fn(() => ({ from: vi.fn() })) },
@@ -165,5 +166,44 @@ describe('T-U-027 unsupported positional token shapes', () => {
       targets: [{ entity_type: 'document', identifier: 'Notes/missing-token.md' }],
       add_tags: ['#topic/test'],
     }).success).toBe(true);
+  });
+});
+
+describe('REQ-018 batch item response wrappers', () => {
+  it('keeps unified batch status separate from legacy per-tool payload status fields', () => {
+    expect(batchSucceeded('Notes/archived.md', { status: 'archived', archived_at: '2026-05-27T00:00:00.000Z' })).toEqual({
+      identifier: 'Notes/archived.md',
+      status: 'succeeded',
+      data: {
+        status: 'archived',
+        archived_at: '2026-05-27T00:00:00.000Z',
+      },
+    });
+
+    expect(batchConflicted('Notes/conflict.md', {
+      error: 'conflict',
+      message: 'Version mismatch',
+      identifier: 'Notes/conflict.md',
+      version_token: 'new-token',
+      details: { reason: 'version_mismatch' },
+    })).toMatchObject({
+      identifier: 'Notes/conflict.md',
+      status: 'conflicted',
+      error: {
+        error: 'conflict',
+        version_token: 'new-token',
+        details: { reason: 'version_mismatch' },
+      },
+    });
+
+    expect(batchFailed('Notes/missing.md', {
+      error: 'not_found',
+      message: 'No document matches identifier',
+      identifier: 'Notes/missing.md',
+    })).toMatchObject({
+      identifier: 'Notes/missing.md',
+      status: 'failed',
+      error: { error: 'not_found' },
+    });
   });
 });

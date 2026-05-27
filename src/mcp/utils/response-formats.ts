@@ -236,6 +236,35 @@ export function batchResult(results: unknown[]): unknown[] {
   return results;
 }
 
+export type BatchItemResult<TSuccess = unknown> =
+  | { identifier: string; status: 'succeeded'; data: TSuccess }
+  | { identifier: string; status: 'conflicted'; error: ErrorEnvelope }
+  | { identifier: string; status: 'failed'; error: ErrorEnvelope };
+
+export function batchSucceeded<TSuccess>(identifier: string, data: TSuccess): BatchItemResult<TSuccess> {
+  return {
+    identifier,
+    status: 'succeeded',
+    data,
+  };
+}
+
+export function batchConflicted(identifier: string, envelope: ErrorEnvelope): BatchItemResult {
+  return {
+    identifier,
+    status: 'conflicted',
+    error: envelope,
+  };
+}
+
+export function batchFailed(identifier: string, error: ErrorEnvelope): BatchItemResult {
+  return {
+    identifier,
+    status: 'failed',
+    error,
+  };
+}
+
 export function documentIdentification(input: DocumentIdentificationInput): {
   identifier: string;
   title: string;
