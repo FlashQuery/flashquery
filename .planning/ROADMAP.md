@@ -46,7 +46,7 @@
 - [x] **Phase 160: Folder Locks + Manage Directory Migration** - Folder operations coordinate safely with descendant file writes using shared/exclusive advisory locks. (completed 2026-05-27)
 - [x] **Phase 161: Destination Locks + EXDEV Fallback** - Create, copy, and move operations lock destination paths and move safely across devices. (completed 2026-05-27)
 - [x] **Phase 162: Version-fingerprint Check** - Reads and writes expose version tokens and callers can opt into conflict detection. (completed 2026-05-27)
-- [ ] **Phase 163: Multi-file Batch Contract** - Batch tools accept mixed identifier/token inputs and return ordered per-item results.
+- [x] **Phase 163: Multi-file Batch Contract** - Batch tools accept mixed identifier/token inputs and return ordered per-item results. (completed 2026-05-27)
 
 ## Phase Details
 
@@ -309,10 +309,10 @@ Plans:
 
 Plans:
 
-- [ ] 163-01-PLAN.md — Shared mixed batch contracts, schema widening, and T-U-026/T-U-027 unit coverage.
-- [ ] 163-02-PLAN.md — archive_document/remove_document per-item batch envelopes and T-I-034 through T-I-037 coverage.
-- [ ] 163-03-PLAN.md — insert_doc_link/apply_tags mixed input handling, help updates, and T-I-038 coverage.
-- [ ] 163-04-PLAN.md — INT-WCO-02/INT-WCO-03 scenario coverage and final Phase 163 evidence.
+- [x] 163-01-PLAN.md — Shared mixed batch contracts, schema widening, and T-U-026/T-U-027 unit coverage.
+- [x] 163-02-PLAN.md — archive_document/remove_document per-item batch envelopes and T-I-034 through T-I-037 coverage.
+- [x] 163-03-PLAN.md — insert_doc_link/apply_tags mixed input handling, help updates, and T-I-038 coverage.
+- [x] 163-04-PLAN.md — INT-WCO-02/INT-WCO-03 scenario coverage and final Phase 163 evidence.
 
 ## Progress
 
@@ -329,7 +329,7 @@ Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 →
 | 160. Folder Locks + Manage Directory Migration | 4/4 | Complete   | 2026-05-27 |
 | 161. Destination Locks + EXDEV Fallback | 4/4 | Complete    | 2026-05-27 |
 | 162. Version-fingerprint Check | 6/6 | Complete    | 2026-05-27 |
-| 163. Multi-file Batch Contract | 0/TBD | Not started | - |
+| 163. Multi-file Batch Contract | 4/4 | Complete    | 2026-05-27 |
 
 ## Archived Milestone Details
 

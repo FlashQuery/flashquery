@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.9
 milestone_name: Vault Write Coherency Locking
-status: ready_to_plan
-stopped_at: Phase 162 complete (6/6) — ready to discuss Phase 163
-last_updated: 2026-05-27T17:42:42.848Z
-last_activity: 2026-05-27 -- Phase 162 marked complete
+status: milestone_complete
+stopped_at: Milestone complete (Phase 163 was final phase)
+last_updated: 2026-05-27T20:39:44.712Z
+last_activity: 2026-05-27 -- Phase 163 execution started
 progress:
   total_phases: 9
   completed_phases: 8
-  total_plans: 34
-  completed_plans: 34
+  total_plans: 38
+  completed_plans: 38
   percent: 89
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-26)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 163 — multi file batch contract
+**Current focus:** Milestone complete
 
 ## Current Position
 
 Phase: 163
 Plan: Not started
-Status: Ready to plan
+Status: Milestone complete
 Last activity: 2026-05-27
 
 Progress: [██████████] 100%
@@ -36,7 +36,7 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 21 (this milestone)
+- Total plans completed: 25 (this milestone)
 - Average duration: —
 - Total execution time: 0 hours
 
@@ -52,7 +52,7 @@ Progress: [██████████] 100%
 | 160 | 4 | - | - |
 | 161 | 4 | - | - |
 | 162 | 6 | - | - |
-| 163 | TBD | - | - |
+| 163 | 4 | - | - |
 
 *Updated after each plan completion*
 | Phase 158-tier-2-lock-table-retirement-session-check P02 | 8 min | 2 tasks | 13 files |
