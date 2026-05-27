@@ -121,6 +121,25 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
             identifier,
           });
         }
+        if (!sourceFqcId) {
+          const sourceContent = await readFile(sourceAbsPath, 'utf-8');
+          const { data: sourceFm } = matter(sourceContent);
+          if (typeof sourceFm[FM.ID] !== 'string' || sourceFm[FM.ID].trim() === '') {
+            return jsonExpectedError({
+              error: 'invalid_input',
+              message: 'move_document requires a tracked document with an fq_id.',
+              identifier,
+              details: { reason: 'untracked_document' },
+            });
+          }
+
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: 'move_document requires the source document to be indexed before moving.',
+            identifier,
+            details: { reason: 'unindexed_document' },
+          });
+        }
 
         // Step 3: Validate and normalize destination path
         let destPath = destination.trim();

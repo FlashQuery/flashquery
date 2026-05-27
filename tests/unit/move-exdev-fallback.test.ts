@@ -259,4 +259,25 @@ describe('REQ-022 move-exdev-fallback', () => {
       path: 'canonical.md',
     });
   });
+
+  it('rejects untracked source documents before moving filesystem bytes', async () => {
+    resolverMock.resolveDocumentIdentifier.mockResolvedValue({
+      absPath: '/tmp/fq-vault/source.md',
+      relativePath: 'source.md',
+      fqcId: null,
+      resolvedVia: 'path',
+    });
+    fsPromisesMock.readFile.mockResolvedValueOnce('plain untracked body');
+
+    const moveDocument = await registerMoveTool();
+    const result = await moveDocument({ identifier: 'source.md', destination: 'dest.md' });
+
+    expect(fsPromisesMock.rename).not.toHaveBeenCalled();
+    expect(vaultWriteMock.writeVaultFile).not.toHaveBeenCalled();
+    expect(fsPromisesMock.unlink).not.toHaveBeenCalled();
+    expect(parsePayload(result)).toMatchObject({
+      error: 'invalid_input',
+      details: { reason: 'untracked_document' },
+    });
+  });
 });
