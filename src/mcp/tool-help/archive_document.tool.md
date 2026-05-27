@@ -5,6 +5,8 @@ help_hint: "Use archive_document when a document should leave normal search/list
 tier: read-write
 args:
   identifiers: "Required document identifier or identifier array."
+  expected_version: "Optional source file version_token precondition."
+  if_match: "Alias for expected_version."
 ---
 
 # archive_document
@@ -18,10 +20,12 @@ Use `archive_document` to mark documents archived while keeping the Markdown fil
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `identifiers` | string or string[] | yes | none | One or more document identifiers. Each may be a vault-relative path, filename, or `fq_id`. |
+| `expected_version` | string | no | none | Optional source-file `version_token` precondition. |
+| `if_match` | string | no | none | Alias for `expected_version`. |
 
 ## Returns
 
-Returns JSON text. A single identifier returns one archive result or an expected error. Batch input returns an array preserving input order. Successful entries include `identifier`, `title`, `path`, `fq_id`, `modified`, `size.chars`, `status: "archived"`, and `archived_at`.
+Returns JSON text. A single identifier returns one archive result or an expected error. Batch input returns an array preserving input order. Successful entries include `identifier`, `title`, `path`, `fq_id`, `modified`, `size.chars`, `status: "archived"`, `archived_at`, and post-archive `version_token`.
 
 ## Examples
 
@@ -37,12 +41,19 @@ Archives one document and returns its archived document block.
 
 Archives the first document and reports a per-item error for the missing one.
 
+```json
+{ "identifiers": "Projects/Old Plan.md", "if_match": "..." }
+```
+
+Archives only if the source file still has the supplied whole-file `version_token`. Omitting `expected_version` and `if_match` keeps last-writer-wins behavior.
+
 ## Gotchas
 
 - This is not a delete operation. Use `remove_document` when the file should move to trash or be physically removed.
 - Re-archiving is idempotent and preserves an existing `archived_at` timestamp.
 - Ambiguous filenames return an expected `ambiguous_identifier` error.
 - Document locking may return a conflict if another process is writing documents.
+- Stale `expected_version` or `if_match` values refer to the source file and return a `conflict` with the current `version_token`.
 
 ## Related Tools
 

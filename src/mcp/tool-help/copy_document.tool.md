@@ -6,6 +6,8 @@ tier: read-write
 args:
   identifier: "Required source document identifier."
   destination: "Optional vault-relative destination path."
+  expected_version: "Optional source file version_token precondition."
+  if_match: "Alias for expected_version."
 ---
 
 # copy_document
@@ -20,10 +22,12 @@ Use `copy_document` to duplicate one document as a new document. The source body
 | --- | --- | --- | --- | --- |
 | `identifier` | string | yes | none | Source document identifier: vault-relative path, filename, or `fq_id`. |
 | `destination` | string | no | root filename based on source title | Vault-relative path for the new copy. |
+| `expected_version` | string | no | none | Optional source-file `version_token` precondition. |
+| `if_match` | string | no | none | Alias for `expected_version`. |
 
 ## Returns
 
-Returns JSON text with a document identification block for the new copy: `identifier`, `title`, `path`, `fq_id`, `modified`, and `size.chars`. Expected errors cover missing/ambiguous source identifiers, unsafe destination paths, destination conflicts, and invalid source tags.
+Returns JSON text with a document identification block for the new copy: `identifier`, `title`, `path`, `fq_id`, `modified`, `size.chars`, and destination `version_token`. Expected errors cover missing/ambiguous source identifiers, unsafe destination paths, destination conflicts, invalid source tags, and stale source `expected_version` / `if_match` conflicts.
 
 ## Examples
 
@@ -39,12 +43,19 @@ Creates a copy at the requested path.
 
 Copies to the vault root using the source title as the filename.
 
+```json
+{ "identifier": "Templates/Meeting.md", "destination": "Meetings/Copy.md", "if_match": "..." }
+```
+
+Copies only if the source file still has the supplied whole-file `version_token`. The success `version_token` describes the new destination file. Omitting `expected_version` and `if_match` keeps last-writer-wins source behavior.
+
 ## Gotchas
 
 - This tool is intentionally single-target. Array input is rejected.
 - Destination paths must stay inside the vault and must not already exist.
 - You cannot override title, body, tags, or frontmatter during copy. Copy first, then call `write_document` if customization is needed.
 - Background embedding refresh happens after the MCP response.
+- Stale `expected_version` or `if_match` values refer to source bytes; destination existence is still checked under the destination lock.
 
 ## Related Tools
 

@@ -5,6 +5,8 @@ help_hint: "Use remove_document when a document should leave normal vault workfl
 tier: read-write
 args:
   identifiers: "Required document identifier or identifiers."
+  expected_version: "Optional source file version_token precondition."
+  if_match: "Alias for expected_version."
 ---
 
 # remove_document
@@ -18,10 +20,12 @@ Use `remove_document` when documents should no longer appear in normal vault wor
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `identifiers` | string or string[] | yes | none | One or more document identifiers: path, fq_id, or filename. |
+| `expected_version` | string | no | none | Optional source-file `version_token` precondition. |
+| `if_match` | string | no | none | Alias for `expected_version`. |
 
 ## Returns
 
-Returns JSON text. Single-string input returns one removal result; array input returns ordered per-document results. Successful entries include document identification with `size.chars`, archived lifecycle metadata, and `moved_to` removal destination details. Expected errors are returned per item for invalid identifiers, missing documents, unsafe trash config, or conflicts.
+Returns JSON text. Single-string input returns one removal result; array input returns ordered per-document results. Successful entries include document identification with `size.chars`, archived lifecycle metadata, and `moved_to` removal destination details. `remove_document` success omits `version_token` because the source file no longer remains at its original path. Expected errors are returned per item for invalid identifiers, missing documents, unsafe trash config, or conflicts.
 
 ## Examples
 
@@ -37,12 +41,19 @@ Removes one document.
 
 Removes an ordered batch.
 
+```json
+{ "identifiers": "Scratch/Old.md", "expected_version": "..." }
+```
+
+Removes only if the source file still has the supplied whole-file `version_token`. Omitting `expected_version` and `if_match` keeps last-writer-wins behavior.
+
 ## Gotchas
 
 - Use `archive_document` for reversible archive-only behavior.
 - This tool has no restore API.
 - Directory removal belongs to `manage_directory`.
 - Trash destinations use basename-only collision handling.
+- Stale `expected_version` or `if_match` values refer to the source/removed file and return a `conflict` with the current `version_token`.
 
 ## Related Tools
 
