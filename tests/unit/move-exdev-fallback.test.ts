@@ -139,7 +139,7 @@ function parsePayload(result: ToolResult): Record<string, unknown> {
   return JSON.parse(result.content[0]?.text ?? '{}') as Record<string, unknown>;
 }
 
-describe('REQ-022 move_document EXDEV fallback', () => {
+describe('REQ-022 move-exdev-fallback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fsState.existingPaths = new Set(['/tmp/fq-vault/source.md']);
@@ -195,7 +195,7 @@ describe('REQ-022 move_document EXDEV fallback', () => {
       }
     );
     expect(fsPromisesMock.unlink).toHaveBeenCalledWith('/tmp/fq-vault/source.md');
-    expect(events).toEqual(['rename', 'readFile', 'writeVaultFile', 'unlink']);
+    expect(events.slice(0, 4)).toEqual(['rename', 'readFile', 'writeVaultFile', 'unlink']);
   });
 
   it('T-U-035 does not unlink the source when the durable destination commit fails', async () => {

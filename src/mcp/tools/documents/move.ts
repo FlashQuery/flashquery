@@ -31,6 +31,16 @@ import {
   stringField,
 } from './helpers.js';
 
+function isCrossDeviceRenameError(err: unknown): boolean {
+  if (typeof err === 'object' && err !== null && 'code' in err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'EXDEV') return true;
+  }
+
+  const errMsg = err instanceof Error ? err.message : String(err);
+  return errMsg.includes('EXDEV') || errMsg.includes('Invalid cross-device');
+}
+
 export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDeps): void {
   const { config } = deps;
   server.registerTool(
@@ -159,9 +169,7 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
               try {
                 await rename(sourceAbsPath, destAbsPath);
               } catch (err) {
-                const errMsg = err instanceof Error ? err.message : String(err);
-                // Check if it's EXDEV (cross-device) error
-                if (errMsg.includes('EXDEV') || errMsg.includes('Invalid cross-device')) {
+                if (isCrossDeviceRenameError(err)) {
                   // Fallback: durably write dest, then delete source.
                   const content = await readFile(sourceAbsPath, 'utf-8');
                   await writeVaultFile(destAbsPath, content, { lockConfig: config });
