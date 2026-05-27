@@ -203,7 +203,13 @@ Plans:
   - Execution must prove shared file-write directory locks, exclusive structural directory locks, and unchanged `manage_directory` conflict semantics.
   - Required execution evidence: `npm run test:integration -- --grep "folder-lock|manage-directory-advisory"`; integration scenario `INT-WCO-01` when the YAML scenario lands.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 160-01-PLAN.md — Add shared/exclusive directory advisory-lock facade helpers.
+- [ ] 160-02-PLAN.md — Wrap file-writing paths with shared ancestor directory locks and add folder-lock integration tests.
+- [ ] 160-03-PLAN.md — Migrate `manage_directory` remove to exclusive advisory directory locks and preserve response shape.
+- [ ] 160-04-PLAN.md — Add `INT-WCO-01` scenario coverage and final Phase 160 validation evidence.
 
 ### Phase 161: Destination Locks + EXDEV Fallback
 
