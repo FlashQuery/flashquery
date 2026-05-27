@@ -44,7 +44,7 @@
 - [x] **Phase 158: Tier 2 + Lock-table Retirement + Session Check** - Cross-process writes use session-scoped Postgres advisory locks and the old lock table/CLI disappears. (completed 2026-05-26)
 - [x] **Phase 159: Lock Timeout + Canonical Key Derivation** - Lock acquisition is bounded and all file/directory keys resolve to canonical path-based identities. (completed 2026-05-27)
 - [x] **Phase 160: Folder Locks + Manage Directory Migration** - Folder operations coordinate safely with descendant file writes using shared/exclusive advisory locks. (completed 2026-05-27)
-- [ ] **Phase 161: Destination Locks + EXDEV Fallback** - Create, copy, and move operations lock destination paths and move safely across devices.
+- [x] **Phase 161: Destination Locks + EXDEV Fallback** - Create, copy, and move operations lock destination paths and move safely across devices. (completed 2026-05-27)
 - [ ] **Phase 162: Version-fingerprint Check** - Reads and writes expose version tokens and callers can opt into conflict detection.
 - [ ] **Phase 163: Multi-file Batch Contract** - Batch tools accept mixed identifier/token inputs and return ordered per-item results.
 
@@ -247,16 +247,16 @@ Plans:
 
 **Wave 1**
 
-- [ ] 161-01-PLAN.md — REQ-008 source assertions, sorted multi-lock proof, and create/copy/move lock-order comments.
+- [x] 161-01-PLAN.md — REQ-008 source assertions, sorted multi-lock proof, and create/copy/move lock-order comments.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 161-02-PLAN.md — REQ-022 EXDEV fallback unit coverage and narrow `move_document` hardening.
-- [ ] 161-03-PLAN.md — REQ-008 destination race integration coverage for create, copy, move, and sorted move locks.
+- [x] 161-02-PLAN.md — REQ-022 EXDEV fallback unit coverage and narrow `move_document` hardening.
+- [x] 161-03-PLAN.md — REQ-008 destination race integration coverage for create, copy, move, and sorted move locks.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 161-04-PLAN.md — REQ-022 integration coverage, D-WCO-03 directed scenario, and final Phase 161 evidence.
+- [x] 161-04-PLAN.md — REQ-022 integration coverage, D-WCO-03 directed scenario, and final Phase 161 evidence.
 
 ### Phase 162: Version-fingerprint Check
 
@@ -312,7 +312,7 @@ Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 →
 | 158. Tier 2 + Lock-table Retirement + Session Check | 6/6 | Complete   | 2026-05-26 |
 | 159. Lock Timeout + Canonical Key Derivation | 5/5 | Complete    | 2026-05-27 |
 | 160. Folder Locks + Manage Directory Migration | 4/4 | Complete   | 2026-05-27 |
-| 161. Destination Locks + EXDEV Fallback | 0/TBD | Not started | - |
+| 161. Destination Locks + EXDEV Fallback | 4/4 | Complete   | 2026-05-27 |
 | 162. Version-fingerprint Check | 0/TBD | Not started | - |
 | 163. Multi-file Batch Contract | 0/TBD | Not started | - |
 

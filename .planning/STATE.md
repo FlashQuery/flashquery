@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v3.9
 milestone_name: Vault Write Coherency Locking
-status: completed
+status: executing
 stopped_at: Phase 160 complete (4/4) — ready for Phase 161
-last_updated: "2026-05-27T03:57:31.340Z"
-last_activity: 2026-05-27 -- Phase 160 marked complete
+last_updated: "2026-05-27T13:27:12.100Z"
+last_activity: 2026-05-27 -- Phase 161 execution started
 progress:
   total_phases: 9
   completed_phases: 6
-  total_plans: 24
+  total_plans: 28
   completed_plans: 24
   percent: 67
 ---
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-26)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 160 — folder-locks-manage-directory-migration
+**Current focus:** Phase 161 — destination-locks-exdev-fallback
 
 ## Current Position
 
-Phase: 160 — COMPLETE
-Plan: 4 of 4
-Status: Phase 160 complete
-Last activity: 2026-05-27 -- Phase 160 marked complete
+Phase: 161 (destination-locks-exdev-fallback) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 161
+Last activity: 2026-05-27 -- Phase 161 execution started
 
 Progress: [██████████] 100%
 

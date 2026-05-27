@@ -1032,7 +1032,7 @@ If during implementation the dev agent finds any decision genuinely underspecifi
 | REQ-005 | Phase 158 | Complete |
 | REQ-006 | Phase 159 | Complete |
 | REQ-007 | Phase 160 | Pending |
-| REQ-008 | Phase 161 | Pending |
+| REQ-008 | Phase 161 | Complete |
 | REQ-009 | Phase 155 | Complete |
 | REQ-010 | Phase 155 | Complete |
 | REQ-011 | Phase 162 | Pending |
@@ -1046,7 +1046,7 @@ If during implementation the dev agent finds any decision genuinely underspecifi
 | REQ-019 | Phase 163 | Pending |
 | REQ-020 | Phase 156 | Complete |
 | REQ-021 | Phase 156 | Complete |
-| REQ-022 | Phase 161 | Pending |
+| REQ-022 | Phase 161 | Complete |
 | REQ-023 | Phase 157 | Complete |
 | REQ-024 | Phase 160 | Pending |
 | REQ-025 | Phase 155 | Complete |
