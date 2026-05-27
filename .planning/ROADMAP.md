@@ -241,7 +241,22 @@ Plans:
   - Execution must prove destination race prevention for create/copy/move, sorted multi-lock acquisition, and EXDEV fallback safety.
   - Required execution evidence: `npm test -- --grep "move-exdev-fallback"`; `npm run test:integration -- --grep "destination-lock|move-exdev"`; directed scenario `D-WCO-03` when it lands.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+
+**Wave 1**
+
+- [ ] 161-01-PLAN.md — REQ-008 source assertions, sorted multi-lock proof, and create/copy/move lock-order comments.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 161-02-PLAN.md — REQ-022 EXDEV fallback unit coverage and narrow `move_document` hardening.
+- [ ] 161-03-PLAN.md — REQ-008 destination race integration coverage for create, copy, move, and sorted move locks.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 161-04-PLAN.md — REQ-022 integration coverage, D-WCO-03 directed scenario, and final Phase 161 evidence.
 
 ### Phase 162: Version-fingerprint Check
 
