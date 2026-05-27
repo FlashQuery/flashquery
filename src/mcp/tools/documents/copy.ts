@@ -17,6 +17,7 @@ import {
   LockTimeoutError,
   withAncestorDirectoryLocksShared,
   withDocumentLock,
+  withDocumentLocks,
 } from '../../../services/document-lock.js';
 import { validateAllTags, deduplicateTags } from '../../../utils/tag-validator.js';
 import { resolveDocumentIdentifier } from '../../utils/resolve-document.js';
@@ -29,6 +30,12 @@ import {
   documentIdentification,
   withWarnings,
 } from '../../utils/response-formats.js';
+import {
+  buildVersionMismatchEnvelope,
+  computeVersionToken,
+  pickExpectedVersion,
+} from '../../utils/document-version.js';
+import { buildWholeDocumentTargetedRegion } from '../../utils/document-write.js';
 import { validateVaultPath } from '../../utils/path-validation.js';
 import { FM } from '../../../constants/frontmatter-fields.js';
 import { extractTemplateMeta } from '../../../llm/template-meta.js';
@@ -89,6 +96,7 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
       }
 
       try {
+        const expectedVersion = pickExpectedVersion({ expected_version, if_match });
         // Resolve source document
         const sourceResolved = await resolveDocumentIdentifier(
           config,
@@ -97,7 +105,8 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
           logger
         );
 
-        // Read source document
+        // Read source document. If a source precondition is supplied, this snapshot
+        // is refreshed again under the source lock below before writing.
         const rawContent = await readFile(sourceResolved.absPath, 'utf-8');
         const parsed = matter(rawContent);
         const sourceData = parsed.data;
@@ -146,8 +155,7 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
         // REQ-008 lock table: copy_document locks destination absPath only.
         // INV-09 order: shared destination ancestor directory locks wrap the file lock;
         // the authoritative destination existence check stays inside withDocumentLock.
-        return await withAncestorDirectoryLocksShared(config, absPath, async () =>
-          withDocumentLock(config, absPath, async () => {
+        const writeCopy = async (lockedParsed: matter.GrayMatterFile<string>) => {
             if (existsSync(absPath)) {
               return jsonExpectedError({
                 error: 'conflict',
@@ -160,7 +168,7 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
             // Build frontmatter for the copy — spread all source fields, override identity/timestamps
             const deduplicated = deduplicateTags(validation.normalized);
             const copyFm: Record<string, unknown> = {
-              ...sourceData,
+              ...lockedParsed.data,
               [FM.TITLE]: copyTitle,
               [FM.ID]: newFqcId,
               [FM.INSTANCE]: config.instance.id,
@@ -172,7 +180,7 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
 
             // Write copy to vault
             const sanitizedFm = serializeOrderedFrontmatter(copyFm);
-            await vaultManager.writeMarkdown(copyRelativePath, sanitizedFm, parsed.content, {
+            await vaultManager.writeMarkdown(copyRelativePath, sanitizedFm, lockedParsed.content, {
               gitAction: 'create',
               gitTitle: copyTitle,
             });
@@ -210,7 +218,7 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
                 id: newFqcId,
                 label: copyRelativePath,
               }),
-              embedText: `${copyTitle}\n\n${parsed.content}`,
+              embedText: `${copyTitle}\n\n${lockedParsed.content}`,
               provider: embeddingProvider,
               supabase,
             });
@@ -232,8 +240,31 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
                 embedResult.warnings
               )
             );
-          })
-        );
+        };
+
+        return await withAncestorDirectoryLocksShared(config, absPath, async () => {
+          if (!expectedVersion) {
+            return withDocumentLock(config, absPath, async () => writeCopy(parsed));
+          }
+
+          return withDocumentLocks(config, [sourceResolved.absPath, absPath], async () => {
+            const lockedRawContent = await readFile(sourceResolved.absPath, 'utf-8');
+            const currentVersionToken = computeVersionToken(lockedRawContent);
+            if (expectedVersion !== currentVersionToken) {
+              return jsonExpectedError(
+                buildVersionMismatchEnvelope({
+                  identifier,
+                  versionToken: currentVersionToken,
+                  targetedRegion: buildWholeDocumentTargetedRegion({
+                    path: sourceResolved.relativePath,
+                    rawContent: lockedRawContent,
+                  }),
+                })
+              );
+            }
+            return writeCopy(matter(lockedRawContent));
+          });
+        });
       } catch (err) {
         if (err instanceof LockTimeoutError) {
           return jsonExpectedError({

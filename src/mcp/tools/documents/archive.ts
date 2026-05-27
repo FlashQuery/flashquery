@@ -14,7 +14,12 @@ import {
 import { resolveDocumentIdentifier, targetedScan } from '../../utils/resolve-document.js';
 import { getIsShuttingDown } from '../../../server/shutdown-state.js';
 import { jsonExpectedError, jsonRuntimeError, jsonToolResult, documentArchiveResult, type ErrorEnvelope } from '../../utils/response-formats.js';
-import { pickExpectedVersion } from '../../utils/document-version.js';
+import {
+  buildVersionMismatchEnvelope,
+  computeVersionToken,
+  pickExpectedVersion,
+} from '../../utils/document-version.js';
+import { buildWholeDocumentTargetedRegion } from '../../utils/document-write.js';
 import { FM } from '../../../constants/frontmatter-fields.js';
 import { computeHash } from '../../../storage/document-primitives.js';
 import type { DocumentToolDeps } from './deps.js';
@@ -76,6 +81,19 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
               await withAncestorDirectoryLocksShared(config, resolved.absPath, async () =>
                 withDocumentLock(config, resolved.absPath, async () => {
               const relativePath = resolved.relativePath;
+              const rawContent = await readFile(resolved.absPath, 'utf-8');
+              const currentVersionToken = computeVersionToken(rawContent);
+              if (expectedVersion && expectedVersion !== currentVersionToken) {
+                results.push(buildVersionMismatchEnvelope({
+                  identifier: id,
+                  versionToken: currentVersionToken,
+                  targetedRegion: buildWholeDocumentTargetedRegion({
+                    path: relativePath,
+                    rawContent,
+                  }),
+                }));
+                return;
+              }
 
               // Step 1: Read current frontmatter (vault-first requires reading before writing)
               let parsed: { data: Record<string, unknown>; content: string };

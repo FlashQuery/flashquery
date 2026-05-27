@@ -22,6 +22,12 @@ import {
   documentIdentification,
   withWarnings,
 } from '../../utils/response-formats.js';
+import {
+  buildVersionMismatchEnvelope,
+  computeVersionToken,
+  pickExpectedVersion,
+} from '../../utils/document-version.js';
+import { buildWholeDocumentTargetedRegion } from '../../utils/document-write.js';
 import { validateVaultPath } from '../../utils/path-validation.js';
 import { FM } from '../../../constants/frontmatter-fields.js';
 import { computeHash } from '../../../storage/document-primitives.js';
@@ -97,6 +103,7 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
       try {
         const vaultRoot = config.instance.vault.path;
         const supabase = supabaseManager.getClient();
+        const expectedVersion = pickExpectedVersion({ expected_version, if_match });
 
         // Step 1: Resolve source identifier
         const resolved = await resolveDocumentIdentifier(config, supabase, identifier, logger);
@@ -182,6 +189,21 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
         return await withAncestorDirectoryLocksShared(config, sourceAbsPath, async () =>
           withAncestorDirectoryLocksShared(config, normalizedDest, async () =>
             withDocumentLocks(config, [sourceAbsPath, normalizedDest], async () => {
+              const sourceRawContent = await readFile(sourceAbsPath, 'utf-8');
+              const currentVersionToken = computeVersionToken(sourceRawContent);
+              if (expectedVersion && expectedVersion !== currentVersionToken) {
+                return jsonExpectedError(
+                  buildVersionMismatchEnvelope({
+                    identifier,
+                    versionToken: currentVersionToken,
+                    targetedRegion: buildWholeDocumentTargetedRegion({
+                      path: resolved.relativePath,
+                      rawContent: sourceRawContent,
+                    }),
+                  })
+                );
+              }
+
               // Step 4: Check if destination already exists
               if (existsSync(destAbsPath)) {
                 return jsonExpectedError({
@@ -213,8 +235,7 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
               } catch (err) {
                 if (isCrossDeviceRenameError(err)) {
                   // Fallback: durably write dest, then delete source.
-                  const content = await readFile(sourceAbsPath, 'utf-8');
-                  await writeVaultFile(destAbsPath, content, { lockConfig: config });
+                  await writeVaultFile(destAbsPath, sourceRawContent, { lockConfig: config });
                   await unlink(sourceAbsPath);
                   logger.info(
                     `move_document: cross-device fallback used for ${identifier} → ${destPath}`

@@ -31,13 +31,18 @@ import {
 import type { ToolResult } from '../../utils/response-formats.js';
 import {
   buildDocumentWriteResult,
+  buildWholeDocumentTargetedRegion,
   mergeWriteDocumentFrontmatter,
   resolveTagsFrontmatterConflict,
   resolveTitleFrontmatterConflict,
   validateReservedFrontmatter,
   validateWriteDocumentInput,
 } from '../../utils/document-write.js';
-import { pickExpectedVersion } from '../../utils/document-version.js';
+import {
+  buildVersionMismatchEnvelope,
+  computeVersionToken,
+  pickExpectedVersion,
+} from '../../utils/document-version.js';
 import { validateVaultPath } from '../../utils/path-validation.js';
 import { pluginManager, getFolderClaimsMap } from '../../../plugins/manager.js';
 import { FM } from '../../../constants/frontmatter-fields.js';
@@ -114,6 +119,7 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
       try {
         const supabase = supabaseManager.getClient();
         const vaultRoot = config.instance.vault.path;
+        const expectedVersion = pickExpectedVersion({ expected_version, if_match });
 
         if (mode === 'create') {
           const validation = await validateVaultPath(vaultRoot, path as string);
@@ -290,6 +296,22 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
                     return { retry: true };
                   }
                   const rawContent = await readFile(resolved.absPath, 'utf-8');
+                  const currentVersionToken = computeVersionToken(rawContent);
+                  if (expectedVersion && expectedVersion !== currentVersionToken) {
+                    return {
+                      retry: false,
+                      result: jsonExpectedError(
+                        buildVersionMismatchEnvelope({
+                          identifier: identifier as string,
+                          versionToken: currentVersionToken,
+                          targetedRegion: buildWholeDocumentTargetedRegion({
+                            path: resolved.relativePath,
+                            rawContent,
+                          }),
+                        })
+                      ),
+                    };
+                  }
                   const parsed = matter(rawContent);
                   const existingData = parsed.data;
                   const existingBody = parsed.content;

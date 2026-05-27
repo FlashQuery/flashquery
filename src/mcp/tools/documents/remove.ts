@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { existsSync } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import matter from 'gray-matter';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -15,6 +15,12 @@ import {
 import { resolveDocumentIdentifier, targetedScan } from '../../utils/resolve-document.js';
 import { getIsShuttingDown } from '../../../server/shutdown-state.js';
 import { jsonExpectedError, jsonRuntimeError, jsonToolResult, documentRemovalResult, withWarnings, type ErrorEnvelope } from '../../utils/response-formats.js';
+import {
+  buildVersionMismatchEnvelope,
+  computeVersionToken,
+  pickExpectedVersion,
+} from '../../utils/document-version.js';
+import { buildWholeDocumentTargetedRegion } from '../../utils/document-write.js';
 import { FM } from '../../../constants/frontmatter-fields.js';
 import { computeHash } from '../../../storage/document-primitives.js';
 import type { DocumentToolDeps } from './deps.js';
@@ -55,6 +61,7 @@ export function registerRemoveDocumentTool(server: McpServer, deps: DocumentTool
           const ids = isBatch ? identifiers : [identifiers];
           const results: Array<Record<string, unknown>> = [];
           const warnings = ids.length > 5 ? [`bulk_removal: ${ids.length} items`] : [];
+          const expectedVersion = pickExpectedVersion({ expected_version, if_match });
           const trashRoot = config.trashFolder.enabled
             ? resolveTrashRoot(vaultRoot, config.trashFolder.path)
             : null;
@@ -82,6 +89,19 @@ export function registerRemoveDocumentTool(server: McpServer, deps: DocumentTool
               await withAncestorDirectoryLocksShared(config, resolved.absPath, async () =>
                 withDocumentLock(config, resolved.absPath, async () => {
               const relativePath = resolved.relativePath;
+              const rawContent = await readFile(resolved.absPath, 'utf-8');
+              const currentVersionToken = computeVersionToken(rawContent);
+              if (expectedVersion && expectedVersion !== currentVersionToken) {
+                results.push(buildVersionMismatchEnvelope({
+                  identifier: id,
+                  versionToken: currentVersionToken,
+                  targetedRegion: buildWholeDocumentTargetedRegion({
+                    path: relativePath,
+                    rawContent,
+                  }),
+                }));
+                return;
+              }
               const parsed = await vaultManager.readMarkdown(relativePath);
               const archivedAtValue = parsed.data[FM.ARCHIVED_AT];
               const existingArchivedAt = typeof archivedAtValue === 'string' && archivedAtValue.length > 0

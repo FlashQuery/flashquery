@@ -177,3 +177,15 @@ export function buildDocumentWriteResult(input: {
     mode: input.mode,
   };
 }
+
+export function buildWholeDocumentTargetedRegion(input: {
+  path: string;
+  rawContent: string;
+}): Record<string, unknown> {
+  return {
+    type: 'document',
+    path: input.path,
+    content: input.rawContent,
+    chars: input.rawContent.length,
+  };
+}
