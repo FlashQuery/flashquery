@@ -105,14 +105,15 @@ async function writeMarkdownFile(
   absolutePath: string,
   frontmatter: Record<string, unknown>,
   content: string
-): Promise<void> {
+): Promise<string> {
   await mkdir(dirname(absolutePath), { recursive: true });
   const fm = sanitizeFrontmatterValues({
     ...frontmatter,
     [FM.UPDATED]: new Date().toISOString(),
   });
   const output = matter.stringify(content, fm);
-  await writeVaultFile(absolutePath, output, { lockConfig: config });
+  const result = await writeVaultFile(absolutePath, output, { lockConfig: config });
+  return result.contentHash;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -466,8 +467,14 @@ export async function targetedScan(
     // Do NOT touch: updated, title, tags, project, author, or other fields
 
     // Write updated frontmatter to vault only if something actually changed
+    let snapshotContentHash = newContentHash;
     if (frontmatterChanged) {
-      await writeMarkdownFile(config, resolved.absPath, parsed.data, parsed.content);
+      snapshotContentHash = await writeMarkdownFile(
+        config,
+        resolved.absPath,
+        parsed.data,
+        parsed.content
+      );
     }
 
     // Build and return snapshot
@@ -475,7 +482,7 @@ export async function targetedScan(
       fqcId: validatedFqcId,
       created: parsed.data[FM.CREATED] as string,
       status: parsed.data[FM.STATUS] as string,
-      contentHash: newContentHash,
+      contentHash: snapshotContentHash,
     };
 
     return {
