@@ -7,7 +7,6 @@ REQUIRES_MANAGED = True
 
 import argparse
 import json
-import os
 import tempfile
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -48,16 +47,6 @@ def _is_expected_conflict(result) -> bool:
 
 def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
-    database_url = os.environ.get("DATABASE_URL", "")
-    if "pooler.supabase.com:6543" in database_url:
-        run.step(
-            label="D-WCO-03 infrastructure gate: session-capable advisory DATABASE_URL required",
-            passed=True,
-            detail="Skipped because .env.test DATABASE_URL points at Supabase transaction pooler port 6543; advisory lock release is not session-capable.",
-            timing_ms=0,
-        )
-        return run
-
     port_range = tuple(args.port_range) if args.port_range else None
     source_path = f"_test/{TEST_NAME}_source_{run.run_id}.md"
     dest_path = f"_test/{TEST_NAME}_dest_{run.run_id}.md"

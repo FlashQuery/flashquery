@@ -103,13 +103,18 @@ function makeConfig(): FlashQueryConfig {
   } as FlashQueryConfig;
 }
 
-function makeSupabase() {
+function makeSupabase(
+  updateResult: { data: { id: string } | null; error: { message: string } | null } = {
+    data: { id: 'doc-1' },
+    error: null,
+  }
+) {
   const ownershipMaybeSingle = vi.fn().mockResolvedValue({ data: { ownership_plugin_id: null } });
   const ownershipEq2 = vi.fn().mockReturnValue({ maybeSingle: ownershipMaybeSingle });
   const ownershipEq1 = vi.fn().mockReturnValue({ eq: ownershipEq2 });
   const selectOwnership = vi.fn().mockReturnValue({ eq: ownershipEq1 });
 
-  const updateMaybeSingle = vi.fn().mockResolvedValue({ data: { id: 'doc-1' }, error: null });
+  const updateMaybeSingle = vi.fn().mockResolvedValue(updateResult);
   const updateSelect = vi.fn().mockReturnValue({ maybeSingle: updateMaybeSingle });
   const updateEq2 = vi.fn().mockReturnValue({ select: updateSelect });
   const updateEq1 = vi.fn().mockReturnValue({ eq: updateEq2 });
@@ -117,6 +122,7 @@ function makeSupabase() {
 
   return {
     from: vi.fn().mockReturnValue({ select: selectOwnership, update }),
+    update,
   };
 }
 
@@ -208,6 +214,49 @@ describe('REQ-022 move-exdev-fallback', () => {
     expect(parsePayload(result)).toMatchObject({
       error: 'runtime_error',
       message: expect.stringContaining('durable write failed'),
+    });
+  });
+
+  it('rolls back a completed filesystem rename when the database path update fails', async () => {
+    supabaseManagerMock.getClient.mockReturnValue(
+      makeSupabase({ data: null, error: { message: 'db unavailable' } })
+    );
+    fsPromisesMock.rename.mockResolvedValue(undefined);
+
+    const moveDocument = await registerMoveTool();
+    const result = await moveDocument({ identifier: 'source.md', destination: 'dest.md' });
+
+    expect(fsPromisesMock.rename).toHaveBeenNthCalledWith(
+      1,
+      '/tmp/fq-vault/source.md',
+      '/tmp/fq-vault/dest.md'
+    );
+    expect(fsPromisesMock.rename).toHaveBeenNthCalledWith(
+      2,
+      '/tmp/fq-vault/dest.md',
+      '/tmp/fq-vault/source.md'
+    );
+    expect(parsePayload(result)).toMatchObject({
+      error: 'runtime_error',
+      message: expect.stringContaining('db unavailable'),
+    });
+  });
+
+  it('persists the canonical validated destination path instead of the raw user input', async () => {
+    const supabase = makeSupabase();
+    supabaseManagerMock.getClient.mockReturnValue(supabase);
+    fsPromisesMock.rename.mockResolvedValue(undefined);
+
+    const moveDocument = await registerMoveTool();
+    const result = await moveDocument({
+      identifier: 'source.md',
+      destination: 'nested/../canonical.md',
+    });
+
+    expect(supabase.update).toHaveBeenCalledWith(expect.objectContaining({ path: 'canonical.md' }));
+    expect(parsePayload(result)).toMatchObject({
+      identifier: 'canonical.md',
+      path: 'canonical.md',
     });
   });
 });

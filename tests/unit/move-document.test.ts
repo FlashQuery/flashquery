@@ -13,14 +13,16 @@ describe('move_document JSON output contract', () => {
     const sourceFqId = 'stable-doc-id';
     const body = 'Moved document body.';
 
-    const result = jsonToolResult(documentIdentification({
-      identifier: 'Moved/Renamed.md',
-      title: 'Renamed',
-      path: 'Moved/Renamed.md',
-      fq_id: sourceFqId,
-      modified: '2026-05-12T00:00:00.000Z',
-      chars: body.length,
-    }));
+    const result = jsonToolResult(
+      documentIdentification({
+        identifier: 'Moved/Renamed.md',
+        title: 'Renamed',
+        path: 'Moved/Renamed.md',
+        fq_id: sourceFqId,
+        modified: '2026-05-12T00:00:00.000Z',
+        chars: body.length,
+      })
+    );
 
     const payload = JSON.parse(result.content[0]!.text) as Record<string, unknown>;
 
@@ -62,7 +64,8 @@ describe('move_document JSON output contract', () => {
   it('represents lock timeout as an expected JSON conflict', () => {
     const result = jsonExpectedError({
       error: 'conflict',
-      message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
+      message:
+        'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
       identifier: 'Source.md',
       details: { reason: 'lock_timeout' },
     });
@@ -77,17 +80,19 @@ describe('move_document JSON output contract', () => {
   });
 
   it('represents plugin ownership as warning codes rather than appended prose', () => {
-    const result = jsonToolResult(withWarnings(
-      documentIdentification({
-        identifier: 'Moved/PluginOwned.md',
-        title: 'Plugin Owned',
-        path: 'Moved/PluginOwned.md',
-        fq_id: 'plugin-owned-id',
-        modified: '2026-05-12T00:00:00.000Z',
-        chars: 11,
-      }),
-      ['plugin_ownership_path_expectation']
-    ));
+    const result = jsonToolResult(
+      withWarnings(
+        documentIdentification({
+          identifier: 'Moved/PluginOwned.md',
+          title: 'Plugin Owned',
+          path: 'Moved/PluginOwned.md',
+          fq_id: 'plugin-owned-id',
+          modified: '2026-05-12T00:00:00.000Z',
+          chars: 11,
+        }),
+        ['plugin_ownership_path_expectation']
+      )
+    );
 
     const payload = JSON.parse(result.content[0]!.text) as Record<string, unknown>;
 
@@ -98,14 +103,17 @@ describe('move_document JSON output contract', () => {
     const moveSection = readFileSync('src/mcp/tools/documents/move.ts', 'utf8');
 
     expect(moveSection).toContain('documentIdentification');
-    expect(moveSection).toContain('validateVaultPath(vaultRoot, destDirRel)');
+    expect(moveSection).toContain('validateVaultPath(vaultRoot, destPath)');
+    expect(moveSection).toContain('relative(resolve(vaultRoot), destAbsPath)');
     expect(moveSection).toContain('Supabase path update failed');
     expect(moveSection).toContain('Supabase path update affected no document row');
     expect(moveSection).toContain('plugin_ownership_path_expectation');
     expect(moveSection).toContain('path_exists');
     expect(moveSection).toContain("details: { reason: 'lock_timeout' }");
     expect(moveSection).toContain("details: { reason: 'untracked_document' }");
-    expect(moveSection).toContain('return jsonRuntimeError({ message: `Error moving document: ${msg}`, identifier });');
+    expect(moveSection).toContain(
+      'return jsonRuntimeError({ message: `Error moving document: ${msg}`, identifier });'
+    );
     expect(moveSection).not.toContain('Document moved successfully');
     expect(moveSection).not.toContain('References to this document');
     expect(moveSection).not.toContain("moved.data[FM.ID] : 'untracked'");

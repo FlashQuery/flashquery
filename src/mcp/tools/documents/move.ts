@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { existsSync } from 'node:fs';
 import { readFile, rename, mkdir, unlink } from 'node:fs/promises';
-import { join, extname, normalize, dirname, basename, resolve } from 'node:path';
+import { extname, normalize, dirname, basename, resolve, relative } from 'node:path';
 import matter from 'gray-matter';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { vaultManager } from '../../../storage/vault.js';
@@ -39,6 +39,23 @@ function isCrossDeviceRenameError(err: unknown): boolean {
 
   const errMsg = err instanceof Error ? err.message : String(err);
   return errMsg.includes('EXDEV') || errMsg.includes('Invalid cross-device');
+}
+
+async function rollbackMovedFile(
+  config: DocumentToolDeps['config'],
+  sourceAbsPath: string,
+  destAbsPath: string
+): Promise<void> {
+  try {
+    await rename(destAbsPath, sourceAbsPath);
+    return;
+  } catch (err) {
+    if (!isCrossDeviceRenameError(err)) throw err;
+  }
+
+  const content = await readFile(destAbsPath, 'utf-8');
+  await writeVaultFile(sourceAbsPath, content, { lockConfig: config });
+  await unlink(destAbsPath);
 }
 
 export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDeps): void {
@@ -114,24 +131,19 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
           destPath += sourceExt;
         }
 
-        // Path traversal and symlink protection for the destination parent.
-        const destDirRel = dirname(destPath);
-        const destBase = basename(destPath);
-        let destAbsPath: string;
-        if (destDirRel === '.' || destDirRel === '') {
-          destAbsPath = join(resolve(vaultRoot), destBase);
-        } else {
-          const parentValidation = await validateVaultPath(vaultRoot, destDirRel);
-          if (!parentValidation.valid) {
-            return jsonExpectedError({
-              error: 'invalid_input',
-              message: 'Destination path escapes vault root.',
-              identifier: destPath,
-              details: { reason: 'path_traversal' },
-            });
-          }
-          destAbsPath = join(parentValidation.absPath, destBase);
+        const destinationValidation = await validateVaultPath(vaultRoot, destPath);
+        if (!destinationValidation.valid) {
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: destinationValidation.error ?? 'Invalid destination path.',
+            identifier: destPath,
+            details: { reason: 'path_traversal' },
+          });
         }
+        const destAbsPath = destinationValidation.absPath;
+        destPath = relative(resolve(vaultRoot), destAbsPath)
+          .split(/[/\\]+/)
+          .join('/');
         const normalizedDest = normalize(destAbsPath);
         // REQ-008 lock table: move_document locks sourceAbsPath and destination
         // normalizedDest. INV-09 order: shared source/destination ancestor directory
@@ -164,16 +176,19 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
               // Step 6: Create intermediate directories
               const destDir = dirname(destAbsPath);
               await mkdir(destDir, { recursive: true });
+              let fileMoved = false;
 
               // Step 7: Perform atomic move
               try {
                 await rename(sourceAbsPath, destAbsPath);
+                fileMoved = true;
               } catch (err) {
                 if (isCrossDeviceRenameError(err)) {
                   // Fallback: durably write dest, then delete source.
                   const content = await readFile(sourceAbsPath, 'utf-8');
                   await writeVaultFile(destAbsPath, content, { lockConfig: config });
                   await unlink(sourceAbsPath);
+                  fileMoved = true;
                   logger.info(
                     `move_document: cross-device fallback used for ${identifier} → ${destPath}`
                   );
@@ -215,20 +230,35 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
                   responseTitle = currentTitle;
                 }
 
-                const { data: updatedRow, error: updateError } = await supabase
-                  .from('fqc_documents')
-                  .update(updateData)
-                  .eq('id', sourceFqcId)
-                  .eq('instance_id', config.instance.id)
-                  .select('id')
-                  .maybeSingle();
-                if (updateError) {
-                  throw new Error(
-                    `Supabase path update failed for ${destPath}: ${updateError.message}`
-                  );
-                }
-                if (!updatedRow) {
-                  throw new Error(`Supabase path update affected no document row for ${destPath}`);
+                try {
+                  const { data: updatedRow, error: updateError } = await supabase
+                    .from('fqc_documents')
+                    .update(updateData)
+                    .eq('id', sourceFqcId)
+                    .eq('instance_id', config.instance.id)
+                    .select('id')
+                    .maybeSingle();
+                  if (updateError) {
+                    throw new Error(
+                      `Supabase path update failed for ${destPath}: ${updateError.message}`
+                    );
+                  }
+                  if (!updatedRow) {
+                    throw new Error(
+                      `Supabase path update affected no document row for ${destPath}`
+                    );
+                  }
+                } catch (err) {
+                  if (fileMoved) {
+                    try {
+                      await rollbackMovedFile(config, sourceAbsPath, destAbsPath);
+                    } catch (rollbackErr) {
+                      logger.error(
+                        `move_document rollback failed after DB update error for ${destPath}: ${rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)}`
+                      );
+                    }
+                  }
+                  throw err;
                 }
               }
 
