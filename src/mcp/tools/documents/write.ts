@@ -119,137 +119,140 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
           }
           const relativePath = validation.relativePath;
           const absolutePath = validation.absPath;
+          // REQ-008 lock table: write_document(create) locks destination absolutePath.
+          // INV-09 order: shared destination ancestor directory locks wrap the file lock;
+          // the authoritative destination existence check stays inside withDocumentLock.
           return await withAncestorDirectoryLocksShared(config, absolutePath, async () =>
             withDocumentLock(config, absolutePath, async () => {
-            if (existsSync(absolutePath)) {
-              try {
-                const statResult = await stat(absolutePath);
-                if (statResult.isDirectory()) {
-                  return jsonExpectedError({
-                    error: 'invalid_input',
-                    message: `Path "${relativePath}" is a directory, not a file. Provide a complete file path with .md extension.`,
-                    details: { field: 'path', reason: 'path_is_directory' },
-                  });
+              if (existsSync(absolutePath)) {
+                try {
+                  const statResult = await stat(absolutePath);
+                  if (statResult.isDirectory()) {
+                    return jsonExpectedError({
+                      error: 'invalid_input',
+                      message: `Path "${relativePath}" is a directory, not a file. Provide a complete file path with .md extension.`,
+                      details: { field: 'path', reason: 'path_is_directory' },
+                    });
+                  }
+                } catch {
+                  // Fall through to the existing path conflict if stat cannot inspect it.
                 }
-              } catch {
-                // Fall through to the existing path conflict if stat cannot inspect it.
+                return jsonExpectedError({
+                  error: 'conflict',
+                  message: `Document already exists at "${relativePath}"`,
+                  details: { reason: 'path_exists' },
+                });
               }
-              return jsonExpectedError({
-                error: 'conflict',
-                message: `Document already exists at "${relativePath}"`,
-                details: { reason: 'path_exists' },
-              });
-            }
 
-            const tagValidation = validateAllTags(tags ?? []);
-            if (!tagValidation.valid) {
-              return jsonExpectedError({
-                error: 'invalid_input',
-                message: `Tag validation failed: ${tagValidation.errors.join('; ')}`,
-                details: { field: 'tags' },
-              });
-            }
+              const tagValidation = validateAllTags(tags ?? []);
+              if (!tagValidation.valid) {
+                return jsonExpectedError({
+                  error: 'invalid_input',
+                  message: `Tag validation failed: ${tagValidation.errors.join('; ')}`,
+                  details: { field: 'tags' },
+                });
+              }
 
-            const fqcId = uuidv4();
-            const now = new Date().toISOString();
-            const deduplicated = deduplicateTags(tagValidation.normalized);
-            const effectiveTitle = title as string;
-            const body = content ?? '';
-            const warnings: string[] = [];
-            const folderClaimsMap = getFolderClaimsMap(config);
-            for (const [folder, claim] of folderClaimsMap.entries()) {
-              const normalizedTarget = relativePath.toLowerCase();
-              if (normalizedTarget === folder || normalizedTarget.startsWith(folder + '/')) {
-                const claimEntry = pluginManager.getEntry(claim.pluginId, 'default');
-                const docType = claimEntry?.schema.documents?.types.find(
-                  (type) => type.id === claim.typeId
-                );
-                if (docType?.access === 'read-only') {
-                  warnings.push('plugin_readonly_folder');
-                  break;
+              const fqcId = uuidv4();
+              const now = new Date().toISOString();
+              const deduplicated = deduplicateTags(tagValidation.normalized);
+              const effectiveTitle = title as string;
+              const body = content ?? '';
+              const warnings: string[] = [];
+              const folderClaimsMap = getFolderClaimsMap(config);
+              for (const [folder, claim] of folderClaimsMap.entries()) {
+                const normalizedTarget = relativePath.toLowerCase();
+                if (normalizedTarget === folder || normalizedTarget.startsWith(folder + '/')) {
+                  const claimEntry = pluginManager.getEntry(claim.pluginId, 'default');
+                  const docType = claimEntry?.schema.documents?.types.find(
+                    (type) => type.id === claim.typeId
+                  );
+                  if (docType?.access === 'read-only') {
+                    warnings.push('plugin_readonly_folder');
+                    break;
+                  }
                 }
               }
-            }
-            const fm = serializeOrderedFrontmatter({
-              ...mergeWriteDocumentFrontmatter(frontmatter, effectiveTitle),
-              [FM.ID]: fqcId,
-              [FM.INSTANCE]: config.instance.id,
-              [FM.STATUS]: 'active',
-              [FM.TAGS]: deduplicated,
-              [FM.CREATED]: now,
-            });
+              const fm = serializeOrderedFrontmatter({
+                ...mergeWriteDocumentFrontmatter(frontmatter, effectiveTitle),
+                [FM.ID]: fqcId,
+                [FM.INSTANCE]: config.instance.id,
+                [FM.STATUS]: 'active',
+                [FM.TAGS]: deduplicated,
+                [FM.CREATED]: now,
+              });
 
-            await vaultManager.writeMarkdown(relativePath, fm, body, {
-              gitAction: 'create',
-              gitTitle: effectiveTitle,
-            });
+              await vaultManager.writeMarkdown(relativePath, fm, body, {
+                gitAction: 'create',
+                gitTitle: effectiveTitle,
+              });
 
-            const rawContent = await readFile(join(vaultRoot, relativePath), 'utf-8');
-            const contentHash = computeHash(rawContent);
-            const insertPayload = {
-              id: fqcId,
-              instance_id: config.instance.id,
-              path: relativePath,
-              title: effectiveTitle,
-              tags: deduplicated,
-              content_hash: contentHash,
-              status: 'active',
-              template_meta: extractTemplateMeta(fm),
-              embedding: null,
-            };
-            const { error: insertError } = await supabase
-              .from('fqc_documents')
-              .insert(insertPayload);
-            if (insertError) {
-              if (insertError.code === '23505' || insertError.message.includes('duplicate key')) {
-                logger.warn(
-                  `write_document(create): duplicate path conflict for ${relativePath} — replacing stale DB row`
-                );
-                await supabase
-                  .from('fqc_documents')
-                  .delete()
-                  .eq('instance_id', config.instance.id)
-                  .eq('path', relativePath);
-                const { error: reinsertError } = await supabase
-                  .from('fqc_documents')
-                  .insert(insertPayload);
-                if (reinsertError) {
+              const rawContent = await readFile(join(vaultRoot, relativePath), 'utf-8');
+              const contentHash = computeHash(rawContent);
+              const insertPayload = {
+                id: fqcId,
+                instance_id: config.instance.id,
+                path: relativePath,
+                title: effectiveTitle,
+                tags: deduplicated,
+                content_hash: contentHash,
+                status: 'active',
+                template_meta: extractTemplateMeta(fm),
+                embedding: null,
+              };
+              const { error: insertError } = await supabase
+                .from('fqc_documents')
+                .insert(insertPayload);
+              if (insertError) {
+                if (insertError.code === '23505' || insertError.message.includes('duplicate key')) {
                   logger.warn(
-                    `write_document(create): re-insert failed after stale-row cleanup for ${relativePath}: ${reinsertError.message}`
+                    `write_document(create): duplicate path conflict for ${relativePath} — replacing stale DB row`
+                  );
+                  await supabase
+                    .from('fqc_documents')
+                    .delete()
+                    .eq('instance_id', config.instance.id)
+                    .eq('path', relativePath);
+                  const { error: reinsertError } = await supabase
+                    .from('fqc_documents')
+                    .insert(insertPayload);
+                  if (reinsertError) {
+                    logger.warn(
+                      `write_document(create): re-insert failed after stale-row cleanup for ${relativePath}: ${reinsertError.message}`
+                    );
+                  }
+                } else {
+                  logger.warn(
+                    `write_document(create): fqc_documents insert failed for ${relativePath}: ${insertError.message}`
                   );
                 }
-              } else {
-                logger.warn(
-                  `write_document(create): fqc_documents insert failed for ${relativePath}: ${insertError.message}`
-                );
               }
-            }
 
-            const embedResult = await scheduleBackgroundEmbedding({
-              target: documentEmbeddingTarget({
-                instanceId: config.instance.id,
-                id: fqcId,
-                label: relativePath,
-              }),
-              embedText: `${effectiveTitle}\n\n${body}`,
-              provider: embeddingProvider,
-              supabase,
-            });
-
-            return jsonToolResult(
-              withWarnings(
-                buildDocumentWriteResult({
-                  mode: 'create',
-                  identifier: relativePath,
-                  title: effectiveTitle,
-                  path: relativePath,
-                  fq_id: fqcId,
-                  modified: now,
-                  chars: body.length,
+              const embedResult = await scheduleBackgroundEmbedding({
+                target: documentEmbeddingTarget({
+                  instanceId: config.instance.id,
+                  id: fqcId,
+                  label: relativePath,
                 }),
-                [...warnings, ...embedResult.warnings]
-              )
-            );
+                embedText: `${effectiveTitle}\n\n${body}`,
+                provider: embeddingProvider,
+                supabase,
+              });
+
+              return jsonToolResult(
+                withWarnings(
+                  buildDocumentWriteResult({
+                    mode: 'create',
+                    identifier: relativePath,
+                    title: effectiveTitle,
+                    path: relativePath,
+                    fq_id: fqcId,
+                    modified: now,
+                    chars: body.length,
+                  }),
+                  [...warnings, ...embedResult.warnings]
+                )
+              );
             })
           );
         }
@@ -264,118 +267,132 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
           const attempt = await withAncestorDirectoryLocksShared(
             config,
             lockCandidate.absPath,
-            async () => withDocumentLock(
-              config,
-              lockCandidate.absPath,
-              async (): Promise<{ retry: true } | { retry: false; result: ToolResult }> => {
-              const resolved = await resolveDocumentIdentifier(
+            async () =>
+              withDocumentLock(
                 config,
-                supabase,
-                identifier as string,
-                logger
-              );
-              if (resolved.absPath !== lockCandidate.absPath) {
-                return { retry: true };
-              }
-              const rawContent = await readFile(resolved.absPath, 'utf-8');
-              const parsed = matter(rawContent);
-              const existingData = parsed.data;
-              const existingBody = parsed.content;
-              const effectiveTitle =
-                title ??
-                (typeof existingData[FM.TITLE] === 'string'
-                  ? (existingData[FM.TITLE] as string)
-                  : resolved.relativePath);
-              const validation = validateAllTags(
-                tags ??
-                  (Array.isArray(existingData[FM.TAGS]) ? (existingData[FM.TAGS] as string[]) : [])
-              );
-              if (!validation.valid) {
-                return {
-                  retry: false,
-                  result: jsonExpectedError({
-                    error: 'invalid_input',
-                    message: `Tag validation failed: ${validation.errors.join('; ')}`,
-                    details: { field: 'tags' },
-                  }),
-                };
-              }
-              const effectiveTags = deduplicateTags(validation.normalized);
-              const effectiveBody = content ?? existingBody;
-              const fm: Record<string, unknown> = {
-                ...existingData,
-                ...mergeWriteDocumentFrontmatter(frontmatter, effectiveTitle),
-                [FM.TAGS]: effectiveTags,
-                [FM.INSTANCE]:
-                  (existingData[FM.INSTANCE] as string | undefined) ?? config.instance.id,
-                [FM.CREATED]: existingData[FM.CREATED] as string | undefined,
-                [FM.STATUS]: (existingData[FM.STATUS] as string | undefined) ?? 'active',
-              };
-              for (const [key, value] of Object.entries(frontmatter ?? {})) {
-                if (value === null) {
-                  delete fm[key];
-                }
-              }
-              const serialized = matter.stringify(effectiveBody, fm);
-              const preWriteHash = computeHash(serialized);
-              const preScan = await targetedScan(config, supabase, resolved, preWriteHash, logger);
-              const fqcId = preScan.capturedFrontmatter.fqcId;
-              fm[FM.ID] = fqcId;
-              const sanitizedFm = serializeOrderedFrontmatter(fm);
-              await vaultManager.writeMarkdown(resolved.relativePath, sanitizedFm, effectiveBody, {
-                gitAction: 'update',
-                gitTitle: effectiveTitle,
-              });
-              const postWriteRaw = await readFile(resolved.absPath, 'utf-8');
-              const postWriteHash = computeHash(postWriteRaw);
+                lockCandidate.absPath,
+                async (): Promise<{ retry: true } | { retry: false; result: ToolResult }> => {
+                  const resolved = await resolveDocumentIdentifier(
+                    config,
+                    supabase,
+                    identifier as string,
+                    logger
+                  );
+                  if (resolved.absPath !== lockCandidate.absPath) {
+                    return { retry: true };
+                  }
+                  const rawContent = await readFile(resolved.absPath, 'utf-8');
+                  const parsed = matter(rawContent);
+                  const existingData = parsed.data;
+                  const existingBody = parsed.content;
+                  const effectiveTitle =
+                    title ??
+                    (typeof existingData[FM.TITLE] === 'string'
+                      ? (existingData[FM.TITLE] as string)
+                      : resolved.relativePath);
+                  const validation = validateAllTags(
+                    tags ??
+                      (Array.isArray(existingData[FM.TAGS])
+                        ? (existingData[FM.TAGS] as string[])
+                        : [])
+                  );
+                  if (!validation.valid) {
+                    return {
+                      retry: false,
+                      result: jsonExpectedError({
+                        error: 'invalid_input',
+                        message: `Tag validation failed: ${validation.errors.join('; ')}`,
+                        details: { field: 'tags' },
+                      }),
+                    };
+                  }
+                  const effectiveTags = deduplicateTags(validation.normalized);
+                  const effectiveBody = content ?? existingBody;
+                  const fm: Record<string, unknown> = {
+                    ...existingData,
+                    ...mergeWriteDocumentFrontmatter(frontmatter, effectiveTitle),
+                    [FM.TAGS]: effectiveTags,
+                    [FM.INSTANCE]:
+                      (existingData[FM.INSTANCE] as string | undefined) ?? config.instance.id,
+                    [FM.CREATED]: existingData[FM.CREATED] as string | undefined,
+                    [FM.STATUS]: (existingData[FM.STATUS] as string | undefined) ?? 'active',
+                  };
+                  for (const [key, value] of Object.entries(frontmatter ?? {})) {
+                    if (value === null) {
+                      delete fm[key];
+                    }
+                  }
+                  const serialized = matter.stringify(effectiveBody, fm);
+                  const preWriteHash = computeHash(serialized);
+                  const preScan = await targetedScan(
+                    config,
+                    supabase,
+                    resolved,
+                    preWriteHash,
+                    logger
+                  );
+                  const fqcId = preScan.capturedFrontmatter.fqcId;
+                  fm[FM.ID] = fqcId;
+                  const sanitizedFm = serializeOrderedFrontmatter(fm);
+                  await vaultManager.writeMarkdown(
+                    resolved.relativePath,
+                    sanitizedFm,
+                    effectiveBody,
+                    {
+                      gitAction: 'update',
+                      gitTitle: effectiveTitle,
+                    }
+                  );
+                  const postWriteRaw = await readFile(resolved.absPath, 'utf-8');
+                  const postWriteHash = computeHash(postWriteRaw);
 
-              const { error: updateError } = await supabase
-                .from('fqc_documents')
-                .update({
-                  title: effectiveTitle,
-                  tags: effectiveTags,
-                  content_hash: postWriteHash,
-                  path: resolved.relativePath,
-                  template_meta: extractTemplateMeta(fm),
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('id', fqcId);
-              if (updateError) {
-                logger.warn(
-                  `write_document(update): fqc_documents update failed for ${resolved.relativePath}: ${updateError.message}`
-                );
-              }
-
-              const embedResult = await scheduleBackgroundEmbedding({
-                target: documentEmbeddingTarget({
-                  instanceId: config.instance.id,
-                  id: fqcId,
-                  label: resolved.relativePath,
-                }),
-                embedText: `${effectiveTitle}\n\n${effectiveBody}`,
-                provider: embeddingProvider,
-                supabase,
-              });
-
-              return {
-                retry: false,
-                result: jsonToolResult(
-                  withWarnings(
-                    buildDocumentWriteResult({
-                      mode: 'update',
-                      identifier: identifier as string,
+                  const { error: updateError } = await supabase
+                    .from('fqc_documents')
+                    .update({
                       title: effectiveTitle,
+                      tags: effectiveTags,
+                      content_hash: postWriteHash,
                       path: resolved.relativePath,
-                      fq_id: fqcId,
-                      modified: new Date().toISOString(),
-                      chars: effectiveBody.length,
+                      template_meta: extractTemplateMeta(fm),
+                      updated_at: new Date().toISOString(),
+                    })
+                    .eq('id', fqcId);
+                  if (updateError) {
+                    logger.warn(
+                      `write_document(update): fqc_documents update failed for ${resolved.relativePath}: ${updateError.message}`
+                    );
+                  }
+
+                  const embedResult = await scheduleBackgroundEmbedding({
+                    target: documentEmbeddingTarget({
+                      instanceId: config.instance.id,
+                      id: fqcId,
+                      label: resolved.relativePath,
                     }),
-                    embedResult.warnings
-                  )
-                ),
-              };
-              }
-            )
+                    embedText: `${effectiveTitle}\n\n${effectiveBody}`,
+                    provider: embeddingProvider,
+                    supabase,
+                  });
+
+                  return {
+                    retry: false,
+                    result: jsonToolResult(
+                      withWarnings(
+                        buildDocumentWriteResult({
+                          mode: 'update',
+                          identifier: identifier as string,
+                          title: effectiveTitle,
+                          path: resolved.relativePath,
+                          fq_id: fqcId,
+                          modified: new Date().toISOString(),
+                          chars: effectiveBody.length,
+                        }),
+                        embedResult.warnings
+                      )
+                    ),
+                  };
+                }
+              )
           );
           if (!attempt.retry) return attempt.result;
         }
