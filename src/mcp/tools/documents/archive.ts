@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import matter from 'gray-matter';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -14,6 +14,7 @@ import {
 import { resolveDocumentIdentifier, targetedScan } from '../../utils/resolve-document.js';
 import { getIsShuttingDown } from '../../../server/shutdown-state.js';
 import { jsonExpectedError, jsonRuntimeError, jsonToolResult, documentArchiveResult, type ErrorEnvelope } from '../../utils/response-formats.js';
+import { pickExpectedVersion } from '../../utils/document-version.js';
 import { FM } from '../../../constants/frontmatter-fields.js';
 import { computeHash } from '../../../storage/document-primitives.js';
 import type { DocumentToolDeps } from './deps.js';
@@ -32,9 +33,13 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
             .describe(
               'One or more document identifiers — each can be a vault-relative path, fqc_id UUID, or filename. See identifier resolution rules.'
             ),
+          expected_version: z.string().optional()
+            .describe('Optional source file version_token precondition for opt-in conflict detection.'),
+          if_match: z.string().optional()
+            .describe('Alias for expected_version.'),
         },
       },
-      async ({ identifiers }) => {
+      async ({ identifiers, expected_version, if_match }) => {
         // D-02b: Check shutdown flag immediately
         if (getIsShuttingDown()) {
           return {
@@ -53,6 +58,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
           const isBatch = Array.isArray(identifiers);
           const ids = isBatch ? identifiers : [identifiers];
           const results: Array<Record<string, unknown>> = [];
+          const expectedVersion = pickExpectedVersion({ expected_version, if_match });
 
           for (const id of ids) {
             try {
@@ -178,6 +184,9 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
                 modified: archivedStats.mtime.toISOString(),
                 chars: parsed.content.length,
                 archived_at: archivedAt,
+                version_token: computeHash(
+                  await readFile(join(config.instance.vault.path, relativePath), 'utf-8')
+                ),
               }));
                 })
               );

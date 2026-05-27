@@ -11,6 +11,8 @@ export interface WriteDocumentInput {
   content?: string;
   frontmatter?: Record<string, unknown>;
   tags?: string[];
+  expected_version?: string;
+  if_match?: string;
 }
 
 const RESERVED_FRONTMATTER_FIELDS = new Set<string>([
@@ -168,6 +170,7 @@ export function buildDocumentWriteResult(input: {
   fq_id: string;
   modified: string;
   chars: number;
+  version_token?: string;
 }): ReturnType<typeof documentIdentification> & { mode: WriteDocumentMode } {
   return {
     ...documentIdentification(input),

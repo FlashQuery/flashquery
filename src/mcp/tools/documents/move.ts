@@ -24,6 +24,7 @@ import {
 } from '../../utils/response-formats.js';
 import { validateVaultPath } from '../../utils/path-validation.js';
 import { FM } from '../../../constants/frontmatter-fields.js';
+import { computeHash } from '../../../storage/document-primitives.js';
 import type { DocumentToolDeps } from './deps.js';
 import {
   isAmbiguousDocumentIdentifierError,
@@ -73,9 +74,13 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
         destination: z
           .string()
           .describe('Vault-relative destination path including filename (extension optional)'),
+        expected_version: z.string().optional()
+          .describe('Optional source file version_token precondition for opt-in conflict detection.'),
+        if_match: z.string().optional()
+          .describe('Alias for expected_version.'),
       },
     },
-    async ({ identifier, destination }) => {
+    async ({ identifier, destination, expected_version, if_match }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -303,6 +308,7 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
                 fq_id: responseFqcId,
                 modified,
                 chars: moved.content.length,
+                version_token: computeHash(await readFile(destAbsPath, 'utf-8')),
               });
 
               return jsonToolResult(withWarnings(payload, warnings));

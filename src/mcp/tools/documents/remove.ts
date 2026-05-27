@@ -34,9 +34,13 @@ export function registerRemoveDocumentTool(server: McpServer, deps: DocumentTool
           identifiers: z
             .union([z.string(), z.array(z.string())])
             .describe('One or more document identifiers: path, fq_id, or filename.'),
+          expected_version: z.string().optional()
+            .describe('Optional source file version_token precondition for opt-in conflict detection.'),
+          if_match: z.string().optional()
+            .describe('Alias for expected_version.'),
         },
       },
-      async ({ identifiers }) => {
+      async ({ identifiers, expected_version, if_match }) => {
         if (getIsShuttingDown()) {
           return {
             content: [{ type: 'text' as const, text: 'Server is shutting down; new requests cannot be processed' }],

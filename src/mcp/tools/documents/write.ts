@@ -37,6 +37,7 @@ import {
   validateReservedFrontmatter,
   validateWriteDocumentInput,
 } from '../../utils/document-write.js';
+import { pickExpectedVersion } from '../../utils/document-version.js';
 import { validateVaultPath } from '../../utils/path-validation.js';
 import { pluginManager, getFolderClaimsMap } from '../../../plugins/manager.js';
 import { FM } from '../../../constants/frontmatter-fields.js';
@@ -72,9 +73,13 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
           .optional()
           .describe('Custom frontmatter fields. FQ-managed fields are rejected.'),
         tags: z.array(z.string()).optional().describe('Replacement tag list.'),
+        expected_version: z.string().optional()
+          .describe('Optional whole-file version_token precondition for opt-in conflict detection.'),
+        if_match: z.string().optional()
+          .describe('Alias for expected_version.'),
       },
     },
-    async ({ mode, identifier, path, title, content, frontmatter, tags }) => {
+    async ({ mode, identifier, path, title, content, frontmatter, tags, expected_version, if_match }) => {
       if (getIsShuttingDown()) {
         return {
           content: [
@@ -95,6 +100,8 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
         content,
         frontmatter,
         tags,
+        expected_version,
+        if_match,
       });
       if (inputError) return jsonExpectedError(inputError);
       const reservedError = validateReservedFrontmatter(frontmatter);
@@ -249,6 +256,7 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
                     fq_id: fqcId,
                     modified: now,
                     chars: body.length,
+                    version_token: contentHash,
                   }),
                   [...warnings, ...embedResult.warnings]
                 )
@@ -386,6 +394,7 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
                           fq_id: fqcId,
                           modified: new Date().toISOString(),
                           chars: effectiveBody.length,
+                          version_token: postWriteHash,
                         }),
                         embedResult.warnings
                       )

@@ -79,6 +79,7 @@ export interface DocumentIdentificationInput {
   fq_id: string;
   modified: string;
   chars: number;
+  version_token?: string;
 }
 
 export interface DocumentArchiveResultInput extends DocumentIdentificationInput {
@@ -242,6 +243,7 @@ export function documentIdentification(input: DocumentIdentificationInput): {
   fq_id: string;
   modified: string;
   size: { chars: number };
+  version_token?: string;
 } {
   return {
     identifier: input.identifier,
@@ -250,6 +252,7 @@ export function documentIdentification(input: DocumentIdentificationInput): {
     fq_id: input.fq_id,
     modified: input.modified,
     size: { chars: input.chars },
+    ...(input.version_token === undefined ? {} : { version_token: input.version_token }),
   };
 }
 
@@ -267,10 +270,12 @@ export function documentArchiveResult(input: DocumentArchiveResultInput): Return
 export function documentRemovalResult(input: DocumentRemovalResultInput): ReturnType<typeof documentArchiveResult> & {
   moved_to: string | null;
 } {
-  return {
+  const result = {
     ...documentArchiveResult(input),
     moved_to: input.moved_to,
   };
+  delete result.version_token;
+  return result;
 }
 
 export function directoryResult(input: DirectoryResult): DirectoryResult {

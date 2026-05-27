@@ -60,9 +60,13 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
           .describe(
             'Vault-relative path for the copy. If omitted, defaults to vault root using source title as filename.'
           ),
+        expected_version: z.string().optional()
+          .describe('Optional source file version_token precondition for opt-in conflict detection.'),
+        if_match: z.string().optional()
+          .describe('Alias for expected_version.'),
       },
     },
-    async ({ identifier, destination }) => {
+    async ({ identifier, destination, expected_version, if_match }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -223,6 +227,7 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
                   fq_id: newFqcId,
                   modified,
                   chars: written.content.length,
+                  version_token: contentHash,
                 }),
                 embedResult.warnings
               )
