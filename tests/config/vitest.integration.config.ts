@@ -26,6 +26,7 @@ export default defineConfig({
       'tests/integration/apply-tags-concurrent.integration.test.ts',
       'tests/integration/insert-doc-link-race.integration.test.ts',
       'tests/integration/call-macro-per-step-lock.integration.test.ts',
+      'tests/integration/batch-input-shape.integration.test.ts',
       'tests/integration/version-token-shape.integration.test.ts',
       'tests/integration/version-token-precondition.integration.test.ts',
       'tests/integration/version-check-inside-lock.integration.test.ts',
