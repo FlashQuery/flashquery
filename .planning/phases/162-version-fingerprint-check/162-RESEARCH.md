@@ -379,17 +379,15 @@ return buildConsolidatedResponse(
 | A1 | A new helper file such as `src/mcp/utils/document-version.ts` is acceptable if it follows existing utility patterns. [ASSUMED] | Recommended Project Structure | Planner may instead inline helpers; behavior is unaffected. |
 | A2 | Integration tests can safely use `.env.test` because it exists locally, but actual credentials/session capability still need runtime validation. [ASSUMED] | Environment Availability | Integration runs may skip or fail if `.env.test` values are incomplete. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should `copy_document` also lock the source when `expected_version` is supplied?**
    - What we know: product docs say copy precondition refers to source, and current copy locks only destination. [VERIFIED: product Requirements §6.2.2] [VERIFIED: `src/mcp/tools/documents/copy.ts`]
-   - What's unclear: whether planner should add source+destination locking for all copies or only source re-read/hash under destination lock.
-   - Recommendation: add source lock when a source precondition is supplied, and acquire any multi-file locks through existing sorted lock helpers if both source and destination locks are held. [ASSUMED]
+   - RESOLVED: `copy_document` expected_version validates source bytes; preserve destination race safety. Prefer acquiring source and destination through sorted lock helpers when a source precondition is present, or otherwise ensure the source check is fresh under the appropriate lock before copy proceeds. Destination existence checks remain under the destination lock. [VERIFIED: product Requirements §6.2.2] [VERIFIED: 162-CONTEXT.md]
 
 2. **Should batch tool version semantics be partially implemented now?**
    - What we know: Phase 162 covers current file-affecting tools and Phase 163 covers multi-file batch contract. [VERIFIED: ROADMAP.md]
-   - What's unclear: `archive_document` and `remove_document` already accept arrays today, but Phase 163 owns the ordered `succeeded/conflicted/failed` batch envelope. [VERIFIED: product Requirements §6.3]
-   - Recommendation: Phase 162 should add per-item stale-token refusal only where current batch shape naturally supports per-item errors, but leave new batch status-envelope restructuring to Phase 163. [ASSUMED]
+   - RESOLVED: Phase 162 does not restructure Phase 163 batch envelopes; it adds token semantics only where current tool response shapes can support them without claiming REQ-018/REQ-019. `archive_document` and `remove_document` array behavior may return stale-token refusals using their existing per-item/error shape, but ordered `succeeded/conflicted/failed` batch envelopes remain out of this phase. [VERIFIED: product Requirements §6.3] [VERIFIED: 162-CONTEXT.md]
 
 ## Environment Availability
 
