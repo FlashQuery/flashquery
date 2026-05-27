@@ -42,7 +42,7 @@
 - [x] **Phase 156: Atomic + Durable Write Primitive Consolidation** - Every vault write uses one durable atomic write path that surfaces failures. (completed 2026-05-26)
 - [x] **Phase 157: Records / Memory / Plugins Audit + Guards** - Non-file subsystems remain coherent after the legacy lock table is removed. (completed 2026-05-26)
 - [x] **Phase 158: Tier 2 + Lock-table Retirement + Session Check** - Cross-process writes use session-scoped Postgres advisory locks and the old lock table/CLI disappears. (completed 2026-05-26)
-- [ ] **Phase 159: Lock Timeout + Canonical Key Derivation** - Lock acquisition is bounded and all file/directory keys resolve to canonical path-based identities.
+- [x] **Phase 159: Lock Timeout + Canonical Key Derivation** - Lock acquisition is bounded and all file/directory keys resolve to canonical path-based identities. (completed 2026-05-27)
 - [ ] **Phase 160: Folder Locks + Manage Directory Migration** - Folder operations coordinate safely with descendant file writes using shared/exclusive advisory locks.
 - [ ] **Phase 161: Destination Locks + EXDEV Fallback** - Create, copy, and move operations lock destination paths and move safely across devices.
 - [ ] **Phase 162: Version-fingerprint Check** - Reads and writes expose version tokens and callers can opt into conflict detection.
@@ -179,11 +179,11 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 159-01-PLAN.md — Canonical file and directory lock-key derivation with `T-U-006` through `T-U-010`.
-- [ ] 159-02-PLAN.md — Configurable bounded lock acquisition with `T-U-014` and `T-U-015`.
-- [ ] 159-03-PLAN.md — Single-document write/copy/move `lock_timeout` response envelopes.
-- [ ] 159-04-PLAN.md — Batch archive/remove and compound `lock_timeout` response envelopes.
-- [ ] 159-05-PLAN.md — Integration and directed scenario evidence for `T-I-009`, `T-I-010`, and `D-WCO-02`.
+- [x] 159-01-PLAN.md — Canonical file and directory lock-key derivation with `T-U-006` through `T-U-010`.
+- [x] 159-02-PLAN.md — Configurable bounded lock acquisition with `T-U-014` and `T-U-015`.
+- [x] 159-03-PLAN.md — Single-document write/copy/move `lock_timeout` response envelopes.
+- [x] 159-04-PLAN.md — Batch archive/remove and compound `lock_timeout` response envelopes.
+- [x] 159-05-PLAN.md — Integration and directed scenario evidence for `T-I-009`, `T-I-010`, and `D-WCO-02`.
 
 ### Phase 160: Folder Locks + Manage Directory Migration
 
@@ -277,7 +277,7 @@ Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 →
 | 156. Atomic + Durable Write Primitive Consolidation | 3/3 | Complete    | 2026-05-26 |
 | 157. Records / Memory / Plugins Audit + Guards | 0/TBD | Not started | - |
 | 158. Tier 2 + Lock-table Retirement + Session Check | 6/6 | Complete   | 2026-05-26 |
-| 159. Lock Timeout + Canonical Key Derivation | 0/TBD | Not started | - |
+| 159. Lock Timeout + Canonical Key Derivation | 5/5 | Complete    | 2026-05-27 |
 | 160. Folder Locks + Manage Directory Migration | 0/TBD | Not started | - |
 | 161. Destination Locks + EXDEV Fallback | 0/TBD | Not started | - |
 | 162. Version-fingerprint Check | 0/TBD | Not started | - |

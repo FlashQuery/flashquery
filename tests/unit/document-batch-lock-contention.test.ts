@@ -134,7 +134,7 @@ describe('document batch lock-contention envelopes', () => {
     lockMock.withDocumentLock.mockRejectedValue(new LockTimeoutError('/tmp/fq-unit/Notes/Busy.md'));
   });
 
-  it('archive_document batch item lock timeouts use conflict lock_contention envelopes', async () => {
+  it('archive_document batch item lock timeouts use conflict lock_timeout envelopes', async () => {
     const handlers = await registerHandlers();
     const archiveDocument = handlers.get('archive_document');
     if (!archiveDocument) throw new Error('archive_document handler was not registered');
@@ -146,13 +146,13 @@ describe('document batch lock-contention envelopes', () => {
       expect.objectContaining({
         error: 'conflict',
         identifier: 'Notes/Busy.md',
-        details: { reason: 'lock_contention' },
+        details: { reason: 'lock_timeout' },
       }),
     ]);
     expect(vaultMock.writeMarkdown).not.toHaveBeenCalled();
   });
 
-  it('remove_document batch item lock timeouts use conflict lock_contention envelopes', async () => {
+  it('remove_document batch item lock timeouts use conflict lock_timeout envelopes', async () => {
     const handlers = await registerHandlers();
     const removeDocument = handlers.get('remove_document');
     if (!removeDocument) throw new Error('remove_document handler was not registered');
@@ -165,7 +165,7 @@ describe('document batch lock-contention envelopes', () => {
         {
           error: 'conflict',
           identifier: 'Notes/Busy.md',
-          details: { reason: 'lock_contention' },
+          details: { reason: 'lock_timeout' },
         },
       ],
     });

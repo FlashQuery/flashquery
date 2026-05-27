@@ -122,12 +122,12 @@ function documentResolutionError(err: unknown, identifier: string): Record<strin
   };
 }
 
-function lockContentionError(err: LockTimeoutError, identifier?: string): ErrorEnvelope {
+function lockTimeoutError(err: LockTimeoutError, identifier?: string): ErrorEnvelope {
   return {
     error: 'conflict',
     message: err.message,
     ...(identifier ? { identifier } : {}),
-    details: { reason: 'lock_contention' },
+    details: { reason: 'lock_timeout' },
   };
 }
 
@@ -271,7 +271,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             });
           } catch (sourceErr) {
             if (sourceErr instanceof LockTimeoutError) {
-              results.push(lockContentionError(sourceErr, sourceIdentifier));
+              results.push(lockTimeoutError(sourceErr, sourceIdentifier));
               continue;
             }
             results.push(documentResolutionError(sourceErr, sourceIdentifier));
@@ -284,7 +284,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         });
       } catch (err) {
         if (err instanceof LockTimeoutError) {
-          return jsonExpectedError(lockContentionError(err));
+          return jsonExpectedError(lockTimeoutError(err));
         }
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`insert_doc_link failed: ${msg}`);
@@ -469,7 +469,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
               });
             } catch (itemErr) {
               if (itemErr instanceof LockTimeoutError) {
-                results.push(lockContentionError(itemErr, id));
+                results.push(lockTimeoutError(itemErr, id));
                 continue;
               }
               const msg = itemErr instanceof Error ? itemErr.message : String(itemErr);
@@ -570,7 +570,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         return jsonToolResult(results);
       } catch (err) {
         if (err instanceof LockTimeoutError) {
-          return jsonExpectedError(lockContentionError(err));
+          return jsonExpectedError(lockTimeoutError(err));
         }
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`apply_tags failed: ${msg}`);
@@ -1204,7 +1204,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
          });
        } catch (err) {
         if (err instanceof LockTimeoutError) {
-          return jsonExpectedError(lockContentionError(err, identifier));
+          return jsonExpectedError(lockTimeoutError(err, identifier));
         }
         const msg = err instanceof Error ? err.message : String(err);
          logger.error(`insert_in_doc failed: ${msg}`);
@@ -1397,7 +1397,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             error: 'conflict',
             message: err.message,
             identifier,
-            details: { reason: 'lock_contention' },
+            details: { reason: 'lock_timeout' },
           });
         }
         const msg = err instanceof Error ? err.message : String(err);

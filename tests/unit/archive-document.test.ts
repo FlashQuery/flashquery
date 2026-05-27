@@ -231,7 +231,7 @@ describe('archive_document JSON result helpers', () => {
     expect(callbackCompleted).toBe(true);
   });
 
-  it('T-U-227 lock timeout: archive_document returns conflict lock_contention before archive mutation', async () => {
+  it('T-U-227 lock timeout: archive_document returns conflict lock_timeout before archive mutation', async () => {
     setupSuccessfulArchive();
     const { LockTimeoutError } = await import('../../src/services/document-lock.js');
     lockMock.withDocumentLock.mockRejectedValue(new LockTimeoutError('/tmp/fq-unit/Notes/Archive Me.md'));
@@ -243,7 +243,7 @@ describe('archive_document JSON result helpers', () => {
     expect(result.isError).toBe(false);
     expect(payload).toMatchObject({
       error: 'conflict',
-      details: { reason: 'lock_contention' },
+      details: { reason: 'lock_timeout' },
     });
     expect(vaultMock.writeMarkdown).not.toHaveBeenCalled();
     expect(resolverMock.targetedScan).not.toHaveBeenCalled();

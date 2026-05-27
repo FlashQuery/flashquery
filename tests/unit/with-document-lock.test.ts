@@ -15,6 +15,9 @@ class FakePoolClient {
     if (sql.includes('pg_advisory_unlock')) {
       return { rows: [{ released: true }] as Row[] } as QueryResult<Row>;
     }
+    if (sql.includes('pg_try_advisory_lock')) {
+      return { rows: [{ acquired: true }] as Row[] } as QueryResult<Row>;
+    }
     return { rows: [] as Row[] } as QueryResult<Row>;
   }
 
@@ -69,7 +72,7 @@ describe('REQ-009 withDocumentLock facade', () => {
     expect(result).toBe('done');
     expect(clients).toHaveLength(1);
     expect(clients[0].calls.map((call) => call.sql)).toEqual([
-      'SELECT pg_advisory_lock($1::bigint)',
+      'SELECT pg_try_advisory_lock($1::bigint) AS acquired',
       'SELECT pg_advisory_unlock($1::bigint) AS released',
     ]);
     expect(clients[0].released).toBe(true);
@@ -84,7 +87,7 @@ describe('REQ-009 withDocumentLock facade', () => {
 
     expect(clients).toHaveLength(1);
     expect(clients[0].calls.map((call) => call.sql)).toEqual([
-      'SELECT pg_advisory_lock($1::bigint)',
+      'SELECT pg_try_advisory_lock($1::bigint) AS acquired',
       'SELECT pg_advisory_unlock($1::bigint) AS released',
     ]);
     expect(clients[0].released).toBe(true);
@@ -95,8 +98,8 @@ describe('REQ-009 withDocumentLock facade', () => {
 
     expect(clients).toHaveLength(1);
     expect(clients[0].calls.map((call) => call.sql)).toEqual([
-      'SELECT pg_advisory_lock($1::bigint)',
-      'SELECT pg_advisory_lock($1::bigint)',
+      'SELECT pg_try_advisory_lock($1::bigint) AS acquired',
+      'SELECT pg_try_advisory_lock($1::bigint) AS acquired',
       'SELECT pg_advisory_unlock($1::bigint) AS released',
       'SELECT pg_advisory_unlock($1::bigint) AS released',
     ]);
@@ -119,6 +122,9 @@ describe('REQ-009 withDocumentLock facade', () => {
           client.calls.push({ sql, params });
           if (sql.includes('pg_advisory_unlock')) {
             return { rows: [{ released: false }] as Row[] } as QueryResult<Row>;
+          }
+          if (sql.includes('pg_try_advisory_lock')) {
+            return { rows: [{ acquired: true }] as Row[] } as QueryResult<Row>;
           }
           return { rows: [] as Row[] } as QueryResult<Row>;
         };

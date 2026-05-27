@@ -1,18 +1,30 @@
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { access, mkdtemp, open, realpath, rm } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { Mutex } from 'async-mutex';
 import type { FlashQueryConfig } from '../config/types.js';
 import { withPgClient } from '../utils/pg-client.js';
 
 const TIER1_STRIPE_COUNT = 1024;
+const TIER2_RETRY_DELAY_MS = 25;
 const tier1Stripes = Array.from({ length: TIER1_STRIPE_COUNT }, () => new Mutex());
 const heldDocumentLocks = new AsyncLocalStorage<Set<string>>();
+const vaultCaseSensitivity = new Map<string, Promise<boolean>>();
 
 export class LockTimeoutError extends Error {
-  constructor(resource: string) {
-    super(`Write lock timeout: another instance is writing to ${resource}. Retry in a few seconds.`);
+  readonly reason = 'lock_timeout';
+  readonly resource: string;
+  readonly timeoutSeconds: number;
+
+  constructor(resource: string, timeoutSeconds = 10) {
+    super(
+      `Write lock timeout: another instance is writing to ${resource}. Retry in a few seconds.`
+    );
     this.name = 'LockTimeoutError';
+    this.resource = resource;
+    this.timeoutSeconds = timeoutSeconds;
   }
 }
 
@@ -26,6 +38,7 @@ interface BurstRequest<T> {
   fn: () => Promise<T>;
   resolve: (value: T) => void;
   reject: (error: unknown) => void;
+  timer?: NodeJS.Timeout;
 }
 
 interface BurstState {
@@ -45,28 +58,132 @@ function hashString(value: string): number {
   return hash >>> 0;
 }
 
-function toPhase155BasicKey(filePath: string): string {
-  // Phase 155 deliberately accepts already resolved absolute paths only.
-  // Full realpath/case-folding canonical derivation is deferred to Phase 159.
-  if (!path.isAbsolute(filePath)) {
-    throw new Error('withDocumentLock requires an absolute, already validated file path');
-  }
-  return path.normalize(filePath);
+function timeoutMs(config: FlashQueryConfig): number {
+  return (config.locking.lockTimeoutSeconds ?? 10) * 1000;
 }
 
-function toEntry(filePath: string): DocumentLockEntry {
-  const basicKey = toPhase155BasicKey(filePath);
+function remainingMs(deadline: number): number {
+  return Math.max(0, deadline - Date.now());
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function acquireTier1StripeWithTimeout(
+  stripeIndex: number,
+  entry: DocumentLockEntry,
+  deadline: number,
+  timeoutSeconds: number
+): Promise<() => void> {
+  let timeout: NodeJS.Timeout | undefined;
+  let acquired = false;
+  const acquire = tier1Stripes[stripeIndex].acquire();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(
+      () => reject(new LockTimeoutError(entry.resource, timeoutSeconds)),
+      remainingMs(deadline)
+    );
+    timeout.unref?.();
+  });
+
+  try {
+    const release = await Promise.race([acquire, timeoutPromise]);
+    acquired = true;
+    return release;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    if (!acquired) {
+      acquire.then((release) => release()).catch(() => undefined);
+    }
+  }
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function safeRealpath(filePath: string): Promise<string> {
+  try {
+    return await realpath(filePath);
+  } catch {
+    return path.resolve(filePath);
+  }
+}
+
+async function isCaseInsensitiveVault(vaultRoot: string): Promise<boolean> {
+  const resolvedVault = await safeRealpath(vaultRoot);
+  const cached = vaultCaseSensitivity.get(resolvedVault);
+  if (cached) return cached;
+  if (!(await pathExists(resolvedVault))) return false;
+
+  const probe = (async () => {
+    const probeDir = await mkdtemp(path.join(resolvedVault, '.flashquery-case-probe-'));
+    const probeFile = path.join(probeDir, 'CaseProbe');
+    try {
+      const handle = await open(probeFile, 'w');
+      await handle.close();
+      return pathExists(path.join(probeDir, 'caseprobe'));
+    } finally {
+      await rm(probeDir, { recursive: true, force: true });
+    }
+  })();
+
+  vaultCaseSensitivity.set(resolvedVault, probe);
+  return probe;
+}
+
+async function canonicalPathFor(
+  vaultRoot: string,
+  filePath: string,
+  kind: 'file' | 'dir'
+): Promise<string> {
+  const resolvedVault = await safeRealpath(vaultRoot);
+  const absolutePath = path.isAbsolute(filePath) ? filePath : path.resolve(resolvedVault, filePath);
+  const normalizedPath = path.normalize(absolutePath);
+  let canonicalPath: string;
+
+  if (kind === 'dir') {
+    canonicalPath = await safeRealpath(normalizedPath);
+  } else if (await pathExists(normalizedPath)) {
+    canonicalPath = await safeRealpath(normalizedPath);
+  } else {
+    const parent = await safeRealpath(path.dirname(normalizedPath));
+    canonicalPath = path.join(parent, path.basename(normalizedPath));
+  }
+
+  return (await isCaseInsensitiveVault(resolvedVault))
+    ? canonicalPath.toLocaleLowerCase('en-US')
+    : canonicalPath;
+}
+
+async function toEntry(
+  config: FlashQueryConfig,
+  filePath: string,
+  kind: 'file' | 'dir' = 'file'
+): Promise<DocumentLockEntry> {
+  const vaultRoot = config.instance.vault?.path ?? path.dirname(path.resolve(filePath));
+  const canonicalPath = await canonicalPathFor(vaultRoot, filePath, kind);
+  const basicKey = `${kind}:${canonicalPath}`;
   return {
     basicKey,
-    resource: `document:${basicKey}`,
+    resource: basicKey,
     stripeIndex: hashString(basicKey) % TIER1_STRIPE_COUNT,
   };
 }
 
-function uniqueSortedEntries(filePaths: string[]): DocumentLockEntry[] {
+async function uniqueSortedEntries(
+  config: FlashQueryConfig,
+  filePaths: string[]
+): Promise<DocumentLockEntry[]> {
   const byKey = new Map<string, DocumentLockEntry>();
   for (const filePath of filePaths) {
-    const entry = toEntry(filePath);
+    const entry = await toEntry(config, filePath);
     byKey.set(entry.basicKey, entry);
   }
   return [...byKey.values()].sort((a, b) => a.basicKey.localeCompare(b.basicKey));
@@ -84,40 +201,60 @@ function toAdvisoryKey(entry: DocumentLockEntry): string {
 export function isDocumentLockHeldForPath(filePath: string): boolean {
   const held = heldDocumentLocks.getStore();
   if (!held) return false;
-  return held.has(toPhase155BasicKey(filePath));
+  const normalized = path.normalize(filePath);
+  return held.has(`file:${normalized}`);
 }
 
 async function runWithTier2<T>(
   config: FlashQueryConfig,
   entries: DocumentLockEntry[],
+  deadline: number,
   fn: () => Promise<T>
 ): Promise<T> {
   if (!config.locking.enabled) return fn();
 
   const advisoryKeys = entries.map(toAdvisoryKey);
+  const configuredTimeoutSeconds = config.locking.lockTimeoutSeconds ?? 10;
   return withPgClient(config.supabase.databaseUrl, async (client) => {
     const acquiredKeys: string[] = [];
     let callbackResult: T | undefined;
     let callbackError: unknown;
 
-    for (const advisoryKey of advisoryKeys) {
-      await client.query('SELECT pg_advisory_lock($1::bigint)', [advisoryKey]);
-      acquiredKeys.push(advisoryKey);
-    }
-
     try {
-      callbackResult = await fn();
-    } catch (err) {
-      callbackError = err;
-    }
+      for (const [index, advisoryKey] of advisoryKeys.entries()) {
+        while (true) {
+          if (remainingMs(deadline) <= 0) {
+            throw new LockTimeoutError(
+              entries[index]?.resource ?? entries[0]?.resource ?? 'document lock',
+              configuredTimeoutSeconds
+            );
+          }
+          const result = await client.query<{ acquired: boolean }>(
+            'SELECT pg_try_advisory_lock($1::bigint) AS acquired',
+            [advisoryKey]
+          );
+          if (result.rows[0]?.acquired === true) {
+            acquiredKeys.push(advisoryKey);
+            break;
+          }
+          await sleep(Math.min(TIER2_RETRY_DELAY_MS, remainingMs(deadline)));
+        }
+      }
 
-    for (const advisoryKey of [...acquiredKeys].reverse()) {
-      const result = await client.query<{ released: boolean }>(
-        'SELECT pg_advisory_unlock($1::bigint) AS released',
-        [advisoryKey]
-      );
-      if (result.rows[0]?.released !== true) {
-        throw new Error(`Failed to release advisory document lock ${advisoryKey}`);
+      try {
+        callbackResult = await fn();
+      } catch (err) {
+        callbackError = err;
+      }
+    } finally {
+      for (const advisoryKey of [...acquiredKeys].reverse()) {
+        const result = await client.query<{ released: boolean }>(
+          'SELECT pg_advisory_unlock($1::bigint) AS released',
+          [advisoryKey]
+        );
+        if (result.rows[0]?.released !== true) {
+          throw new Error(`Failed to release advisory document lock ${advisoryKey}`);
+        }
       }
     }
 
@@ -142,15 +279,29 @@ export async function withDocumentLocks<T>(
   filePaths: string[],
   fn: () => Promise<T>
 ): Promise<T> {
-  const entries = uniqueSortedEntries(filePaths);
+  const entries = await uniqueSortedEntries(config, filePaths);
   if (entries.length === 0) return fn();
-  const stripeIndices = [...new Set(entries.map((entry) => entry.stripeIndex))].sort((a, b) => a - b);
+  const deadline = Date.now() + timeoutMs(config);
+  const configuredTimeoutSeconds = config.locking.lockTimeoutSeconds ?? 10;
+  const stripeIndices = [...new Set(entries.map((entry) => entry.stripeIndex))].sort(
+    (a, b) => a - b
+  );
   const burstKey = toBurstKey(entries);
   const activeBurst = activeBursts.get(burstKey);
 
   if (activeBurst) {
     return new Promise<T>((resolve, reject) => {
-      activeBurst.queue.push({ fn, resolve: resolve as (value: unknown) => void, reject });
+      const request: BurstRequest<unknown> = {
+        fn,
+        resolve: resolve as (value: unknown) => void,
+        reject,
+      };
+      request.timer = setTimeout(() => {
+        const index = activeBurst.queue.indexOf(request);
+        if (index >= 0) activeBurst.queue.splice(index, 1);
+        reject(new LockTimeoutError(entries[0].resource, configuredTimeoutSeconds));
+      }, remainingMs(deadline));
+      activeBurst.queue.push(request);
     });
   }
 
@@ -176,14 +327,22 @@ export async function withDocumentLocks<T>(
 
     try {
       for (const stripeIndex of stripeIndices) {
-        const releaseTier1 = await tier1Stripes[stripeIndex].acquire();
+        const entry =
+          entries.find((candidate) => candidate.stripeIndex === stripeIndex) ?? entries[0];
+        const releaseTier1 = await acquireTier1StripeWithTimeout(
+          stripeIndex,
+          entry,
+          deadline,
+          configuredTimeoutSeconds
+        );
         tier1Releases.push(releaseTier1);
       }
 
-      await runWithTier2(config, entries, async () => {
+      await runWithTier2(config, entries, deadline, async () => {
         while (burstState.queue.length > 0) {
           const request = burstState.queue.shift();
           if (!request) continue;
+          if (request.timer) clearTimeout(request.timer);
           const inheritedLocks = heldDocumentLocks.getStore();
           const activeLocks = new Set(inheritedLocks ?? []);
           for (const entry of entries) {
@@ -211,6 +370,7 @@ export async function withDocumentLocks<T>(
         outcome.request.reject(err);
       }
       for (const request of burstState.queue.splice(0)) {
+        if (request.timer) clearTimeout(request.timer);
         request.reject(err);
       }
     } finally {
@@ -223,3 +383,11 @@ export async function withDocumentLocks<T>(
 
   return initialPromise;
 }
+
+export const __testing = {
+  deriveDocumentLockEntry: toEntry,
+  clearCaseSensitivityCache: () => vaultCaseSensitivity.clear(),
+  setCaseInsensitiveForVault: async (vaultRoot: string, isInsensitive: boolean) => {
+    vaultCaseSensitivity.set(await safeRealpath(vaultRoot), Promise.resolve(isInsensitive));
+  },
+};

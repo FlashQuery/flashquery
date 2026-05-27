@@ -59,12 +59,12 @@ describe('move_document JSON output contract', () => {
     });
   });
 
-  it('represents lock contention as an expected JSON conflict', () => {
+  it('represents lock timeout as an expected JSON conflict', () => {
     const result = jsonExpectedError({
       error: 'conflict',
       message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
       identifier: 'Source.md',
-      details: { reason: 'lock_contention' },
+      details: { reason: 'lock_timeout' },
     });
 
     const payload = JSON.parse(result.content[0]!.text) as ErrorEnvelope;
@@ -72,7 +72,7 @@ describe('move_document JSON output contract', () => {
     expect(result.isError).toBe(false);
     expect(payload).toMatchObject({
       error: 'conflict',
-      details: { reason: 'lock_contention' },
+      details: { reason: 'lock_timeout' },
     });
   });
 
@@ -103,7 +103,7 @@ describe('move_document JSON output contract', () => {
     expect(moveSection).toContain('Supabase path update affected no document row');
     expect(moveSection).toContain('plugin_ownership_path_expectation');
     expect(moveSection).toContain('path_exists');
-    expect(moveSection).toContain("details: { reason: 'lock_contention' }");
+    expect(moveSection).toContain("details: { reason: 'lock_timeout' }");
     expect(moveSection).toContain("details: { reason: 'untracked_document' }");
     expect(moveSection).toContain('return jsonRuntimeError({ message: `Error moving document: ${msg}`, identifier });');
     expect(moveSection).not.toContain('Document moved successfully');

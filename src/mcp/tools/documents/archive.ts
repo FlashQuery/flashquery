@@ -181,7 +181,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
                   error: 'conflict',
                   message: itemErr.message,
                   identifier: id,
-                  details: { reason: 'lock_contention' },
+                  details: { reason: 'lock_timeout' },
                 });
                 continue;
               }
@@ -229,7 +229,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
             return jsonExpectedError({
               error: 'conflict',
               message: err.message,
-              details: { reason: 'lock_contention' },
+              details: { reason: 'lock_timeout' },
             });
           }
           const msg = err instanceof Error ? err.message : String(err);

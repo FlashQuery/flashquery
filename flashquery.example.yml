@@ -215,6 +215,10 @@ mcp:
 
 locking:
   enabled: true
+  # Maximum time a contended document write waits to acquire its lock before
+  # returning a conflict envelope with details.reason: "lock_timeout".
+  # Default: 10.
+  # lock_timeout_seconds: 10
 
 
 # ─── Logging ────────────────────────────────────────────────────────────────

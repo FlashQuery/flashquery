@@ -84,6 +84,7 @@ const McpSchema = z
 const LockingSchema = z
   .object({
     enabled: z.boolean().default(true),
+    lock_timeout_seconds: z.number().int().positive().default(10),
     ttl_seconds: z.number().optional(),
   })
   .strip()

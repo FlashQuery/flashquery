@@ -7,7 +7,7 @@ describe('REQ-009 document lock facade only', () => {
     const exportedSymbols = [...source.matchAll(/^export\s+(?:async\s+function|class|interface|const|type)\s+(\w+)/gm)]
       .map((match) => match[1]);
 
-    expect(exportedSymbols.sort()).toEqual(['LockTimeoutError', 'withDocumentLock', 'withDocumentLocks'].sort());
+    expect(exportedSymbols.sort()).toEqual(['LockTimeoutError', '__testing', 'withDocumentLock', 'withDocumentLocks'].sort());
     expect(source).not.toMatch(/export\s+(?:async\s+)?function\s+acquire/i);
     expect(source).not.toMatch(/export\s+(?:async\s+)?function\s+release/i);
   });

@@ -28,7 +28,7 @@ describe('replace_doc_section Phase 124 contract', () => {
     );
 
     expect(replaceBlock).toContain("error: 'conflict'");
-    expect(replaceBlock).toContain("reason: 'lock_contention'");
+    expect(replaceBlock).toContain("reason: 'lock_timeout'");
     expect(replaceBlock).toContain("error: 'ambiguous_identifier'");
     expect(replaceBlock).toContain("error: 'not_found'");
     expect(replaceBlock).toContain('return jsonRuntimeError({ message: `Error replacing document section: ${msg}`, identifier });');

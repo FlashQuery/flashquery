@@ -70,12 +70,12 @@ describe('copy_document JSON output contract', () => {
     });
   });
 
-  it('represents lock contention and tag validation as expected JSON errors', () => {
+  it('represents lock timeout and tag validation as expected JSON errors', () => {
     const lock = jsonExpectedError({
       error: 'conflict',
       message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
       identifier: 'Source.md',
-      details: { reason: 'lock_contention' },
+      details: { reason: 'lock_timeout' },
     });
     const tags = jsonExpectedError({
       error: 'invalid_input',
@@ -87,7 +87,7 @@ describe('copy_document JSON output contract', () => {
     expect(lock.isError).toBe(false);
     expect(JSON.parse(lock.content[0]!.text)).toMatchObject({
       error: 'conflict',
-      details: { reason: 'lock_contention' },
+      details: { reason: 'lock_timeout' },
     });
     expect(tags.isError).toBe(false);
     expect(JSON.parse(tags.content[0]!.text)).toMatchObject({
@@ -99,7 +99,7 @@ describe('copy_document JSON output contract', () => {
   it('uses JSON runtime envelopes for unexpected copy_document failures', () => {
     const copySection = readFileSync('src/mcp/tools/documents/copy.ts', 'utf8');
 
-    expect(copySection).toContain("details: { reason: 'lock_contention' }");
+    expect(copySection).toContain("details: { reason: 'lock_timeout' }");
     expect(copySection).toContain("details: { field: 'tags', errors: [...validation.errors] }");
     expect(copySection).toContain('return jsonRuntimeError({ message: `Error copying document: ${msg}`, identifier });');
     expect(copySection).not.toContain('Tag validation failed - ${messages.join');

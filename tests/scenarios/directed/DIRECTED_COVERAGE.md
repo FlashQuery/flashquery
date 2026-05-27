@@ -365,6 +365,7 @@ Per-file document write locking and public-surface concurrent write behaviors.
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
 | D-WCO-01 | T-S-001: two parallel `write_document` calls to different files complete through the public MCP surface with locking enabled. | test_per_file_lock_parallel | 2026-05-26 | 2026-05-26 |
+| D-WCO-02 | T-S-002: case-variant `write_document` paths serialize to one create plus one structured conflict on case-insensitive vault filesystems, and skip clearly on case-sensitive filesystems. | test_case_variant_path_locking | 2026-05-26 |  |
 | D-WCO-04 | T-S-004: two concurrent `apply_tags` calls with disjoint tags on one document preserve the union of both updates. | test_apply_tags_no_lost_update | 2026-05-26 | 2026-05-26 |
 | D-WCO-08 | T-S-008: two parallel `call_macro` invocations rely on per-step tool locks and preserve structural document changes. | test_parallel_macros_per_file_lock | 2026-05-26 | 2026-05-26 |
 
@@ -1877,6 +1878,9 @@ Covers: ML-32
 
 ### test_per_file_lock_parallel
 Covers: D-WCO-01
+
+### test_case_variant_path_locking
+Covers: D-WCO-02
 
 ### test_apply_tags_no_lost_update
 Covers: D-WCO-04

@@ -225,7 +225,7 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
               error: 'conflict',
               message: err.message,
               identifier,
-              details: { reason: 'lock_contention' },
+              details: { reason: 'lock_timeout' },
             });
           }
           if (isDocumentNotFoundError(err)) {

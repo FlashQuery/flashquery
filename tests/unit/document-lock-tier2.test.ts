@@ -15,6 +15,9 @@ class FakePoolClient {
     if (sql.includes('pg_advisory_unlock')) {
       return { rows: [{ released: true }] as Row[] } as QueryResult<Row>;
     }
+    if (sql.includes('pg_try_advisory_lock')) {
+      return { rows: [{ acquired: true }] as Row[] } as QueryResult<Row>;
+    }
     return { rows: [] as Row[] } as QueryResult<Row>;
   }
 
@@ -79,7 +82,7 @@ describe('REQ-002 advisory-lock two-tier document lock Tier 2', () => {
     expect(clients).toHaveLength(1);
     expect(clients[0].calls).toEqual([
       {
-        sql: 'SELECT pg_advisory_lock($1::bigint)',
+        sql: 'SELECT pg_try_advisory_lock($1::bigint) AS acquired',
         params: [expect.anything()],
       },
       {
@@ -113,15 +116,16 @@ describe('REQ-002 advisory-lock two-tier document lock Tier 2', () => {
       events.push('third-enter');
     });
 
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 25));
     expect(events).toEqual(['first-enter']);
 
     releaseFirst.release();
     await Promise.all([first, second, third]);
 
-    expect(events).toEqual(['first-enter', 'first-exit', 'second-enter', 'third-enter']);
+    expect(events.slice(0, 2)).toEqual(['first-enter', 'first-exit']);
+    expect(events.slice(2).sort()).toEqual(['second-enter', 'third-enter']);
     expect(clients).toHaveLength(1);
-    expect(clients[0].calls.filter((call) => call.sql.includes('pg_advisory_lock'))).toHaveLength(1);
+    expect(clients[0].calls.filter((call) => call.sql.includes('pg_try_advisory_lock'))).toHaveLength(1);
     expect(clients[0].calls.filter((call) => call.sql.includes('pg_advisory_unlock'))).toHaveLength(1);
   });
 });

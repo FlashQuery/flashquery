@@ -58,7 +58,32 @@ locking:
     const config = loadConfig(writeConfig(baseConfig()));
 
     expect(config.locking.enabled).toBe(true);
+    expect(config.locking.lockTimeoutSeconds).toBe(10);
     expect(config.locking).not.toHaveProperty('ttlSeconds');
     expect(getDeprecationWarnings(config).filter((warning) => warning.includes('ttl_seconds'))).toEqual([]);
+  });
+
+  it('T-U-014 lock-timeout configured loads locking.lock_timeout_seconds as lockTimeoutSeconds', () => {
+    const config = loadConfig(writeConfig(baseConfig(`
+locking:
+  lock_timeout_seconds: 5
+`)));
+
+    expect(config.locking.lockTimeoutSeconds).toBe(5);
+  });
+
+  it('T-U-015 lock-timeout default applies when lock_timeout_seconds is absent', () => {
+    const config = loadConfig(writeConfig(baseConfig()));
+
+    expect(config.locking.lockTimeoutSeconds).toBe(10);
+  });
+
+  it.each(['0', '-1', '1.5'])('rejects invalid lock_timeout_seconds value %s', (value) => {
+    expect(() =>
+      loadConfig(writeConfig(baseConfig(`
+locking:
+  lock_timeout_seconds: ${value}
+`)))
+    ).toThrow();
   });
 });

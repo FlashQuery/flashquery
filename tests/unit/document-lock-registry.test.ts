@@ -57,12 +57,12 @@ describe('REQ-001 document-lock Tier 1 registry', () => {
     expect(events).toContain('distinct:b-enter');
   });
 
-  it('T-U-002 uses bounded 1024 stripe allocation and Phase-155 basic absolute-path key scaffolding', async () => {
+  it('T-U-002 uses bounded 1024 stripe allocation and full canonical key derivation', async () => {
     const source = await import('node:fs/promises').then((fs) =>
       fs.readFile(new URL('../../src/services/document-lock.ts', import.meta.url), 'utf-8')
     );
     expect(source).toContain('TIER1_STRIPE_COUNT = 1024');
-    expect(source).toContain('Phase 155');
+    expect(source).toContain('canonicalPathFor');
     expect(source).toMatch(/path\.isAbsolute/);
     expect(source).not.toMatch(/relativePath.*resource/i);
   });

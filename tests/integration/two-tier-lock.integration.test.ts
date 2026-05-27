@@ -26,12 +26,12 @@ function makeConfig(): FlashQueryConfig {
       databaseUrl: TEST_DATABASE_URL,
       skipDdl: true,
     },
-    locking: { enabled: true },
+    locking: { enabled: true, lockTimeoutSeconds: 10 },
   } as FlashQueryConfig;
 }
 
 function advisoryKeyForPath(filePath: string): string {
-  const digest = createHash('sha256').update(`document:${filePath}`).digest();
+  const digest = createHash('sha256').update(`file:${filePath}`).digest();
   return digest.readBigInt64BE(0).toString();
 }
 
