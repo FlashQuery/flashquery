@@ -10,6 +10,55 @@ const DOCUMENT_TOOL_FILES = [
   'src/mcp/tools/compound.ts',
 ];
 
+const SHARED_DIRECTORY_LOCK_SITES = [
+  {
+    file: 'src/mcp/tools/documents/write.ts',
+    patterns: [
+      /withAncestorDirectoryLocksShared\(\s*config,\s*absolutePath[\s\S]*withDocumentLock\(\s*config,\s*absolutePath/,
+      /withAncestorDirectoryLocksShared\(\s*config,\s*lockCandidate\.absPath[\s\S]*withDocumentLock\(\s*config,\s*lockCandidate\.absPath/,
+    ],
+  },
+  {
+    file: 'src/mcp/tools/documents/archive.ts',
+    patterns: [
+      /withAncestorDirectoryLocksShared\(\s*config,\s*resolved\.absPath[\s\S]*withDocumentLock\(\s*config,\s*resolved\.absPath/,
+    ],
+  },
+  {
+    file: 'src/mcp/tools/documents/remove.ts',
+    patterns: [
+      /withAncestorDirectoryLocksShared\(\s*config,\s*resolved\.absPath[\s\S]*withDocumentLock\(\s*config,\s*resolved\.absPath/,
+    ],
+  },
+  {
+    file: 'src/mcp/tools/documents/copy.ts',
+    patterns: [
+      /withAncestorDirectoryLocksShared\(\s*config,\s*absPath[\s\S]*withDocumentLock\(\s*config,\s*absPath/,
+    ],
+  },
+  {
+    file: 'src/mcp/tools/documents/move.ts',
+    patterns: [
+      /withAncestorDirectoryLocksShared\(\s*config,\s*sourceAbsPath[\s\S]*withAncestorDirectoryLocksShared\(\s*config,\s*normalizedDest[\s\S]*withDocumentLocks\(\s*config,\s*\[sourceAbsPath,\s*normalizedDest\]/,
+    ],
+  },
+  {
+    file: 'src/mcp/tools/compound.ts',
+    patterns: [
+      /insert_doc_link[\s\S]*withAncestorDirectoryLocksShared\(\s*config,\s*sourceResolved\.absPath[\s\S]*withDocumentLock\(\s*config,\s*sourceResolved\.absPath/,
+      /apply_tags[\s\S]*withAncestorDirectoryLocksShared\(\s*config,\s*resolved\.absPath[\s\S]*withDocumentLock\(\s*config,\s*resolved\.absPath/,
+      /insert_in_doc[\s\S]*withAncestorDirectoryLocksShared\(\s*config,\s*resolved\.absPath[\s\S]*withDocumentLock\(\s*config,\s*resolved\.absPath/,
+      /replace_doc_section[\s\S]*withAncestorDirectoryLocksShared\(\s*config,\s*resolved\.absPath[\s\S]*withDocumentLock\(\s*config,\s*resolved\.absPath/,
+    ],
+  },
+  {
+    file: 'src/services/scanner.ts',
+    patterns: [
+      /repairFrontmatter[\s\S]*withAncestorDirectoryLocksShared\(\s*config,\s*join\(vaultRoot,\s*filePath\)[\s\S]*withDocumentLock\(\s*config,\s*join\(vaultRoot,\s*filePath\)/,
+    ],
+  },
+];
+
 describe('REQ-001/REQ-010 document tool lock call sites', () => {
   it('T-I-001/T-I-002 scaffolding: document and compound tools no longer acquire the coarse documents lock directly', async () => {
     const offenders: string[] = [];
@@ -92,5 +141,17 @@ describe('REQ-001/REQ-010 document tool lock call sites', () => {
     expect(source).toMatch(/return \{ retry: true \}/);
     expect(source).toMatch(/if \(!attempt\.retry\) return attempt\.result/);
     expect(lockToWriteSlice).toMatch(/readFile\(resolved\.absPath/);
+  });
+
+  it('REQ-007 T-I-012 file-writing tools hold shared ancestor directory locks outside file locks', async () => {
+    for (const site of SHARED_DIRECTORY_LOCK_SITES) {
+      const source = await readFile(new URL(`../../${site.file}`, import.meta.url), 'utf-8');
+      expect(source, `${site.file} must import shared directory lock helper`).toContain(
+        'withAncestorDirectoryLocksShared'
+      );
+      for (const pattern of site.patterns) {
+        expect(source, `${site.file} missing ${pattern}`).toMatch(pattern);
+      }
+    }
   });
 });
