@@ -4,7 +4,7 @@ description: "Add a wiki-style relationship link from source documents to one re
 help_hint: "Use insert_doc_link to add a deduplicated [[Target]] link into source document frontmatter relationship fields."
 tier: read-write
 args:
-  identifiers: "Required source document identifier or identifiers."
+  identifiers: "Required source document identifier, or array of strings and {identifier, version_token} items."
   target_identifier: "Required target document identifier."
   property: "Optional frontmatter relationship property."
   expected_version: "Optional version_token precondition for source document writes."
@@ -21,7 +21,7 @@ Use `insert_doc_link` to add a wiki-style relationship link from one or more sou
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `identifiers` | string or string[] | yes | none | Source document identifier or ordered source identifier array. |
+| `identifiers` | string or Array<string \| { identifier, version_token }> | yes | none | Source document identifier or ordered source identifier array. Batch arrays may mix bare strings with object-form `{ "identifier": "...", "version_token": "..." }` items. |
 | `target_identifier` | string | yes | none | Target document identifier used to resolve the link title and target metadata. |
 | `property` | string | no | `links` | Frontmatter property to update, such as `related` or `parent`. |
 | `expected_version` | string | no | none | Optional `version_token` expected for the source document before writing. |
@@ -29,7 +29,7 @@ Use `insert_doc_link` to add a wiki-style relationship link from one or more sou
 
 ## Returns
 
-Returns JSON text. Each source result includes document identification fields, post-write `version_token`, status `updated` or `unchanged`, the target property, the wikilink, and target document metadata. Target resolution failures stop the request; source failures are reported per source.
+Returns JSON text. Single-string input preserves the existing wrapped result object. Batch array input returns a raw ordered array. Each batch entry reports top-level `status: "succeeded"`, `"conflicted"`, or `"failed"` in input order. Successful entries include document data with post-write `version_token`, legacy source status `updated` or `unchanged`, the target property, the wikilink, and target document metadata. Target resolution failures stop the request; source failures are reported per source.
 
 When `expected_version` or `if_match` is stale for a source document, the write is refused before disk mutation with `error: "conflict"`, `details.reason: "version_mismatch"`, the current `version_token`, and `targeted_region.frontmatter`.
 
@@ -46,6 +46,12 @@ Adds the target link to the `links` property.
 ```
 
 Adds the same relationship to two source documents.
+
+```json
+{ "identifiers": ["A.md", { "identifier": "B.md", "version_token": "..." }], "target_identifier": "Index.md" }
+```
+
+Uses a mixed source batch. The object-form `version_token` applies only to that source item; bare strings are untokened unless a top-level `expected_version` or `if_match` is supplied.
 
 ```json
 { "identifiers": "Projects/Plan.md", "target_identifier": "People/Ada.md", "expected_version": "..." }

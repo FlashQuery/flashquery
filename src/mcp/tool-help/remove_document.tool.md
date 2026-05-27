@@ -4,7 +4,7 @@ description: "Remove one or more documents from current vault workflows by archi
 help_hint: "Use remove_document when a document should leave normal vault workflows and be moved to trash or deleted."
 tier: read-write
 args:
-  identifiers: "Required document identifier or identifiers."
+  identifiers: "Required document identifier, or array of strings and {identifier, version_token} items."
   expected_version: "Optional source file version_token precondition."
   if_match: "Alias for expected_version."
 ---
@@ -19,13 +19,13 @@ Use `remove_document` when documents should no longer appear in normal vault wor
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `identifiers` | string or string[] | yes | none | One or more document identifiers: path, fq_id, or filename. |
+| `identifiers` | string or Array<string \| { identifier, version_token }> | yes | none | One or more document identifiers: path, fq_id, or filename. Batch arrays may mix bare strings with object-form `{ "identifier": "...", "version_token": "..." }` items. |
 | `expected_version` | string | no | none | Optional source-file `version_token` precondition. |
 | `if_match` | string | no | none | Alias for `expected_version`. |
 
 ## Returns
 
-Returns JSON text. Single-string input returns one removal result; array input returns ordered per-document results. Successful entries include document identification with `size.chars`, archived lifecycle metadata, and `moved_to` removal destination details. `remove_document` success omits `version_token` because the source file no longer remains at its original path. Expected errors are returned per item for invalid identifiers, missing documents, unsafe trash config, or conflicts.
+Returns JSON text. Single-string input returns one removal result. Batch array input returns a raw ordered array. Each batch entry reports top-level `status: "succeeded"`, `"conflicted"`, or `"failed"` in input order. Successful entries include document identification with `size.chars`, archived lifecycle metadata, and `moved_to` removal destination details. `remove_document` success omits `version_token` because the source file no longer remains at its original path.
 
 ## Examples
 
@@ -40,6 +40,12 @@ Removes one document.
 ```
 
 Removes an ordered batch.
+
+```json
+{ "identifiers": ["Drafts/A.md", { "identifier": "Drafts/B.md", "version_token": "..." }] }
+```
+
+Uses a mixed batch. The object-form `version_token` applies only to that item; bare strings are untokened unless a top-level `expected_version` or `if_match` is supplied.
 
 ```json
 { "identifiers": "Scratch/Old.md", "expected_version": "..." }

@@ -4,7 +4,7 @@ description: "Archive one or more vault documents without deleting files, preser
 help_hint: "Use archive_document when a document should leave normal search/list workflows but remain recoverable in the vault."
 tier: read-write
 args:
-  identifiers: "Required document identifier or identifier array."
+  identifiers: "Required document identifier, or array of strings and {identifier, version_token} items."
   expected_version: "Optional source file version_token precondition."
   if_match: "Alias for expected_version."
 ---
@@ -19,13 +19,13 @@ Use `archive_document` to mark documents archived while keeping the Markdown fil
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `identifiers` | string or string[] | yes | none | One or more document identifiers. Each may be a vault-relative path, filename, or `fq_id`. |
+| `identifiers` | string or Array<string \| { identifier, version_token }> | yes | none | One or more document identifiers. Batch arrays may mix bare strings with object-form `{ "identifier": "...", "version_token": "..." }` items. |
 | `expected_version` | string | no | none | Optional source-file `version_token` precondition. |
 | `if_match` | string | no | none | Alias for `expected_version`. |
 
 ## Returns
 
-Returns JSON text. A single identifier returns one archive result or an expected error. Batch input returns an array preserving input order. Successful entries include `identifier`, `title`, `path`, `fq_id`, `modified`, `size.chars`, `status: "archived"`, `archived_at`, and post-archive `version_token`.
+Returns JSON text. A single identifier returns one archive result or an expected error. Batch array input returns a raw ordered array. Each batch entry reports top-level `status: "succeeded"`, `"conflicted"`, or `"failed"` in input order. Successful entries include document data with `identifier`, `title`, `path`, `fq_id`, `modified`, `size.chars`, `status: "archived"`, `archived_at`, and post-archive `version_token`.
 
 ## Examples
 
@@ -40,6 +40,12 @@ Archives one document and returns its archived document block.
 ```
 
 Archives the first document and reports a per-item error for the missing one.
+
+```json
+{ "identifiers": ["Projects/A.md", { "identifier": "Projects/B.md", "version_token": "..." }] }
+```
+
+Uses a mixed batch. The object-form `version_token` applies only to that item; bare strings are untokened unless a top-level `expected_version` or `if_match` is supplied.
 
 ```json
 { "identifiers": "Projects/Old Plan.md", "if_match": "..." }

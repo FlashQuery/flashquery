@@ -4,8 +4,8 @@ description: "Apply additive or removal tag edits to ordered document and memory
 help_hint: "Use apply_tags when you need idempotent tag additions or removals across explicit document and memory targets."
 tier: read-write
 args:
-  targets: "Optional array of { entity_type, identifier } targets."
-  identifiers: "Optional legacy document identifier or identifier array."
+  targets: "Optional array of document {entity_type, identifier, version_token} and memory {entity_type, identifier} targets."
+  identifiers: "Optional legacy document identifier, or array of strings and {identifier, version_token} items."
   memory_id: "Optional legacy single memory identifier."
   add_tags: "Optional tags to add."
   remove_tags: "Optional tags to remove."
@@ -23,8 +23,8 @@ Use `apply_tags` to add or remove tags on explicit document and memory targets i
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `targets` | array | no | derived from legacy fields | Ordered targets shaped as `{ "entity_type": "document" | "memory", "identifier": string }`; document targets may also include `expected_version` or `if_match`. |
-| `identifiers` | string or string[] | no | none | Legacy document-only input. Use instead of `targets` only for document tagging. |
+| `targets` | array | no | derived from legacy fields | Ordered targets shaped as `{ "entity_type": "document" | "memory", "identifier": string }`; document targets may also include `version_token`, `expected_version`, or `if_match`. |
+| `identifiers` | string or Array<string \| { identifier, version_token }> | no | none | Legacy document-only input. Batch arrays may mix bare strings with object-form `{ "identifier": "...", "version_token": "..." }` items. Use instead of `targets` only for document tagging. |
 | `memory_id` | string | no | none | Legacy memory-only input. Use instead of `targets` only for one memory. |
 | `add_tags` | string[] | no | `[]` | Tags to add idempotently after normalization and validation. |
 | `remove_tags` | string[] | no | `[]` | Tags to remove. Missing tags are ignored. |
@@ -33,7 +33,7 @@ Use `apply_tags` to add or remove tags on explicit document and memory targets i
 
 ## Returns
 
-Returns JSON text. Successful document entries include document identification fields, post-write `version_token`, `tags`, and `entity_type: "document"`. Successful memory entries include memory identification fields, `tags`, and `entity_type: "memory"`. Ordered per-target failures include `error`, `message`, and `identifier`.
+Returns JSON text. Successful document entries include document identification fields, post-write `version_token`, `tags`, and `entity_type: "document"`. Successful memory entries include memory identification fields, `tags`, and `entity_type: "memory"`. Document batch entries from array input report top-level `status: "succeeded"`, `"conflicted"`, or `"failed"` in raw input order. Memory targets preserve their existing response shape.
 
 For document targets only, stale `expected_version` or `if_match` refuses the write before disk mutation with `error: "conflict"`, `details.reason: "version_mismatch"`, the current `version_token`, and `targeted_region.frontmatter`. Memory targets preserve existing behavior and do not use document version preconditions.
 
@@ -58,7 +58,13 @@ Removes `stale` from one memory if present.
 Uses the legacy document shorthand for an ordered document batch.
 
 ```json
-{ "targets": [{ "entity_type": "document", "identifier": "Notes/Plan.md", "expected_version": "..." }], "add_tags": ["review"] }
+{ "identifiers": ["Notes/A.md", { "identifier": "Notes/B.md", "version_token": "..." }], "add_tags": ["review"] }
+```
+
+Uses a mixed document batch. The object-form `version_token` applies only to that document item; bare strings are untokened unless a top-level `expected_version` or `if_match` is supplied.
+
+```json
+{ "targets": [{ "entity_type": "document", "identifier": "Notes/Plan.md", "version_token": "..." }], "add_tags": ["review"] }
 ```
 
 Applies tags only if the document's whole-file `version_token` still matches.
