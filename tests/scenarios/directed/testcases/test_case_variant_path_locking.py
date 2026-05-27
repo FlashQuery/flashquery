@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Directed scenario: D-WCO-02 case-variant public writes serialize."""
+"""Directed scenario: D-WCO-02 case-variant public read-modify-writes serialize."""
 from __future__ import annotations
 
 COVERAGE = ["D-WCO-02"]
@@ -8,7 +8,6 @@ REQUIRES_MANAGED = True
 import argparse
 import json
 import sys
-import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -63,63 +62,66 @@ def run_test(args: argparse.Namespace) -> TestRun:
             run.record_cleanup(ctx.cleanup_errors)
             return run
 
-        def create(path: str, title: str):
-            start = time.monotonic()
-            result = ctx.client.call_tool(
-                "write_document",
-                mode="create",
-                path=path,
-                title=title,
-                content=f"Body for {title}",
-                tags=["fqc-test", run.run_id],
-            )
-            end = time.monotonic()
-            return path, start, end, result
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            futures = [
-                pool.submit(create, path_a, "Case Variant A"),
-                pool.submit(create, path_b, "Case Variant B"),
-            ]
-            results = [future.result() for future in futures]
-
-        def payload_for(item):
+        create_result = ctx.client.call_tool(
+            "write_document",
+            mode="create",
+            path=path_a,
+            title="Case Variant Lock Target",
+            content="Case-variant tag race target.",
+            tags=["fqc-test", run.run_id],
+        )
+        if create_result.ok:
+            ctx.cleanup.track_file(path_a)
             try:
-                return json.loads(item[3].text)
-            except Exception:
-                return {}
-
-        successes = [item for item in results if item[3].ok and not payload_for(item).get("error")]
-        conflicts = [
-            item for item in results
-            if payload_for(item).get("error") == "conflict"
-            and payload_for(item).get("details", {}).get("reason") in {"path_exists", "lock_timeout"}
-        ]
-
-        for path, _start, _end, result in successes:
-            ctx.cleanup.track_file(path)
-            try:
-                payload = json.loads(result.text)
+                payload = json.loads(create_result.text)
                 if payload.get("fq_id"):
                     ctx.cleanup.track_mcp_document(payload["fq_id"])
             except Exception:
                 pass
+        run.step(
+            label="setup: create case-variant target document",
+            passed=create_result.ok,
+            detail=create_result.error or "",
+            timing_ms=create_result.timing_ms,
+            tool_result=create_result,
+        )
+        if not create_result.ok:
+            return run
 
-        ordered = sorted(results, key=lambda item: item[2])
-        observable_ordering = ordered[1][2] >= ordered[0][2]
-        passed = len(successes) == 1 and len(conflicts) == 1 and observable_ordering
+        tag_a = f"case-original-{run.run_id}"
+        tag_b = f"case-variant-{run.run_id}"
+
+        def apply(path: str, tag_name: str):
+            return path, tag_name, ctx.client.call_tool(
+                "apply_tags",
+                targets=[{"entity_type": "document", "identifier": path}],
+                add_tags=[tag_name],
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [
+                pool.submit(apply, path_a, tag_a),
+                pool.submit(apply, path_b, tag_b),
+            ]
+            results = [future.result() for future in futures]
+
+        fm = ctx.vault.read_frontmatter(path_a)
+        tags = set(fm.get("fq_tags", []) or fm.get("tags", []))
+        expected = {tag_a, tag_b}
+        passed = all(item[2].ok for item in results) and expected.issubset(tags)
         detail = (
-            f"successes={len(successes)} conflicts={len(conflicts)} "
-            f"first={ordered[0][0]} second={ordered[1][0]} "
-            f"a={expectation_detail(results[0][3]) or results[0][3].error}; "
-            f"b={expectation_detail(results[1][3]) or results[1][3].error}"
+            ""
+            if passed
+            else f"tags={sorted(tags)!r}; "
+                 f"a={expectation_detail(results[0][2]) or results[0][2].error}; "
+                 f"b={expectation_detail(results[1][2]) or results[1][2].error}"
         )
         run.step(
-            label="D-WCO-02 / T-S-002: case-variant write_document calls serialize to one create plus one conflict",
+            label="D-WCO-02 / T-S-002: case-variant apply_tags calls preserve both read-modify-write updates",
             passed=passed,
             detail="" if passed else detail,
-            timing_ms=int(max(item[2] - item[1] for item in results) * 1000),
-            tool_result=results[0][3],
+            timing_ms=max(item[2].timing_ms for item in results),
+            tool_result=results[0][2],
         )
 
         if args.keep:

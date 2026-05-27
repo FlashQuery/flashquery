@@ -99,15 +99,15 @@ describe('T-U-030 single durable vault write primitive guard', () => {
     const moveSource = readFileSync('src/mcp/tools/documents/move.ts', 'utf8');
 
     expect(vaultSource).toMatch(/import .*writeVaultFile.* from '\.\/vault-write\.js'/s);
-    expect(vaultSource).toMatch(/await writeVaultFile\(absolutePath, output\)/);
-    expect(vaultSource).toMatch(/await writeVaultFile\(trashAbsPath, content\)/);
+    expect(vaultSource).toMatch(/await writeVaultFile\(absolutePath, output, \{ lockConfig: this\.config \}\)/);
+    expect(vaultSource).toMatch(/await writeVaultFile\(trashAbsPath, content, \{ lockConfig: this\.config \}\)/);
     expect(frontmatterSource).toMatch(/import .*writeVaultFile.* from '\.\.\/storage\/vault-write\.js'/s);
-    expect(frontmatterSource).toMatch(/await writeVaultFile\(absolutePath, updatedContent\)/);
+    expect(frontmatterSource).toMatch(/await writeVaultFile\(absolutePath, updatedContent, \{ lockConfig \}\)/);
     expect(resolverSource).toMatch(/import .*writeVaultFile.* from '\.\.\/\.\.\/storage\/vault-write\.js'/s);
-    expect(resolverSource).toMatch(/await writeVaultFile\(absolutePath, output\)/);
+    expect(resolverSource).toMatch(/await writeVaultFile\(absolutePath, output, \{ lockConfig: config \}\)/);
     expect(pluginSource).toMatch(/await atomicWriteFrontmatter\(toAbsolutePath\(doc\.path\)/);
     expect(gitSource).toMatch(/await writeVaultFile\(dumpAbsPath, output\)/);
-    expect(moveSource).toMatch(/await writeVaultFile\(destAbsPath, content\)/);
+    expect(moveSource).toMatch(/await writeVaultFile\(destAbsPath, content, \{ lockConfig: config \}\)/);
   });
 
   it('documents each allowed direct write site with an explicit reason', () => {

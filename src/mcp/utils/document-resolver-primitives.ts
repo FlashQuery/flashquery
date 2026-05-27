@@ -101,6 +101,7 @@ function sanitizeFrontmatterValues(
 }
 
 async function writeMarkdownFile(
+  config: DocumentResolverConfig,
   absolutePath: string,
   frontmatter: Record<string, unknown>,
   content: string
@@ -111,7 +112,7 @@ async function writeMarkdownFile(
     [FM.UPDATED]: new Date().toISOString(),
   });
   const output = matter.stringify(content, fm);
-  await writeVaultFile(absolutePath, output);
+  await writeVaultFile(absolutePath, output, { lockConfig: config });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -466,7 +467,7 @@ export async function targetedScan(
 
     // Write updated frontmatter to vault only if something actually changed
     if (frontmatterChanged) {
-      await writeMarkdownFile(resolved.absPath, parsed.data, parsed.content);
+      await writeMarkdownFile(config, resolved.absPath, parsed.data, parsed.content);
     }
 
     // Build and return snapshot

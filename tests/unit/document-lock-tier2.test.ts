@@ -9,11 +9,12 @@ type QueryCall = { sql: string; params?: unknown[] };
 class FakePoolClient {
   readonly calls: QueryCall[] = [];
   released = false;
+  releaseSucceeds = true;
 
   async query<Row extends QueryResultRow = QueryResultRow>(sql: string, params?: unknown[]): Promise<QueryResult<Row>> {
     this.calls.push({ sql, params });
     if (sql.includes('pg_advisory_unlock')) {
-      return { rows: [{ released: true }] as Row[] } as QueryResult<Row>;
+      return { rows: [{ released: this.releaseSucceeds }] as Row[] } as QueryResult<Row>;
     }
     if (sql.includes('pg_try_advisory_lock')) {
       return { rows: [{ acquired: true }] as Row[] } as QueryResult<Row>;
@@ -127,5 +128,19 @@ describe('REQ-002 advisory-lock two-tier document lock Tier 2', () => {
     expect(clients).toHaveLength(1);
     expect(clients[0].calls.filter((call) => call.sql.includes('pg_try_advisory_lock'))).toHaveLength(1);
     expect(clients[0].calls.filter((call) => call.sql.includes('pg_advisory_unlock'))).toHaveLength(1);
+  });
+
+  it('preserves the callback error when advisory release also fails', async () => {
+    const { clients } = installFakePool();
+    const callbackError = new Error('callback failed');
+
+    await expect(
+      withDocumentLock(makeConfig(), '/tmp/vault/release-mask.md', async () => {
+        clients[0].releaseSucceeds = false;
+        throw callbackError;
+      })
+    ).rejects.toThrow(callbackError);
+
+    expect(clients[0].calls.some((call) => call.sql.includes('pg_advisory_unlock'))).toBe(true);
   });
 });

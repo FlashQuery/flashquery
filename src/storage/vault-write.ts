@@ -29,11 +29,20 @@ interface DurableFileSyncContext {
   path: string;
 }
 
+interface LockAssertionConfig {
+  instance: {
+    vault?: {
+      path: string;
+    };
+  };
+}
+
 export interface WriteVaultFileOptions {
   operations?: VaultWriteOperations;
   durableFileSync?: (handle: SyncableHandle, context: DurableFileSyncContext) => Promise<void>;
   darwinFullFsync?: (path: string) => Promise<void>;
   platform?: NodeJS.Platform;
+  lockConfig?: LockAssertionConfig;
 }
 
 let tempCounter = 0;
@@ -84,10 +93,12 @@ export async function writeVaultFile(
   content: Buffer | string,
   options: WriteVaultFileOptions = {}
 ): Promise<VaultWriteResult> {
-  if (process.env.FQC_LOCK_ASSERT === 'true' && !isDocumentLockHeldForPath(absPath)) {
-    throw new Error(
-      `writeVaultFile(${absPath}) called without holding withDocumentLock for that path`
-    );
+  if (process.env.FQC_LOCK_ASSERT === 'true') {
+    if (!options.lockConfig || !(await isDocumentLockHeldForPath(options.lockConfig, absPath))) {
+      throw new Error(
+        `writeVaultFile(${absPath}) called without holding withDocumentLock for that path`
+      );
+    }
   }
 
   const bytes = toBuffer(content);

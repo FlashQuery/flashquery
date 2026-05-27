@@ -24,10 +24,10 @@ Phase 159 achieved its goal: contended document writes now have bounded lock acq
 | Missing destination paths key by canonical parent plus basename | Passed | Unit coverage derives destination keys without requiring the file to exist. |
 | Case-insensitive vaults fold path case before hashing | Passed | Unit coverage uses the testing cache hook to force case-insensitive behavior and verify equal keys. |
 | File and directory resources are separated | Passed | Unit coverage verifies `file:` and `dir:` namespaces are distinct. |
-| Lock acquisition is bounded | Passed | Unit coverage verifies default and configured timeout behavior, Tier 2 uses `pg_try_advisory_lock`, and Tier 1 timeout handles are cleared/unref'd. |
+| Lock acquisition is bounded | Passed | Unit coverage verifies configured timeout behavior and `tests/unit/lock-timeout.test.ts` now carries T-U-015 for the absent-`lock_timeout_seconds` 10s config default; Tier 2 uses `pg_try_advisory_lock`, and Tier 1 timeout handles are cleared/unref'd. |
 | Public document tools return `lock_timeout` envelopes | Passed | Unit coverage spans write/copy/move/archive/remove/compound call sites and batch item envelopes. |
 | Update-mode writes never write a freshly re-resolved path under the stale path lock | Passed | Code review finding CR-01 was fixed by retrying when the locked candidate path and fresh resolved path differ; source-shape regression coverage asserts the guard. |
-| Directed case-variant scenario is covered where the environment supports it | Passed | `test_case_variant_path_locking` passed under the managed directed runner using `.env.test`; residue check reported 0. |
+| Directed case-variant scenario is covered where the environment supports it | Passed | `test_case_variant_path_locking` verifies concurrent case-variant `apply_tags` calls preserve both read-modify-write updates on case-insensitive vaults; case-sensitive vaults skip clearly. |
 
 ## Verification Commands
 

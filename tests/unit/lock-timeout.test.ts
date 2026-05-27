@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import type { PoolClient, QueryResult, QueryResultRow } from 'pg';
 import type { FlashQueryConfig } from '../../src/config/types.js';
+import { loadConfig } from '../../src/config/loader.js';
 import { LockTimeoutError, withDocumentLock } from '../../src/services/document-lock.js';
 import { closePgPools, __setPgPoolFactoryForTesting } from '../../src/utils/pg-client.js';
 
 type QueryCall = { sql: string; params?: unknown[] };
+const tempDirs: string[] = [];
 
 class ContendedPoolClient {
   readonly calls: QueryCall[] = [];
@@ -54,10 +59,38 @@ function installContendedPool(): { clients: ContendedPoolClient[] } {
   return { clients };
 }
 
+function writeConfig(contents: string): string {
+  const dir = mkdtempSync(join(tmpdir(), 'fq-lock-timeout-config-'));
+  tempDirs.push(dir);
+  const configPath = join(dir, 'flashquery.yml');
+  writeFileSync(configPath, contents);
+  return configPath;
+}
+
+function baseConfig(locking = ''): string {
+  return `
+instance:
+  id: "lock-timeout-config-test"
+  vault:
+    path: "./vault"
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "key"
+  database_url: "postgresql://localhost/db"
+embedding:
+  provider: "openai"
+  model: "text-embedding-3-small"
+${locking}
+`;
+}
+
 describe('REQ-006 bounded lock acquisition timeout', () => {
   afterEach(async () => {
     await closePgPools();
     __setPgPoolFactoryForTesting(null);
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('T-U-014 lock-timeout configured controls the pg_try_advisory_lock retry deadline', async () => {
@@ -73,7 +106,13 @@ describe('REQ-006 bounded lock acquisition timeout', () => {
     expect(clients[0].released).toBe(true);
   });
 
-  it('T-U-015 lock-timeout default is carried by the typed timeout error', () => {
+  it('T-U-015 lock-timeout default applies when lock_timeout_seconds is absent', () => {
+    const config = loadConfig(writeConfig(baseConfig()));
+
+    expect(config.locking.lockTimeoutSeconds).toBe(10);
+  });
+
+  it('LockTimeoutError carries the default 10 s when no override is provided', () => {
     const err = new LockTimeoutError('file:/tmp/vault/busy.md');
 
     expect(err.reason).toBe('lock_timeout');

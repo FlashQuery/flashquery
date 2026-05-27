@@ -72,7 +72,7 @@ locking:
     expect(config.locking.lockTimeoutSeconds).toBe(5);
   });
 
-  it('T-U-015 lock-timeout default applies when lock_timeout_seconds is absent', () => {
+  it('lock-timeout config loader default applies when lock_timeout_seconds is absent', () => {
     const config = loadConfig(writeConfig(baseConfig()));
 
     expect(config.locking.lockTimeoutSeconds).toBe(10);

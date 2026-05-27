@@ -174,12 +174,14 @@ export interface VaultManager {
 
 class VaultManagerImpl implements VaultManager {
   private rootPath: string;
+  private config?: FlashQueryConfig;
 
   constructor(rootPath: string) {
     this.rootPath = rootPath;
   }
 
   async initialize(config: FlashQueryConfig): Promise<void> {
+    this.config = config;
     const vaultPath = config.instance.vault.path;
 
     // Detect existing content — respect structure without modification (D-02)
@@ -218,7 +220,7 @@ class VaultManagerImpl implements VaultManager {
     // Serialize using gray-matter (default import — CJS interop)
     const output = matter.stringify(content, fm);
 
-    await writeVaultFile(absolutePath, output);
+    await writeVaultFile(absolutePath, output, { lockConfig: this.config });
     const duration = Math.round(performance.now() - startTime);
     logger.debug(`Vault: wrote ${relativePath} (${duration}ms) — document update persisted to disk`);
 
@@ -281,7 +283,7 @@ class VaultManagerImpl implements VaultManager {
       const errMsg = err instanceof Error ? err.message : String(err);
       if (errMsg.includes('EXDEV') || errMsg.includes('Invalid cross-device')) {
         const content = await readFile(sourceAbsPath, 'utf-8');
-        await writeVaultFile(trashAbsPath, content);
+        await writeVaultFile(trashAbsPath, content, { lockConfig: this.config });
         await unlink(sourceAbsPath);
         logger.info(`Vault: cross-device trash fallback used for ${relativePath}`);
       } else {

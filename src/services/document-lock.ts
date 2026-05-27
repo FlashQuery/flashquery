@@ -34,6 +34,14 @@ interface DocumentLockEntry {
   stripeIndex: number;
 }
 
+interface DocumentLockKeyConfig {
+  instance: {
+    vault?: {
+      path: string;
+    };
+  };
+}
+
 interface BurstRequest<T> {
   fn: () => Promise<T>;
   resolve: (value: T) => void;
@@ -163,7 +171,7 @@ async function canonicalPathFor(
 }
 
 async function toEntry(
-  config: FlashQueryConfig,
+  config: DocumentLockKeyConfig,
   filePath: string,
   kind: 'file' | 'dir' = 'file'
 ): Promise<DocumentLockEntry> {
@@ -198,11 +206,14 @@ function toAdvisoryKey(entry: DocumentLockEntry): string {
   return digest.readBigInt64BE(0).toString();
 }
 
-export function isDocumentLockHeldForPath(filePath: string): boolean {
+export async function isDocumentLockHeldForPath(
+  config: DocumentLockKeyConfig,
+  filePath: string
+): Promise<boolean> {
   const held = heldDocumentLocks.getStore();
   if (!held) return false;
-  const normalized = path.normalize(filePath);
-  return held.has(`file:${normalized}`);
+  const entry = await toEntry(config, filePath, 'file');
+  return held.has(entry.basicKey);
 }
 
 async function runWithTier2<T>(
@@ -247,15 +258,24 @@ async function runWithTier2<T>(
         callbackError = err;
       }
     } finally {
+      let releaseError: Error | undefined;
       for (const advisoryKey of [...acquiredKeys].reverse()) {
-        const result = await client.query<{ released: boolean }>(
-          'SELECT pg_advisory_unlock($1::bigint) AS released',
-          [advisoryKey]
-        );
-        if (result.rows[0]?.released !== true) {
-          throw new Error(`Failed to release advisory document lock ${advisoryKey}`);
+        try {
+          const result = await client.query<{ released: boolean }>(
+            'SELECT pg_advisory_unlock($1::bigint) AS released',
+            [advisoryKey]
+          );
+          if (result.rows[0]?.released !== true) {
+            releaseError = new Error(`Failed to release advisory document lock ${advisoryKey}`);
+          }
+        } catch (err) {
+          releaseError =
+            err instanceof Error
+              ? err
+              : new Error(`Failed to release advisory document lock ${advisoryKey}`);
         }
       }
+      if (!callbackError && releaseError) throw releaseError;
     }
 
     if (callbackError) {
@@ -367,7 +387,7 @@ export async function withDocumentLocks<T>(
       }
     } catch (err) {
       for (const outcome of outcomes) {
-        outcome.request.reject(err);
+        outcome.request.reject(outcome.status === 'rejected' ? outcome.reason : err);
       }
       for (const request of burstState.queue.splice(0)) {
         if (request.timer) clearTimeout(request.timer);

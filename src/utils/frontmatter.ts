@@ -9,6 +9,14 @@ import { logger } from '../logging/logger.js';
 import { FM } from '../constants/frontmatter-fields.js';
 import { writeVaultFile } from '../storage/vault-write.js';
 
+interface LockAssertionConfig {
+  instance: {
+    vault?: {
+      path: string;
+    };
+  };
+}
+
 /**
  * Update document frontmatter atomically using the .fqc-tmp pattern (WRT-03).
  *
@@ -29,7 +37,8 @@ import { writeVaultFile } from '../storage/vault-write.js';
  */
 export async function atomicWriteFrontmatter(
   absolutePath: string,
-  updates: Record<string, unknown>
+  updates: Record<string, unknown>,
+  lockConfig?: LockAssertionConfig
 ): Promise<void> {
   const rawContent = await readFile(absolutePath, 'utf-8');
   const parsed = matter(rawContent);
@@ -41,7 +50,7 @@ export async function atomicWriteFrontmatter(
   };
 
   const updatedContent = matter.stringify(parsed.content, mergedFrontmatter);
-  await writeVaultFile(absolutePath, updatedContent);
+  await writeVaultFile(absolutePath, updatedContent, { lockConfig });
 
   logger.debug(`[WRT-03] frontmatter updated atomically for ${absolutePath}`);
 }

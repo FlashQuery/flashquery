@@ -143,7 +143,7 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
             if (errMsg.includes('EXDEV') || errMsg.includes('Invalid cross-device')) {
               // Fallback: durably write dest, then delete source.
               const content = await readFile(sourceAbsPath, 'utf-8');
-              await writeVaultFile(destAbsPath, content);
+              await writeVaultFile(destAbsPath, content, { lockConfig: config });
               await unlink(sourceAbsPath);
               logger.info(`move_document: cross-device fallback used for ${identifier} → ${destPath}`);
             } else {

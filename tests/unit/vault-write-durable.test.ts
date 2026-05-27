@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { mkdtemp, mkdir, rm, symlink } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { withDocumentLock } from '../../src/services/document-lock.js';
 import { writeVaultFile } from '../../src/storage/vault-write.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
@@ -131,10 +134,48 @@ describe('writeVaultFile durable sequence', () => {
 
       await expect(
         withDocumentLock(config, '/vault/asserted.md', () =>
-          writeVaultFile('/vault/asserted.md', 'body', { operations, platform: 'linux' })
+          writeVaultFile('/vault/asserted.md', 'body', {
+            operations,
+            platform: 'linux',
+            lockConfig: config,
+          })
         )
       ).resolves.toEqual({ contentHash: expect.any(String) });
     } finally {
+      if (previous === undefined) {
+        delete process.env.FQC_LOCK_ASSERT;
+      } else {
+        process.env.FQC_LOCK_ASSERT = previous;
+      }
+    }
+  });
+
+  it('REQ-020 AC #4 accepts canonical symlink aliases when asserting ambient locks', async () => {
+    const previous = process.env.FQC_LOCK_ASSERT;
+    process.env.FQC_LOCK_ASSERT = 'true';
+    const vault = await mkdtemp(join(tmpdir(), 'fq-vault-write-lock-'));
+    const notes = join(vault, 'Notes');
+    const alias = join(vault, 'Alias');
+    const target = join(alias, 'Plan.md');
+    const config = {
+      locking: { enabled: false },
+      instance: {
+        id: 'lock-assert-symlink-test',
+        vault: { path: vault, markdownExtensions: ['.md'] },
+      },
+    } as FlashQueryConfig;
+
+    try {
+      await mkdir(notes);
+      await symlink(notes, alias);
+
+      await expect(
+        withDocumentLock(config, target, () =>
+          writeVaultFile(target, 'body', { platform: 'linux', lockConfig: config })
+        )
+      ).resolves.toEqual({ contentHash: expect.any(String) });
+    } finally {
+      await rm(vault, { recursive: true, force: true });
       if (previous === undefined) {
         delete process.env.FQC_LOCK_ASSERT;
       } else {

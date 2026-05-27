@@ -3,7 +3,11 @@ import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promis
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { FlashQueryConfig } from '../../src/config/types.js';
-import { __testing } from '../../src/services/document-lock.js';
+import {
+  __testing,
+  isDocumentLockHeldForPath,
+  withDocumentLock,
+} from '../../src/services/document-lock.js';
 
 const tempDirs: string[] = [];
 
@@ -22,6 +26,13 @@ function makeConfig(vaultPath: string): FlashQueryConfig {
     },
     supabase: { url: 'http://localhost:54321', serviceRoleKey: 'service-role', databaseUrl: 'postgres://fq/test', skipDdl: true },
     locking: { enabled: true, lockTimeoutSeconds: 10 },
+  } as FlashQueryConfig;
+}
+
+function makeTier1OnlyConfig(vaultPath: string): FlashQueryConfig {
+  return {
+    ...makeConfig(vaultPath),
+    locking: { enabled: false, lockTimeoutSeconds: 10 },
   } as FlashQueryConfig;
 }
 
@@ -61,7 +72,7 @@ describe('REQ-003 canonical lock-key derivation', () => {
     const vault = await makeVault();
     await mkdir(join(vault, 'Notes'));
     await writeFile(join(vault, 'Notes', 'Plan.md'), 'body');
-    const config = makeConfig(vault);
+    const config = makeTier1OnlyConfig(vault);
     const resolvedFile = await realpath(join(vault, 'Notes', 'Plan.md'));
 
     await __testing.setCaseInsensitiveForVault(vault, true);
@@ -99,5 +110,32 @@ describe('REQ-003 canonical lock-key derivation', () => {
 
     expect(entry.basicKey).toBe(`file:${resolvedFile}`);
     expect(entry.resource).not.toBe('file:Notes/Plan.md');
+  });
+
+  it('ambient lock assertion lookup uses the same canonical symlink key as acquisition', async () => {
+    const vault = await makeVault();
+    await mkdir(join(vault, 'Notes'));
+    await writeFile(join(vault, 'Notes', 'Plan.md'), 'body');
+    await symlink(join(vault, 'Notes'), join(vault, 'Alias'));
+    await __testing.setCaseInsensitiveForVault(vault, false);
+    const config = makeTier1OnlyConfig(vault);
+
+    await withDocumentLock(config, join(vault, 'Alias', 'Plan.md'), async () => {
+      await expect(isDocumentLockHeldForPath(config, join(vault, 'Alias', 'Plan.md'))).resolves.toBe(true);
+      await expect(isDocumentLockHeldForPath(config, join(vault, 'Notes', 'Plan.md'))).resolves.toBe(true);
+    });
+  });
+
+  it('ambient lock assertion lookup uses canonical case-folded and relative keys', async () => {
+    const vault = await makeVault();
+    await mkdir(join(vault, 'Notes'));
+    await writeFile(join(vault, 'Notes', 'Plan.md'), 'body');
+    await __testing.setCaseInsensitiveForVault(vault, true);
+    const config = makeTier1OnlyConfig(vault);
+
+    await withDocumentLock(config, 'Notes/Plan.md', async () => {
+      await expect(isDocumentLockHeldForPath(config, join(vault, 'Notes', 'Plan.md'))).resolves.toBe(true);
+      await expect(isDocumentLockHeldForPath(config, join(vault, 'notes', 'plan.md'))).resolves.toBe(true);
+    });
   });
 });
