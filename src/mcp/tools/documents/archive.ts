@@ -13,7 +13,16 @@ import {
 } from '../../../services/document-lock.js';
 import { resolveDocumentIdentifier, targetedScan } from '../../utils/resolve-document.js';
 import { getIsShuttingDown } from '../../../server/shutdown-state.js';
-import { jsonExpectedError, jsonRuntimeError, jsonToolResult, documentArchiveResult, type ErrorEnvelope } from '../../utils/response-formats.js';
+import {
+  batchConflicted,
+  batchFailed,
+  batchSucceeded,
+  jsonExpectedError,
+  jsonRuntimeError,
+  jsonToolResult,
+  documentArchiveResult,
+  type ErrorEnvelope,
+} from '../../utils/response-formats.js';
 import {
   buildVersionMismatchEnvelope,
   computeVersionToken,
@@ -64,12 +73,21 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
           const ids = normalizeBatchIdentifiers(identifiers);
           const results: Array<Record<string, unknown>> = [];
           const expectedVersion = pickExpectedVersion({ expected_version, if_match });
+          const pushSuccess = (identifier: string, data: Record<string, unknown>) => {
+            results.push(isBatch ? batchSucceeded(identifier, data) : data);
+          };
+          const pushConflict = (identifier: string, envelope: ErrorEnvelope) => {
+            results.push(isBatch ? batchConflicted(identifier, envelope) : envelope);
+          };
+          const pushFailure = (identifier: string, error: ErrorEnvelope) => {
+            results.push(isBatch ? batchFailed(identifier, error) : error);
+          };
 
           for (const item of ids) {
             const id = item.identifier;
             try {
               if (typeof id !== 'string' || id.trim() === '') {
-                results.push({
+                pushFailure(String(id), {
                   error: 'invalid_input',
                   message: 'Document identifier must be a non-empty string.',
                   identifier: String(id),
@@ -84,9 +102,9 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
               const relativePath = resolved.relativePath;
               const rawContent = await readFile(resolved.absPath, 'utf-8');
               const currentVersionToken = computeVersionToken(rawContent);
-              const itemExpectedVersion = item.version_token ?? expectedVersion;
+              const itemExpectedVersion = isBatch ? item.version_token : item.version_token ?? expectedVersion;
               if (itemExpectedVersion && itemExpectedVersion !== currentVersionToken) {
-                results.push(buildVersionMismatchEnvelope({
+                pushConflict(id, buildVersionMismatchEnvelope({
                   identifier: id,
                   versionToken: currentVersionToken,
                   targetedRegion: buildWholeDocumentTargetedRegion({
@@ -200,7 +218,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
               const title = stringField(archivedFm, FM.TITLE, relativePath);
 
               logger.info(`archive_document: archived ${relativePath}`);
-              results.push(documentArchiveResult({
+              pushSuccess(id, documentArchiveResult({
                 identifier: id,
                 title,
                 path: relativePath,
@@ -214,7 +232,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
               );
             } catch (itemErr) {
               if (itemErr instanceof LockTimeoutError) {
-                results.push({
+                pushFailure(id, {
                   error: 'conflict',
                   message: itemErr.message,
                   identifier: id,
@@ -224,7 +242,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
               }
 
               if (isDocumentNotFoundError(itemErr)) {
-                results.push({
+                pushFailure(id, {
                   error: 'not_found',
                   message: `No document matches identifier '${id}'`,
                   identifier: id,
@@ -233,7 +251,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
               }
 
               if (isAmbiguousDocumentIdentifierError(itemErr)) {
-                results.push({
+                pushFailure(id, {
                   error: 'ambiguous_identifier',
                   message: itemErr.message,
                   identifier: id,
@@ -246,7 +264,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
               if (!isBatch) {
                 throw itemErr;
               }
-              results.push({
+              pushFailure(id, {
                 error: 'runtime_error',
                 message: msg,
                 identifier: id,
