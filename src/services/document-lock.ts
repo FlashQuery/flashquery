@@ -197,6 +197,41 @@ async function uniqueSortedEntries(
   return [...byKey.values()].sort((a, b) => a.basicKey.localeCompare(b.basicKey));
 }
 
+async function ancestorDirectoryEntries(
+  config: FlashQueryConfig,
+  filePath: string
+): Promise<DocumentLockEntry[]> {
+  const vaultRoot = config.instance.vault?.path ?? path.dirname(path.resolve(filePath));
+  const resolvedVault = path.normalize(await safeRealpath(vaultRoot));
+  const absolutePath = path.isAbsolute(filePath) ? filePath : path.resolve(resolvedVault, filePath);
+  let current = path.dirname(path.normalize(absolutePath));
+  const directories: string[] = [];
+
+  while (true) {
+    const relative = path.relative(resolvedVault, current);
+    if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
+      directories.push(current);
+      if (current === resolvedVault) break;
+      const parent = path.dirname(current);
+      if (parent === current) break;
+      current = parent;
+      continue;
+    }
+    break;
+  }
+
+  if (directories.length === 0 || directories[directories.length - 1] !== resolvedVault) {
+    throw new Error(`Directory lock path escapes vault root: ${filePath}`);
+  }
+
+  const byKey = new Map<string, DocumentLockEntry>();
+  for (const directory of directories) {
+    const entry = await toEntry(config, directory, 'dir');
+    byKey.set(entry.basicKey, entry);
+  }
+  return [...byKey.values()].sort((a, b) => a.basicKey.localeCompare(b.basicKey));
+}
+
 function toBurstKey(entries: DocumentLockEntry[]): string {
   return entries.map((entry) => entry.basicKey).join('\n');
 }
@@ -222,10 +257,30 @@ async function runWithTier2<T>(
   deadline: number,
   fn: () => Promise<T>
 ): Promise<T> {
+  return runWithAdvisoryLocks(config, entries, deadline, 'exclusive', 'document', fn);
+}
+
+async function runWithAdvisoryLocks<T>(
+  config: FlashQueryConfig,
+  entries: DocumentLockEntry[],
+  deadline: number,
+  mode: 'exclusive' | 'shared',
+  label: 'document' | 'directory',
+  fn: () => Promise<T>
+): Promise<T> {
   if (!config.locking.enabled) return fn();
 
   const advisoryKeys = entries.map(toAdvisoryKey);
   const configuredTimeoutSeconds = config.locking.lockTimeoutSeconds ?? 10;
+  const acquireSql =
+    mode === 'shared'
+      ? 'SELECT pg_try_advisory_lock_shared($1::bigint) AS acquired'
+      : 'SELECT pg_try_advisory_lock($1::bigint) AS acquired';
+  const releaseSql =
+    mode === 'shared'
+      ? 'SELECT pg_advisory_unlock_shared($1::bigint) AS released'
+      : 'SELECT pg_advisory_unlock($1::bigint) AS released';
+
   return withPgClient(config.supabase.databaseUrl, async (client) => {
     const acquiredKeys: string[] = [];
     let callbackResult: T | undefined;
@@ -236,14 +291,11 @@ async function runWithTier2<T>(
         while (true) {
           if (remainingMs(deadline) <= 0) {
             throw new LockTimeoutError(
-              entries[index]?.resource ?? entries[0]?.resource ?? 'document lock',
+              entries[index]?.resource ?? entries[0]?.resource ?? `${label} lock`,
               configuredTimeoutSeconds
             );
           }
-          const result = await client.query<{ acquired: boolean }>(
-            'SELECT pg_try_advisory_lock($1::bigint) AS acquired',
-            [advisoryKey]
-          );
+          const result = await client.query<{ acquired: boolean }>(acquireSql, [advisoryKey]);
           if (result.rows[0]?.acquired === true) {
             acquiredKeys.push(advisoryKey);
             break;
@@ -262,17 +314,17 @@ async function runWithTier2<T>(
       for (const advisoryKey of [...acquiredKeys].reverse()) {
         try {
           const result = await client.query<{ released: boolean }>(
-            'SELECT pg_advisory_unlock($1::bigint) AS released',
+            releaseSql,
             [advisoryKey]
           );
           if (result.rows[0]?.released !== true) {
-            releaseError = new Error(`Failed to release advisory document lock ${advisoryKey}`);
+            releaseError = new Error(`Failed to release advisory ${label} lock ${advisoryKey}`);
           }
         } catch (err) {
           releaseError =
             err instanceof Error
               ? err
-              : new Error(`Failed to release advisory document lock ${advisoryKey}`);
+              : new Error(`Failed to release advisory ${label} lock ${advisoryKey}`);
         }
       }
       if (!callbackError && releaseError) throw releaseError;
@@ -284,6 +336,35 @@ async function runWithTier2<T>(
     }
     return callbackResult as T;
   });
+}
+
+async function runWithDirectoryLocks<T>(
+  config: FlashQueryConfig,
+  entries: DocumentLockEntry[],
+  mode: 'exclusive' | 'shared',
+  fn: () => Promise<T>
+): Promise<T> {
+  if (entries.length === 0) return fn();
+  const deadline = Date.now() + timeoutMs(config);
+  return runWithAdvisoryLocks(config, entries, deadline, mode, 'directory', fn);
+}
+
+export async function withAncestorDirectoryLocksShared<T>(
+  config: FlashQueryConfig,
+  filePath: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  const entries = await ancestorDirectoryEntries(config, filePath);
+  return runWithDirectoryLocks(config, entries, 'shared', fn);
+}
+
+export async function withDirectoryLockExclusive<T>(
+  config: FlashQueryConfig,
+  dirPath: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  const entry = await toEntry(config, dirPath, 'dir');
+  return runWithDirectoryLocks(config, [entry], 'exclusive', fn);
 }
 
 export async function withDocumentLock<T>(

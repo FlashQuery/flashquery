@@ -101,7 +101,7 @@ describe('REQ-007 with-directory-lock shared ancestor facade', () => {
       'SELECT pg_advisory_unlock_shared($1::bigint) AS released',
       'SELECT pg_advisory_unlock_shared($1::bigint) AS released',
     ]);
-    expect(new Set(clients[0].calls.slice(0, 3).map((call) => call.params?.[0]))).toHaveSize(3);
+    expect(new Set(clients[0].calls.slice(0, 3).map((call) => call.params?.[0])).size).toBe(3);
     expect(clients[0].released).toBe(true);
   });
 
