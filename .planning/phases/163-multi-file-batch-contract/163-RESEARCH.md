@@ -41,7 +41,7 @@
 - Unit tests must cover `T-U-026` and `T-U-027` in `tests/unit/batch-input-shape.test.ts`.
 - Integration tests must cover `T-I-034` through `T-I-038` in `tests/integration/batch-envelope.integration.test.ts` and `tests/integration/batch-input-shape.integration.test.ts`.
 - Integration scenarios must cover `T-Y-002` and `T-Y-003` as `INT-WCO-02` and `INT-WCO-03`.
-- Required execution evidence includes `npm test -- --grep "batch-input-shape"` and `npm run test:integration -- --grep "batch-envelope|batch-input-shape"`.
+- Required execution evidence includes `npm test -- tests/unit/batch-input-shape.test.ts` and `npm run test:integration -- tests/integration/batch-envelope.integration.test.ts tests/integration/batch-input-shape.integration.test.ts`.
 - When the integration scenarios land, execution evidence must include `INT-WCO-02` and `INT-WCO-03`.
 
 ### the agent's Discretion
@@ -359,17 +359,15 @@ Source: removal success intentionally omits `version_token` because the file no 
 | A3 | Existing outer wrappers such as `remove_document` warnings should be preserved where needed. | Common Pitfalls | Callers may see a breaking response envelope if the outer shape changes unexpectedly. |
 | A4 | YAML scenario assertions may need substring checks for JSON array details. | Common Pitfalls | Scenario plan may be too shallow or may require runner enhancement. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should array input return a raw array or `{ results }` for every tool?**
    - What we know: REQ-018 requires an ordered array of N result entries; existing tools differ in outer shape. [CITED: Vault Write Coherency Locking Requirements.md §6.3.1] [VERIFIED: codebase grep]
-   - What's unclear: Whether preserving current `remove_document` `{ results, warnings }` wrapper is required for compatibility.
-   - Recommendation: Planner should add an explicit first task to choose and document the exact outer response shape before implementation.
+   - Resolution: Array input returns a raw ordered per-item array for Phase 163 batch-capable document tools. Single-string input preserves existing single-item behavior. This follows the external requirements and Test Plan `T-I-034`; legacy string-array callers continue to be accepted, but their array-call response shape follows the new REQ-018 batch contract.
 
 2. **How should `apply_tags.targets` support object item shape?**
    - What we know: `apply_tags` already supports explicit `targets[]` with per-target `expected_version` / `if_match` for documents. [VERIFIED: src/mcp/tools/compound.ts:426]
-   - What's unclear: Whether REQ-019's object form applies only to legacy `identifiers` or also to target items as `{ entity_type, identifier: { identifier, version_token } }`.
-   - Recommendation: Prefer preserving `targets[]` as explicit objects with per-target `expected_version` while widening legacy `identifiers`; ask only if source docs conflict during planning. [ASSUMED]
+   - Resolution: Widen legacy `identifiers` to accept `Array<string | { identifier, version_token }>` and allow explicit document targets to carry `version_token` as a per-target alias for `expected_version`. Do not introduce nested `{ entity_type, identifier: { identifier, version_token } }`; memory targets remain unchanged.
 
 ## Environment Availability
 
@@ -396,24 +394,24 @@ Source: removal success intentionally omits `version_token` because the file no 
 |----------|-------|
 | Framework | Vitest 4.x for unit/integration; Python YAML scenario runner for `INT-WCO-*`. [VERIFIED: package.json] |
 | Config file | `tests/config/vitest.unit.config.ts`, `tests/config/vitest.integration.config.ts`. [VERIFIED: package.json] |
-| Quick run command | `npm test -- --grep "batch-input-shape"` |
-| Full suite command | `npm run test:integration -- --grep "batch-envelope|batch-input-shape"` plus `python3 tests/scenarios/integration/run_integration.py --managed batch_envelope_per_item batch_mixed_input` |
+| Quick run command | `npm test -- tests/unit/batch-input-shape.test.ts` |
+| Full suite command | `npm run test:integration -- tests/integration/batch-envelope.integration.test.ts tests/integration/batch-input-shape.integration.test.ts` plus `python3 tests/scenarios/integration/run_integration.py --managed batch_envelope_per_item batch_mixed_input` |
 
 ### Phase Requirements → Test Map
 
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|--------------|
-| REQ-019 | schema accepts string, string[], mixed object arrays and rejects `version_tokens` | unit | `npm test -- --grep "batch-input-shape"` | no, Wave 0 |
-| REQ-018 | remove batch returns ordered succeeded/conflicted/failed entries | integration | `npm run test:integration -- --grep "batch-envelope"` | no, Wave 0 |
-| REQ-018 | conflict entry carries current token and targeted region; not-found is failed; successes persist | integration | `npm run test:integration -- --grep "batch-envelope"` | no, Wave 0 |
-| REQ-019 | mixed bare/object input honors object token and skips bare string token check | integration | `npm run test:integration -- --grep "batch-input-shape"` | no, Wave 0 |
+| REQ-019 | schema accepts string, string[], mixed object arrays and rejects `version_tokens` | unit | `npm test -- tests/unit/batch-input-shape.test.ts` | no, Wave 0 |
+| REQ-018 | remove batch returns ordered succeeded/conflicted/failed entries | integration | `npm run test:integration -- tests/integration/batch-envelope.integration.test.ts` | no, Wave 0 |
+| REQ-018 | conflict entry carries current token and targeted region; not-found is failed; successes persist | integration | `npm run test:integration -- tests/integration/batch-envelope.integration.test.ts` | no, Wave 0 |
+| REQ-019 | mixed bare/object input honors object token and skips bare string token check | integration | `npm run test:integration -- tests/integration/batch-input-shape.integration.test.ts` | no, Wave 0 |
 | REQ-018 | `INT-WCO-02` archive batch public scenario | scenario | `python3 tests/scenarios/integration/run_integration.py --managed batch_envelope_per_item` | no, Wave 0 |
 | REQ-019 | `INT-WCO-03` mixed input public scenario | scenario | `python3 tests/scenarios/integration/run_integration.py --managed batch_mixed_input` | no, Wave 0 |
 
 ### Sampling Rate
 
-- **Per task commit:** `npm test -- --grep "batch-input-shape"` for schema/helper work; focused integration file after handler changes. [CITED: Vault Write Coherency Locking Test Plan.md §4.3]
-- **Per wave merge:** `npm run test:integration -- --grep "batch-envelope|batch-input-shape"`. [CITED: Vault Write Coherency Locking Test Plan.md §4.3]
+- **Per task commit:** `npm test -- tests/unit/batch-input-shape.test.ts` for schema/helper work; focused integration file after handler changes. [CITED: Vault Write Coherency Locking Test Plan.md §4.3]
+- **Per wave merge:** `npm run test:integration -- tests/integration/batch-envelope.integration.test.ts tests/integration/batch-input-shape.integration.test.ts`. [CITED: Vault Write Coherency Locking Test Plan.md §4.3]
 - **Phase gate:** unit + integration + integration scenario evidence for `INT-WCO-02` and `INT-WCO-03`. [CITED: Vault Write Coherency Locking Test Plan.md §4.3]
 
 ### Wave 0 Gaps
