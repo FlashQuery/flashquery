@@ -305,7 +305,14 @@ Plans:
   - Execution must prove ordered best-effort item results, mixed bare/object input support, item-level version conflicts, and backward compatibility for existing string inputs.
   - Required execution evidence: `npm test -- --grep "batch-input-shape"`; `npm run test:integration -- --grep "batch-envelope|batch-input-shape"`; integration scenarios `INT-WCO-02` and `INT-WCO-03` when they land.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+
+- [ ] 163-01-PLAN.md — Shared mixed batch contracts, schema widening, and T-U-026/T-U-027 unit coverage.
+- [ ] 163-02-PLAN.md — archive_document/remove_document per-item batch envelopes and T-I-034 through T-I-037 coverage.
+- [ ] 163-03-PLAN.md — insert_doc_link/apply_tags mixed input handling, help updates, and T-I-038 coverage.
+- [ ] 163-04-PLAN.md — INT-WCO-02/INT-WCO-03 scenario coverage and final Phase 163 evidence.
 
 ## Progress
 
