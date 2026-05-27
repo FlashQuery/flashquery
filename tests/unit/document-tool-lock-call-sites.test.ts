@@ -59,6 +59,37 @@ const SHARED_DIRECTORY_LOCK_SITES = [
   },
 ];
 
+function expectInsideLock(
+  source: string,
+  options: {
+    file: string;
+    outerPattern: RegExp;
+    lockPattern: RegExp;
+    checkedExpression: string;
+  }
+): void {
+  const outerMatch = options.outerPattern.exec(source);
+  const lockMatch = options.lockPattern.exec(source);
+  const checkIndex = source.indexOf(options.checkedExpression);
+
+  expect(
+    outerMatch?.index ?? -1,
+    `${options.file} missing ancestor directory lock`
+  ).toBeGreaterThan(-1);
+  expect(lockMatch?.index ?? -1, `${options.file} missing destination file lock`).toBeGreaterThan(
+    -1
+  );
+  expect(checkIndex, `${options.file} missing ${options.checkedExpression}`).toBeGreaterThan(-1);
+  expect(
+    outerMatch?.index ?? Number.POSITIVE_INFINITY,
+    `${options.file} must acquire ancestor locks before the destination file lock`
+  ).toBeLessThan(lockMatch?.index ?? -1);
+  expect(
+    lockMatch?.index ?? Number.POSITIVE_INFINITY,
+    `${options.file} must acquire the destination file lock before the existence check`
+  ).toBeLessThan(checkIndex);
+}
+
 describe('REQ-001/REQ-010 document tool lock call sites', () => {
   it('T-I-001/T-I-002 scaffolding: document and compound tools no longer acquire the coarse documents lock directly', async () => {
     const offenders: string[] = [];
@@ -153,5 +184,40 @@ describe('REQ-001/REQ-010 document tool lock call sites', () => {
         expect(source, `${site.file} missing ${pattern}`).toMatch(pattern);
       }
     }
+  });
+
+  it('REQ-008 create/copy/move destination existence checks run inside destination file locks', async () => {
+    const writeSource = await readFile(
+      new URL('../../src/mcp/tools/documents/write.ts', import.meta.url),
+      'utf-8'
+    );
+    const copySource = await readFile(
+      new URL('../../src/mcp/tools/documents/copy.ts', import.meta.url),
+      'utf-8'
+    );
+    const moveSource = await readFile(
+      new URL('../../src/mcp/tools/documents/move.ts', import.meta.url),
+      'utf-8'
+    );
+
+    expectInsideLock(writeSource, {
+      file: 'write.ts',
+      outerPattern: /withAncestorDirectoryLocksShared\(\s*config,\s*absolutePath/,
+      lockPattern: /withDocumentLock\(\s*config,\s*absolutePath/,
+      checkedExpression: 'existsSync(absolutePath)',
+    });
+    expectInsideLock(copySource, {
+      file: 'copy.ts',
+      outerPattern: /withAncestorDirectoryLocksShared\(\s*config,\s*absPath/,
+      lockPattern: /withDocumentLock\(\s*config,\s*absPath/,
+      checkedExpression: 'existsSync(absPath)',
+    });
+    expectInsideLock(moveSource, {
+      file: 'move.ts',
+      outerPattern:
+        /withAncestorDirectoryLocksShared\(\s*config,\s*sourceAbsPath[\s\S]*withAncestorDirectoryLocksShared\(\s*config,\s*normalizedDest/,
+      lockPattern: /withDocumentLocks\(\s*config,\s*\[sourceAbsPath,\s*normalizedDest\]/,
+      checkedExpression: 'existsSync(destAbsPath)',
+    });
   });
 });
