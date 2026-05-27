@@ -64,7 +64,7 @@ describe.skipIf(!HAS_SUPABASE)('REQ-015 refused-write conflict envelope integrat
     });
 
     const tagsPayload = parseToolJson<RegionPayload>(await harness.handlers.apply_tags({
-        targets: [{ entity_type: 'document', identifier: 'phase162/refused-regions.md' }],
+        identifiers: 'phase162/refused-regions.md',
         add_tags: ['stale'],
         expected_version: '2'.repeat(64),
       }));
@@ -127,7 +127,10 @@ describe.skipIf(!HAS_SUPABASE)('REQ-015 refused-write conflict envelope integrat
         identifiers: 'phase162/refused-regions.md',
         expected_version: '2'.repeat(64),
       }));
-    expect(expectVersionMismatchRegion(archivePayload)).toMatchObject({ type: 'document' });
+    expect(expectVersionMismatchRegion(archivePayload)).toMatchObject({
+      kind: 'frontmatter',
+      frontmatter: expect.objectContaining({ fq_title: 'Refused Regions' }),
+    });
 
     const copyPayload = parseToolJson<RegionPayload>(await harness.handlers.copy_document({
       identifier: 'phase162/refused-regions.md',

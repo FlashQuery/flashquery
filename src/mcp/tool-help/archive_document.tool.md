@@ -25,7 +25,15 @@ Use `archive_document` to mark documents archived while keeping the Markdown fil
 
 ## Returns
 
-Returns JSON text. A single identifier returns one archive result or an expected error. Batch array input returns a raw ordered array. Each batch entry reports top-level `status: "succeeded"`, `"conflicted"`, or `"failed"` in input order. Successful entries include document data with `identifier`, `title`, `path`, `fq_id`, `modified`, `size.chars`, `status: "archived"`, `archived_at`, and post-archive `version_token`.
+Returns JSON text. A single identifier returns one archive result or an expected error. Batch array input returns a raw ordered array. Each batch entry reports top-level `status: "succeeded"`, `"conflicted"`, or `"failed"` in input order. Successful batch entries include document data at the entry top level, use `result_status: "archived"` for the archive lifecycle value, and include post-archive `version_token`. Conflict entries expose `version_token`, `targeted_region`, and `details` at the entry top level.
+
+```json
+[
+  { "identifier": "Projects/Old Plan.md", "status": "succeeded", "result_status": "archived", "path": "Projects/Old Plan.md", "version_token": "..." },
+  { "identifier": "Projects/Raced.md", "status": "conflicted", "error": "conflict", "version_token": "...", "targeted_region": { "kind": "frontmatter" }, "details": { "reason": "version_mismatch" } },
+  { "identifier": "missing.md", "status": "failed", "error": { "error": "not_found", "message": "No document matches identifier 'missing.md'" } }
+]
+```
 
 ## Examples
 

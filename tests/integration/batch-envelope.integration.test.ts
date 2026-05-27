@@ -13,13 +13,10 @@ import {
 type BatchEntry = {
   identifier: string;
   status: 'succeeded' | 'conflicted' | 'failed';
-  data?: Record<string, unknown>;
-  error?: {
-    error?: string;
-    details?: { reason?: string };
-    targeted_region?: Record<string, unknown>;
-    version_token?: string;
-  };
+  version_token?: string;
+  targeted_region?: Record<string, unknown>;
+  details?: { reason?: string };
+  error?: { error?: string };
 };
 
 function sha256(raw: string): string {
@@ -86,17 +83,16 @@ describe.skipIf(!HAS_SUPABASE)('REQ-018 destructive batch result envelopes', () 
 
     expect(payload[1]).toMatchObject({
       status: 'conflicted',
-      error: {
-        error: 'conflict',
-        details: { reason: 'version_mismatch' },
-        targeted_region: {
-          type: 'document',
-          path: 'phase163/archive-conflict.md',
-          content: expect.stringContaining('archive conflict current'),
+      error: 'conflict',
+      details: { reason: 'version_mismatch' },
+      targeted_region: {
+        kind: 'frontmatter',
+        frontmatter: {
+          fq_title: 'Archive Conflict',
         },
       },
     });
-    expect(payload[1]?.error?.version_token).toMatch(/^[a-f0-9]{64}$/);
+    expect(payload[1]?.version_token).toMatch(/^[a-f0-9]{64}$/);
 
     expect(payload[2]).toMatchObject({
       status: 'failed',
@@ -107,8 +103,8 @@ describe.skipIf(!HAS_SUPABASE)('REQ-018 destructive batch result envelopes', () 
     const archivedB = await readFile(join(harness.vaultPath, 'phase163/archive-success-b.md'), 'utf-8');
     expect(archivedA).toContain('fq_status: archived');
     expect(archivedB).toContain('fq_status: archived');
-    expect(payload[0]?.data?.version_token).toBe(sha256(archivedA));
-    expect(payload[3]?.data?.version_token).toBe(sha256(archivedB));
+    expect(payload[0]?.version_token).toBe(sha256(archivedA));
+    expect(payload[3]?.version_token).toBe(sha256(archivedB));
 
     await expect(readFile(join(harness.vaultPath, 'phase163/archive-conflict.md'), 'utf-8')).resolves.toBe(conflictDiskBefore);
   });
@@ -142,20 +138,18 @@ describe.skipIf(!HAS_SUPABASE)('REQ-018 destructive batch result envelopes', () 
       'phase163/remove-missing.md',
     ]);
     expect(payload.map((entry) => entry.status)).toEqual(['succeeded', 'conflicted', 'failed']);
-    expect(payload[0]?.data?.version_token).toBeUndefined();
+    expect(payload[0]?.version_token).toBeUndefined();
     expect(payload[1]).toMatchObject({
       status: 'conflicted',
-      error: {
-        error: 'conflict',
-        details: { reason: 'version_mismatch' },
-        targeted_region: {
-          type: 'document',
-          path: 'phase163/remove-conflict.md',
-          content: expect.stringContaining('remove conflict current'),
-        },
+      error: 'conflict',
+      details: { reason: 'version_mismatch' },
+      targeted_region: {
+        type: 'document',
+        path: 'phase163/remove-conflict.md',
+        content: expect.stringContaining('remove conflict current'),
       },
     });
-    expect(payload[1]?.error?.version_token).toMatch(/^[a-f0-9]{64}$/);
+    expect(payload[1]?.version_token).toMatch(/^[a-f0-9]{64}$/);
     expect(payload[2]).toMatchObject({
       status: 'failed',
       error: { error: 'not_found' },

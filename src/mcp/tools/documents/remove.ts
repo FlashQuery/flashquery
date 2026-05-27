@@ -53,6 +53,8 @@ export function registerRemoveDocumentTool(server: McpServer, deps: DocumentTool
             .describe('Optional source file version_token precondition for opt-in conflict detection.'),
           if_match: z.string().optional()
             .describe('Alias for expected_version.'),
+          version_tokens: z.never().optional()
+            .describe('Unsupported. Use object-form identifiers with per-item version_token values.'),
         },
       },
       async ({ identifiers, expected_version, if_match }) => {
@@ -99,7 +101,7 @@ export function registerRemoveDocumentTool(server: McpServer, deps: DocumentTool
                 pushFailure(id, {
                   ...trashRoot,
                   identifier: id,
-                } as ErrorEnvelope);
+                });
                 continue;
               }
 
@@ -230,7 +232,7 @@ export function registerRemoveDocumentTool(server: McpServer, deps: DocumentTool
             } catch (itemErr) {
               if (itemErr instanceof LockTimeoutError) {
                 pushFailure(id, {
-                  error: 'conflict',
+                  error: isBatch ? 'lock_timeout' : 'conflict',
                   message: itemErr.message,
                   identifier: id,
                   details: { reason: 'lock_timeout' },

@@ -25,7 +25,15 @@ Use `remove_document` when documents should no longer appear in normal vault wor
 
 ## Returns
 
-Returns JSON text. Single-string input returns one removal result. Batch array input returns a raw ordered array. Each batch entry reports top-level `status: "succeeded"`, `"conflicted"`, or `"failed"` in input order. Successful entries include document identification with `size.chars`, archived lifecycle metadata, and `moved_to` removal destination details. `remove_document` success omits `version_token` because the source file no longer remains at its original path.
+Returns JSON text. Single-string input returns one removal result. Batch array input returns a raw ordered array. Each batch entry reports top-level `status: "succeeded"`, `"conflicted"`, or `"failed"` in input order. Successful batch entries include document identification, archived lifecycle metadata, and `moved_to` at the entry top level. `remove_document` success omits `version_token` because the source file no longer remains at its original path. Conflict entries expose `version_token`, `targeted_region`, and `details` at the entry top level.
+
+```json
+[
+  { "identifier": "Drafts/A.md", "status": "succeeded", "path": "Drafts/A.md", "moved_to": ".flashquery/removed/A.md" },
+  { "identifier": "Drafts/Raced.md", "status": "conflicted", "error": "conflict", "version_token": "...", "targeted_region": { "type": "document" }, "details": { "reason": "version_mismatch" } },
+  { "identifier": "missing.md", "status": "failed", "error": { "error": "not_found", "message": "No document matches identifier 'missing.md'" } }
+]
+```
 
 ## Examples
 

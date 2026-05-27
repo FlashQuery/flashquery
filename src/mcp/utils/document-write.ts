@@ -1,5 +1,6 @@
 import { FM } from '../../constants/frontmatter-fields.js';
 import { documentIdentification, type ErrorEnvelope } from './response-formats.js';
+import matter from 'gray-matter';
 
 export type WriteDocumentMode = 'create' | 'update';
 
@@ -189,5 +190,12 @@ export function buildWholeDocumentTargetedRegion(input: {
     path: input.path,
     content: input.rawContent,
     chars: input.rawContent.length,
+  };
+}
+
+export function buildFrontmatterTargetedRegion(rawContent: string): Record<string, unknown> {
+  return {
+    kind: 'frontmatter',
+    frontmatter: matter(rawContent).data,
   };
 }

@@ -191,7 +191,7 @@ class FQCServer:
             self.vault_path.mkdir(parents=True, exist_ok=True)
         else:
             self._vault_tmpdir = tempfile.mkdtemp(prefix=f"fqc-vault-{self.instance_id}-")
-            self.vault_path = Path(self._vault_tmpdir)
+            self.vault_path = Path(self._vault_tmpdir).resolve()
 
         self.base_url = f"http://127.0.0.1:{self.port}"
 

@@ -63,7 +63,7 @@ function toolSchema(tools: Map<string, CapturedTool>, name: string): z.ZodObject
   if (!captured) {
     throw new Error(`${name} was not registered`);
   }
-  return z.strictObject(captured.inputSchema);
+  return z.object(captured.inputSchema);
 }
 
 describe('T-U-026 mixed batch identifier shape', () => {
@@ -170,14 +170,12 @@ describe('T-U-027 unsupported positional token shapes', () => {
 });
 
 describe('REQ-018 batch item response wrappers', () => {
-  it('keeps unified batch status separate from legacy per-tool payload status fields', () => {
+  it('emits spec-shaped top-level batch entries', () => {
     expect(batchSucceeded('Notes/archived.md', { status: 'archived', archived_at: '2026-05-27T00:00:00.000Z' })).toEqual({
       identifier: 'Notes/archived.md',
       status: 'succeeded',
-      data: {
-        status: 'archived',
-        archived_at: '2026-05-27T00:00:00.000Z',
-      },
+      result_status: 'archived',
+      archived_at: '2026-05-27T00:00:00.000Z',
     });
 
     expect(batchConflicted('Notes/conflict.md', {
@@ -189,11 +187,9 @@ describe('REQ-018 batch item response wrappers', () => {
     })).toMatchObject({
       identifier: 'Notes/conflict.md',
       status: 'conflicted',
-      error: {
-        error: 'conflict',
-        version_token: 'new-token',
-        details: { reason: 'version_mismatch' },
-      },
+      error: 'conflict',
+      version_token: 'new-token',
+      details: { reason: 'version_mismatch' },
     });
 
     expect(batchFailed('Notes/missing.md', {

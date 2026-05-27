@@ -65,9 +65,9 @@ steps:
           for item in $batch do
             statuses = append $statuses $item.status
             if $item.status == "conflicted" then
-              conflict_reason = $item.error.details.reason
-              conflict_version_token = $item.error.version_token
-              conflict_region_type = $item.error.targeted_region.type
+              conflict_reason = $item.details.reason
+              conflict_version_token = $item.version_token
+              conflict_region_type = $item.targeted_region.kind
             fi
             if $item.status == "failed" then
               failed_error = $item.error.error
@@ -86,7 +86,7 @@ steps:
         value: [succeeded, conflicted, failed, succeeded]
       expect_json_path:
         - result.conflict_version_token
-      expect_contains: '"evidence":"version_mismatch|document|not_found"'
+      expect_contains: '"evidence":"version_mismatch|frontmatter|not_found"'
 
   - label: "First successful archive entry remains archived"
     assert:

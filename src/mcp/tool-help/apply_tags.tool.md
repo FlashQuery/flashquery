@@ -33,9 +33,17 @@ Use `apply_tags` to add or remove tags on explicit document and memory targets i
 
 ## Returns
 
-Returns JSON text. Successful document entries include document identification fields, post-write `version_token`, `tags`, and `entity_type: "document"`. Successful memory entries include memory identification fields, `tags`, and `entity_type: "memory"`. Document batch entries from array input report top-level `status: "succeeded"`, `"conflicted"`, or `"failed"` in raw input order. Memory targets preserve their existing response shape.
+Returns JSON text. Successful document entries include document identification fields, post-write `version_token`, `tags`, and `entity_type: "document"`. Successful memory entries include memory identification fields, `tags`, and `entity_type: "memory"`. Array input through `targets` or `identifiers` returns a raw ordered batch array; each entry reports top-level `status: "succeeded"`, `"conflicted"`, or `"failed"` in raw input order. The legacy `memory_id` shorthand preserves its existing unwrapped memory response shape.
 
-For document targets only, stale `expected_version` or `if_match` refuses the write before disk mutation with `error: "conflict"`, `details.reason: "version_mismatch"`, the current `version_token`, and `targeted_region.frontmatter`. Memory targets preserve existing behavior and do not use document version preconditions.
+For document targets only, stale `expected_version` or `if_match` refuses the write before disk mutation with `error: "conflict"`, `details.reason: "version_mismatch"`, the current `version_token`, and `targeted_region.frontmatter`. Memory targets preserve existing tag semantics and do not use document version preconditions.
+
+```json
+[
+  { "identifier": "Notes/A.md", "status": "succeeded", "entity_type": "document", "tags": ["planning"], "version_token": "..." },
+  { "identifier": "memory-uuid", "status": "succeeded", "entity_type": "memory", "tags": ["planning"] },
+  { "identifier": "Notes/Raced.md", "status": "conflicted", "error": "conflict", "version_token": "...", "targeted_region": { "kind": "frontmatter" }, "details": { "reason": "version_mismatch" } }
+]
+```
 
 ## Examples
 

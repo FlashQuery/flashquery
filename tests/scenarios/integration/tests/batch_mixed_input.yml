@@ -68,8 +68,8 @@ steps:
           for item in $batch do
             statuses = append $statuses $item.status
             if $item.status == "conflicted" then
-              conflict_reason = $item.error.details.reason
-              conflict_version_token = $item.error.version_token
+              conflict_reason = $item.details.reason
+              conflict_version_token = $item.version_token
             fi
           done
           exit {

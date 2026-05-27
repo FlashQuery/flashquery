@@ -29,9 +29,17 @@ Use `insert_doc_link` to add a wiki-style relationship link from one or more sou
 
 ## Returns
 
-Returns JSON text. Single-string input preserves the existing wrapped result object. Batch array input returns a raw ordered array. Each batch entry reports top-level `status: "succeeded"`, `"conflicted"`, or `"failed"` in input order. Successful entries include document data with post-write `version_token`, legacy source status `updated` or `unchanged`, the target property, the wikilink, and target document metadata. Target resolution failures stop the request; source failures are reported per source.
+Returns JSON text. Single-string input preserves the existing wrapped result object. Batch array input returns a raw ordered array. Each batch entry reports top-level `status: "succeeded"`, `"conflicted"`, or `"failed"` in input order. Successful batch entries include document data at the entry top level with post-write `version_token`, source `result_status` (`updated` or `unchanged`), the target property, the wikilink, and target document metadata. Target resolution failures stop the request; source failures are reported per source.
 
 When `expected_version` or `if_match` is stale for a source document, the write is refused before disk mutation with `error: "conflict"`, `details.reason: "version_mismatch"`, the current `version_token`, and `targeted_region.frontmatter`.
+
+```json
+[
+  { "identifier": "Source/A.md", "status": "succeeded", "result_status": "updated", "link": "[[Target]]", "version_token": "..." },
+  { "identifier": "Source/Raced.md", "status": "conflicted", "error": "conflict", "version_token": "...", "targeted_region": { "kind": "frontmatter" }, "details": { "reason": "version_mismatch" } },
+  { "identifier": "missing.md", "status": "failed", "error": { "error": "not_found", "message": "No document matches identifier 'missing.md'" } }
+]
+```
 
 ## Examples
 

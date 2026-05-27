@@ -236,24 +236,30 @@ export function batchResult(results: unknown[]): unknown[] {
   return results;
 }
 
-export type BatchItemResult<TSuccess = unknown> =
-  | { identifier: string; status: 'succeeded'; data: TSuccess }
-  | { identifier: string; status: 'conflicted'; error: ErrorEnvelope }
+export type BatchItemResult =
+  | ({ identifier: string; status: 'succeeded'; result_status?: unknown } & Record<string, unknown>)
+  | ({ identifier: string; status: 'conflicted' } & ErrorEnvelope)
   | { identifier: string; status: 'failed'; error: ErrorEnvelope };
 
-export function batchSucceeded<TSuccess>(identifier: string, data: TSuccess): BatchItemResult<TSuccess> {
+export function batchSucceeded<TSuccess extends Record<string, unknown>>(
+  identifier: string,
+  data: TSuccess
+): BatchItemResult {
+  const { identifier: _ignoredIdentifier, status: payloadStatus, ...payload } = data;
   return {
+    ...payload,
+    ...(payloadStatus === undefined ? {} : { result_status: payloadStatus }),
     identifier,
     status: 'succeeded',
-    data,
   };
 }
 
 export function batchConflicted(identifier: string, envelope: ErrorEnvelope): BatchItemResult {
+  const { identifier: _ignoredIdentifier, ...payload } = envelope;
   return {
+    ...payload,
     identifier,
     status: 'conflicted',
-    error: envelope,
   };
 }
 

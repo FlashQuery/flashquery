@@ -28,7 +28,7 @@ import {
   computeVersionToken,
   pickExpectedVersion,
 } from '../../utils/document-version.js';
-import { buildWholeDocumentTargetedRegion } from '../../utils/document-write.js';
+import { buildFrontmatterTargetedRegion } from '../../utils/document-write.js';
 import { batchIdentifiersSchema, normalizeBatchIdentifiers } from '../../utils/batch-input.js';
 import { FM } from '../../../constants/frontmatter-fields.js';
 import { computeHash } from '../../../storage/document-primitives.js';
@@ -51,6 +51,8 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
             .describe('Optional source file version_token precondition for opt-in conflict detection.'),
           if_match: z.string().optional()
             .describe('Alias for expected_version.'),
+          version_tokens: z.never().optional()
+            .describe('Unsupported. Use object-form identifiers with per-item version_token values.'),
         },
       },
       async ({ identifiers, expected_version, if_match }) => {
@@ -107,10 +109,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
                 pushConflict(id, buildVersionMismatchEnvelope({
                   identifier: id,
                   versionToken: currentVersionToken,
-                  targetedRegion: buildWholeDocumentTargetedRegion({
-                    path: relativePath,
-                    rawContent,
-                  }),
+                  targetedRegion: buildFrontmatterTargetedRegion(rawContent),
                 }));
                 return;
               }
@@ -233,7 +232,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
             } catch (itemErr) {
               if (itemErr instanceof LockTimeoutError) {
                 pushFailure(id, {
-                  error: 'conflict',
+                  error: isBatch ? 'lock_timeout' : 'conflict',
                   message: itemErr.message,
                   identifier: id,
                   details: { reason: 'lock_timeout' },

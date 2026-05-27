@@ -13,12 +13,9 @@ import {
 type BatchItem = {
   identifier: string;
   status: 'succeeded' | 'conflicted' | 'failed';
-  data?: Record<string, unknown>;
-  error?: {
-    error?: string;
-    details?: { reason?: string };
-    version_token?: string;
-  };
+  version_token?: string;
+  details?: { reason?: string };
+  error?: string | { error?: string };
 };
 
 async function readToken(harness: Phase155Harness, identifier: string): Promise<string> {
@@ -33,13 +30,13 @@ function expectMixedBatchStatuses(results: BatchItem[], identifiers: string[]): 
   expect(results).toHaveLength(3);
   expect(results.map((item) => item.identifier)).toEqual(identifiers);
   expect(results.map((item) => item.status)).toEqual(['succeeded', 'succeeded', 'conflicted']);
-  expect(results[0]?.data?.version_token).toMatch(/^[a-f0-9]{64}$/);
-  expect(results[1]?.data?.version_token).toMatch(/^[a-f0-9]{64}$/);
-  expect(results[2]?.error).toMatchObject({
+  expect(results[0]?.version_token).toMatch(/^[a-f0-9]{64}$/);
+  expect(results[1]?.version_token).toMatch(/^[a-f0-9]{64}$/);
+  expect(results[2]).toMatchObject({
     error: 'conflict',
     details: { reason: 'version_mismatch' },
   });
-  expect(results[2]?.error?.version_token).toMatch(/^[a-f0-9]{64}$/);
+  expect(results[2]?.version_token).toMatch(/^[a-f0-9]{64}$/);
 }
 
 describe.skipIf(!HAS_SUPABASE)('REQ-019 mixed compound batch input integration', () => {
@@ -105,7 +102,7 @@ describe.skipIf(!HAS_SUPABASE)('REQ-019 mixed compound batch input integration',
     expectMixedBatchStatuses(results, paths);
   });
 
-  it('T-I-038 apply_tags preserves existing memory target response semantics', async () => {
+  it('T-I-038 apply_tags wraps a single memory target array result', async () => {
     const memoryId = randomUUID();
     const { error } = await supabaseManager.getClient().from('fqc_memory').insert({
       id: memoryId,
@@ -122,6 +119,36 @@ describe.skipIf(!HAS_SUPABASE)('REQ-019 mixed compound batch input integration',
 
     const results = parseToolJson<Array<Record<string, unknown>>>(await harness.handlers.apply_tags({
       targets: [{ entity_type: 'memory', identifier: memoryId }],
+      add_tags: ['#topic/phase163-memory'],
+    }));
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      identifier: memoryId,
+      status: 'succeeded',
+      plugin_scope: 'global',
+      entity_type: 'memory',
+    });
+    expect(results[0]?.tags).toEqual(expect.arrayContaining(['#topic/original', '#topic/phase163-memory']));
+  });
+
+  it('T-I-038 apply_tags preserves legacy memory_id shorthand response semantics', async () => {
+    const memoryId = randomUUID();
+    const { error } = await supabaseManager.getClient().from('fqc_memory').insert({
+      id: memoryId,
+      instance_id: harness.instanceId,
+      content: 'Memory target for legacy shorthand regression.',
+      status: 'active',
+      tags: ['#topic/original'],
+      plugin_scope: 'global',
+      is_latest: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    if (error) throw new Error(error.message);
+
+    const results = parseToolJson<Array<Record<string, unknown>>>(await harness.handlers.apply_tags({
+      memory_id: memoryId,
       add_tags: ['#topic/phase163-memory'],
     }));
 
@@ -164,17 +191,15 @@ describe.skipIf(!HAS_SUPABASE)('REQ-019 mixed compound batch input integration',
     expect(results[0]).toMatchObject({
       identifier: 'phase163/tags-one-doc.md',
       status: 'succeeded',
-      data: {
-        entity_type: 'document',
-        path: 'phase163/tags-one-doc.md',
-      },
+      entity_type: 'document',
+      path: 'phase163/tags-one-doc.md',
     });
-    expect((results[0]?.data as Record<string, unknown> | undefined)?.version_token).toMatch(/^[a-f0-9]{64}$/);
+    expect(results[0]?.version_token).toMatch(/^[a-f0-9]{64}$/);
     expect(results[1]).toMatchObject({
-      entity_type: 'memory',
-      memory_id: memoryId,
+      identifier: memoryId,
+      status: 'succeeded',
       plugin_scope: 'global',
+      entity_type: 'memory',
     });
-    expect(results[1]?.status).toBeUndefined();
   });
 });

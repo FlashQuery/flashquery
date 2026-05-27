@@ -57,6 +57,7 @@ import {
   computeVersionToken,
   pickExpectedVersion,
 } from '../utils/document-version.js';
+import { buildFrontmatterTargetedRegion } from '../utils/document-write.js';
 import { batchIdentifierItemSchema, batchIdentifiersSchema, normalizeBatchIdentifiers } from '../utils/batch-input.js';
 
 type HeadingMatchInput = {
@@ -142,9 +143,13 @@ function documentResolutionError(err: unknown, identifier: string): ErrorEnvelop
   };
 }
 
-function lockTimeoutError(err: LockTimeoutError, identifier?: string): ErrorEnvelope {
+function lockTimeoutError(
+  err: LockTimeoutError,
+  identifier?: string,
+  errorCode: 'conflict' | 'lock_timeout' = 'conflict'
+): ErrorEnvelope {
   return {
-    error: 'conflict',
+    error: errorCode,
     message: err.message,
     ...(identifier ? { identifier } : {}),
     details: { reason: 'lock_timeout' },
@@ -166,10 +171,7 @@ function headingErrorMatches(matches: Array<{ text: string; level: number; line:
 }
 
 function frontmatterTargetedRegion(rawContent: string): Record<string, unknown> {
-  return {
-    kind: 'frontmatter',
-    frontmatter: matter(rawContent).data,
-  };
+  return buildFrontmatterTargetedRegion(rawContent);
 }
 
 function sectionTargetedRegion(
@@ -275,6 +277,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           ),
         expected_version: z.string().optional().describe('Optional version_token expected for the source document bytes before writing.'),
         if_match: z.string().optional().describe('Alias for expected_version.'),
+        version_tokens: z.never().optional().describe('Unsupported. Use object-form identifiers with per-item version_token values.'),
       },
     },
     async ({ identifiers, target_identifier, property, expected_version, if_match }) => {
@@ -306,7 +309,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             error: envelope.error === 'ambiguous_identifier' ? 'ambiguous_identifier' : 'not_found',
             message: String(envelope.message),
             identifier: target_identifier,
-            details: envelope.details as Record<string, unknown> | undefined,
+            details: envelope.details,
           });
         }
 
@@ -402,7 +405,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             if (sourceErr instanceof LockTimeoutError) {
               results.push(
                 isBatchInput
-                  ? batchFailed(sourceIdentifier, lockTimeoutError(sourceErr, sourceIdentifier))
+                  ? batchFailed(sourceIdentifier, lockTimeoutError(sourceErr, sourceIdentifier, 'lock_timeout'))
                   : lockTimeoutError(sourceErr, sourceIdentifier)
               );
               continue;
@@ -468,6 +471,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           .describe('Tags to remove (silent no-op if not present)'),
         expected_version: z.string().optional().describe('Optional version_token expected for document targets before writing.'),
         if_match: z.string().optional().describe('Alias for expected_version.'),
+        version_tokens: z.never().optional().describe('Unsupported. Use object-form identifiers with per-item version_token values.'),
       },
     },
     async ({ targets, identifiers, memory_id, add_tags, remove_tags, expected_version, if_match }) => {
@@ -518,9 +522,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const supabase = supabaseManager.getClient();
         const canUseMemoryTargets = memoryCategoryEnabled(config);
         const results: Array<Record<string, unknown>> = [];
-        const shouldWrapDocumentResults =
-          Array.isArray(identifiers) ||
-          (Array.isArray(targets) && normalizedTargets.some((target) => target.entity_type === 'document'));
+        const shouldWrapResults = Array.isArray(identifiers) || Array.isArray(targets);
 
         for (const target of normalizedTargets) {
           if (target.entity_type === 'document') {
@@ -572,7 +574,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                   identifier: id,
                   details: { field: 'tags' },
                 };
-                results.push(shouldWrapDocumentResults ? batchFailed(id, envelope) : envelope);
+                results.push(shouldWrapResults ? batchFailed(id, envelope) : envelope);
                 return;
               }
 
@@ -633,18 +635,18 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 tags: dedupTagsForSync,
                 entity_type: 'document',
               };
-              results.push(shouldWrapDocumentResults ? batchSucceeded(id, data) : data);
+              results.push(shouldWrapResults ? batchSucceeded(id, data) : data);
               return null;
                 })
               );
               if (conflict) {
-                if (!shouldWrapDocumentResults) return jsonExpectedError(conflict);
+                if (!shouldWrapResults) return jsonExpectedError(conflict);
                 results.push(batchConflicted(id, conflict));
               }
             } catch (itemErr) {
               if (itemErr instanceof LockTimeoutError) {
-                const envelope = lockTimeoutError(itemErr, id);
-                results.push(shouldWrapDocumentResults ? batchFailed(id, envelope) : envelope);
+                const envelope = lockTimeoutError(itemErr, id, shouldWrapResults ? 'lock_timeout' : 'conflict');
+                results.push(shouldWrapResults ? batchFailed(id, envelope) : envelope);
                 continue;
               }
               const msg = itemErr instanceof Error ? itemErr.message : String(itemErr);
@@ -653,19 +655,20 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 message: msg,
                 identifier: id,
               };
-              results.push(shouldWrapDocumentResults ? batchFailed(id, envelope) : envelope);
+              results.push(shouldWrapResults ? batchFailed(id, envelope) : envelope);
             }
             continue;
           }
 
           const memoryId = target.identifier;
           if (!canUseMemoryTargets) {
-            results.push({
+            const envelope: ErrorEnvelope = {
               error: 'unsupported',
               message: 'Memory category is disabled by config',
               identifier: memoryId,
               details: { disabled_category: 'memory' },
-            });
+            };
+            results.push(shouldWrapResults ? batchFailed(memoryId, envelope) : envelope);
             continue;
           }
 
@@ -678,11 +681,12 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             .single();
 
           if (fetchError) {
-            results.push({
+            const envelope: ErrorEnvelope = {
               error: 'not_found',
               message: `Failed to fetch memory "${memoryId}": ${fetchError.message}`,
               identifier: memoryId,
-            });
+            };
+            results.push(shouldWrapResults ? batchFailed(memoryId, envelope) : envelope);
             continue;
           }
 
@@ -705,12 +709,13 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 ? [`Memory has conflicting statuses: ${memTagValidation.conflicts.join(', ')}. Choose one to keep.`]
                 : []),
             ];
-            results.push({
+            const envelope: ErrorEnvelope = {
               error: 'invalid_input',
               message: `Tag validation failed: ${messages.join('; ')}`,
               identifier: memoryId,
               details: { field: 'tags' },
-            });
+            };
+            results.push(shouldWrapResults ? batchFailed(memoryId, envelope) : envelope);
             continue;
           }
 
@@ -730,7 +735,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
           logger.info(`apply_tags: updated tags on memory ${memoryId} (${memTagValidation.normalized.length} tags)`);
 
-          results.push({
+          const memoryData = {
             ...memoryIdentification({
               memory_id: memoryId,
               content_preview: typeof memData?.content === 'string' ? memData.content.slice(0, 120) : '',
@@ -740,7 +745,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
               updated_at: new Date().toISOString(),
             }),
             entity_type: 'memory',
-          });
+          };
+          results.push(shouldWrapResults ? batchSucceeded(memoryId, memoryData) : memoryData);
         }
 
         return jsonToolResult(results);

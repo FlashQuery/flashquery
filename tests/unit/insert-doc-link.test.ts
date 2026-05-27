@@ -221,8 +221,8 @@ describe('insert_doc_link handler contract', () => {
     expect(result.isError).not.toBe(true);
     expect(payload).toHaveLength(2);
     expect(payload[0]).toMatchObject({ identifier: 'source-a.md', status: 'succeeded' });
-    expect(payload[0]?.data).toMatchObject({ identifier: 'source-a.md' });
-    expect(['updated', 'unchanged']).toContain((payload[0]?.data as Record<string, unknown>).status);
+    expect(payload[0]).toMatchObject({ identifier: 'source-a.md' });
+    expect(['updated', 'unchanged']).toContain(payload[0]?.result_status);
     expect(payload[1]).toMatchObject({
       identifier: 'missing-source.md',
       status: 'failed',
