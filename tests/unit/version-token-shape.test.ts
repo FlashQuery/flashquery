@@ -39,11 +39,16 @@ describe('REQ-016 whole-file version_token shape', () => {
   });
 
   it('T-U-025 section-only get_document response carries whole-file version_token and no section-scoped token field', () => {
+    const rawBytes = '---\nfq_title: Token\nfq_updated: 2026-05-27T00:00:00.000Z\n---\n## A\n\nBody\n\n## B\n\nOther';
+    const rawBytesHash = createHash('sha256').update(rawBytes).digest('hex');
     const metadata = buildMetadataEnvelope(
       'Notes/Token.md',
       {
         relativePath: 'Notes/Token.md',
-        capturedFrontmatter: { fqcId: '11111111-1111-4111-8111-111111111111' },
+        capturedFrontmatter: {
+          fqcId: '11111111-1111-4111-8111-111111111111',
+          contentHash: rawBytesHash,
+        },
       },
       { fq_title: 'Token', fq_updated: '2026-05-27T00:00:00.000Z' },
       '## A\n\nBody\n\n## B\n\nOther'
@@ -54,6 +59,7 @@ describe('REQ-016 whole-file version_token shape', () => {
     });
 
     expect(response.version_token).toEqual(expect.stringMatching(SHA256_HEX));
+    expect(response.version_token).toBe(rawBytesHash);
     expect(response).not.toHaveProperty('section_version_token');
     expect(response).not.toHaveProperty('section_hash');
     expect(response).not.toHaveProperty('content_hash');

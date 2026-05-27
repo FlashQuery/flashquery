@@ -142,7 +142,7 @@ export function resolveTitle(
  */
 export function buildMetadataEnvelope(
   identifier: string,
-  resolved: { relativePath: string; capturedFrontmatter: { fqcId: string; contentHash?: string } },
+  resolved: { relativePath: string; capturedFrontmatter: { fqcId: string; contentHash: string } },
   frontmatter: Record<string, unknown>,
   bodyContent: string
 ): {
@@ -154,6 +154,9 @@ export function buildMetadataEnvelope(
   modified: string;
   size: { chars: number };
 } {
+  if (!resolved.capturedFrontmatter.contentHash) {
+    throw new Error('buildMetadataEnvelope: capturedFrontmatter.contentHash is required for version_token');
+  }
   const title = resolveTitle(frontmatter, resolved.relativePath);
   const updatedRaw = frontmatter[FM.UPDATED];
   const modified =
@@ -163,7 +166,7 @@ export function buildMetadataEnvelope(
     title,
     path: resolved.relativePath,
     fq_id: resolved.capturedFrontmatter.fqcId,
-    version_token: resolved.capturedFrontmatter.contentHash ?? computeVersionToken(bodyContent),
+    version_token: resolved.capturedFrontmatter.contentHash,
     modified,
     size: { chars: bodyContent.length },
   };

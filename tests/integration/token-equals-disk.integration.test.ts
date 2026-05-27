@@ -32,17 +32,16 @@ describe.skipIf(!HAS_SUPABASE)('REQ-014 token equals disk integration', () => {
     const id = fqcId ?? payload.fq_id;
     const raw = await readFile(join(harness.vaultPath, relativePath), 'utf-8');
     expect(payload.version_token).toBe(sha256(raw));
-    if (id) {
-      const { data, error } = await import('../../src/storage/supabase.js')
-        .then(({ supabaseManager }) => supabaseManager.getClient()
-          .from('fqc_documents')
-          .select('content_hash')
-          .eq('id', id)
-          .eq('instance_id', harness.instanceId)
-          .single());
-      expect(error).toBeNull();
-      expect((data as { content_hash: string }).content_hash).toBe(payload.version_token);
-    }
+    expect(id, 'expectTokenDbAndDiskAgree requires a resolvable fq_id').toBeTruthy();
+    const { data, error } = await import('../../src/storage/supabase.js')
+      .then(({ supabaseManager }) => supabaseManager.getClient()
+        .from('fqc_documents')
+        .select('content_hash')
+        .eq('id', id)
+        .eq('instance_id', harness.instanceId)
+        .single());
+    expect(error).toBeNull();
+    expect((data as { content_hash: string }).content_hash).toBe(payload.version_token);
   }
 
   it('T-I-026 get_document repair returns post-repair version_token, not pre-repair token', async () => {
@@ -66,7 +65,7 @@ describe.skipIf(!HAS_SUPABASE)('REQ-014 token equals disk integration', () => {
     const relativePath = 'phase162/repair-follow-up.md';
     const absPath = join(harness.vaultPath, relativePath);
     await mkdir(dirname(absPath), { recursive: true });
-    await writeFile(absPath, '---\nfq_title: Repair Follow Up\n---\nRepair then no-op write.\n');
+    await writeFile(absPath, '---\nfq_title: Repair Follow Up\n---\nRepair then real write.\n');
 
     const readResult = await harness.handlers.get_document({ identifiers: relativePath });
     const token = parseToolJson<{ version_token?: string }>(readResult).version_token;
@@ -75,10 +74,17 @@ describe.skipIf(!HAS_SUPABASE)('REQ-014 token equals disk integration', () => {
     const writeResult = await harness.handlers.write_document({
       mode: 'update',
       identifier: relativePath,
+      content: 'Repair then real write.',
       expected_version: token,
     });
     expect((writeResult as { isError?: boolean }).isError).toBeFalsy();
-    expect(parseToolJson<{ error?: string; version_token?: string }>(writeResult).error).toBeUndefined();
+    const writePayload = parseToolJson<{ error?: string; version_token?: string }>(writeResult);
+    expect(writePayload.error).toBeUndefined();
+    expect(writePayload.version_token).toMatch(/^[a-f0-9]{64}$/);
+    expect(writePayload.version_token).not.toBe(token);
+    const diskAfter = await readFile(absPath, 'utf-8');
+    expect(diskAfter).toContain('Repair then real write.');
+    expect(writePayload.version_token).toBe(sha256(diskAfter));
   });
 
   it('T-I-028 write, copy, move, archive, and compound mutations keep DB content_hash, version_token, and disk SHA-256 equal', async () => {
@@ -97,13 +103,25 @@ describe.skipIf(!HAS_SUPABASE)('REQ-014 token equals disk integration', () => {
       identifier: 'phase162/equality-write.md',
       destination: 'phase162/equality-copy.md',
     });
-    await expectTokenDbAndDiskAgree(copyResult, 'phase162/equality-copy.md');
+    const copyPayload = parseToolJson<{ fq_id?: string; version_token?: string }>(copyResult);
+    expect(copyPayload.fq_id).toMatch(/^[0-9a-f-]{36}$/);
+    await expectTokenDbAndDiskAgree(copyResult, 'phase162/equality-copy.md', copyPayload.fq_id);
+    const copiedGet = parseToolJson<{ version_token?: string }>(
+      await harness.handlers.get_document({ identifiers: 'phase162/equality-copy.md' })
+    );
+    expect(copiedGet.version_token).toBe(copyPayload.version_token);
 
     const moveResult = await harness.handlers.move_document({
       identifier: 'phase162/equality-copy.md',
       destination: 'phase162/equality-moved.md',
     });
-    await expectTokenDbAndDiskAgree(moveResult, 'phase162/equality-moved.md');
+    const movePayload = parseToolJson<{ fq_id?: string; version_token?: string }>(moveResult);
+    expect(movePayload.fq_id).toMatch(/^[0-9a-f-]{36}$/);
+    await expectTokenDbAndDiskAgree(moveResult, 'phase162/equality-moved.md', movePayload.fq_id);
+    const movedGet = parseToolJson<{ version_token?: string }>(
+      await harness.handlers.get_document({ identifiers: 'phase162/equality-moved.md' })
+    );
+    expect(movedGet.version_token).toBe(movePayload.version_token);
 
     const compoundResult = await harness.handlers.insert_in_doc({
       identifier: 'phase162/equality-write.md',

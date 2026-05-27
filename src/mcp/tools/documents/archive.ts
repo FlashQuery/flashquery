@@ -111,7 +111,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
                 ? archivedAtValue
                 : null;
               const archivedAt = existingArchivedAt ?? new Date().toISOString();
-              let archivedContentHash: string | null = null;
+              let archivedContentHash: string;
 
               // Step 2: Call targetedScan to update frontmatter with archived status
               // Compute hash of the file with archived status
@@ -206,9 +206,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
                 modified: archivedStats.mtime.toISOString(),
                 chars: parsed.content.length,
                 archived_at: archivedAt,
-                version_token: archivedContentHash ?? computeHash(
-                  await readFile(join(config.instance.vault.path, relativePath), 'utf-8')
-                ),
+                version_token: archivedContentHash,
               }));
                 })
               );

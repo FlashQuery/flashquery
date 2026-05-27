@@ -21,7 +21,10 @@ const FIXTURE_FQ_UPDATED = '2026-04-30T10:15:00Z';
 
 const FIXTURE_RESOLVED = {
   relativePath: FIXTURE_IDENTIFIER,
-  capturedFrontmatter: { fqcId: FIXTURE_FQC_ID },
+  capturedFrontmatter: {
+    fqcId: FIXTURE_FQC_ID,
+    contentHash: 'a'.repeat(64),
+  },
 };
 
 const FIXTURE_FRONTMATTER: Record<string, unknown> = {
@@ -148,7 +151,7 @@ describe('buildMetadataEnvelope (GDOC-02, GDOC-07)', () => {
     const customId = 'deadbeef-0000-4000-8000-000000000042';
     const resolved = {
       relativePath: 'Docs/test.md',
-      capturedFrontmatter: { fqcId: customId },
+      capturedFrontmatter: { fqcId: customId, contentHash: 'b'.repeat(64) },
     };
     const envelope = buildMetadataEnvelope('Docs/test.md', resolved, {}, 'body content');
     expect(envelope.fq_id).toBe(customId);

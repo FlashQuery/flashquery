@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { appendFile, readFile, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { HAS_SUPABASE } from '../helpers/test-env.js';
@@ -8,6 +9,10 @@ import {
   writeDocument,
   type Phase155Harness,
 } from './vault-write-coherency-phase155-helpers.js';
+
+function sha256(raw: string): string {
+  return createHash('sha256').update(raw).digest('hex');
+}
 
 describe.skipIf(!HAS_SUPABASE)('REQ-013 version check inside document lock integration', () => {
   let harness: Phase155Harness;
@@ -42,5 +47,32 @@ describe.skipIf(!HAS_SUPABASE)('REQ-013 version check inside document lock integ
     const payload = parseToolJson<{ error?: string; details?: { reason?: string } }>(writeResult);
     expect(payload).toMatchObject({ error: 'conflict', details: { reason: 'version_mismatch' } });
     await expect(readFile(absPath, 'utf-8')).resolves.toBe(afterExternalWrite);
+  });
+
+  it('T-I-025b version check trusts disk bytes, not stale fqc_documents.content_hash', async () => {
+    const created = await writeDocument(harness.handlers, 'phase162/db-lag.md', 'DB Lag', 'true body');
+    const absPath = join(harness.vaultPath, 'phase162/db-lag.md');
+    const diskToken = sha256(await readFile(absPath, 'utf-8'));
+
+    const { supabaseManager } = await import('../../src/storage/supabase.js');
+    const { error: staleHashError } = await supabaseManager.getClient()
+      .from('fqc_documents')
+      .update({ content_hash: '9'.repeat(64) })
+      .eq('id', String(created.fq_id))
+      .eq('instance_id', harness.instanceId);
+    expect(staleHashError).toBeNull();
+
+    const result = await harness.handlers.write_document({
+      mode: 'update',
+      identifier: 'phase162/db-lag.md',
+      content: 'updated despite DB lag',
+      expected_version: diskToken,
+    });
+
+    expect((result as { isError?: boolean }).isError).toBeFalsy();
+    const payload = parseToolJson<{ error?: string; version_token?: string }>(result);
+    expect(payload.error).toBeUndefined();
+    expect(payload.version_token).toMatch(/^[a-f0-9]{64}$/);
+    await expect(readFile(absPath, 'utf-8')).resolves.toContain('updated despite DB lag');
   });
 });

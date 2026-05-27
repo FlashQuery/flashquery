@@ -1,6 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdir, realpath, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import type * as VaultWriteModule from '../../src/storage/vault-write.js';
 import { runScanOnce } from '../../src/services/scanner.js';
 import { vaultManager } from '../../src/storage/vault.js';
 import { HAS_SUPABASE } from '../helpers/test-env.js';
@@ -8,6 +9,19 @@ import {
   createPhase155Harness,
   type Phase155Harness,
 } from './vault-write-coherency-phase155-helpers.js';
+
+const writeVaultFileCalls: string[] = [];
+
+vi.mock('../../src/storage/vault-write.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof VaultWriteModule>();
+  return {
+    ...actual,
+    writeVaultFile: vi.fn(async (...args: Parameters<typeof actual.writeVaultFile>) => {
+      writeVaultFileCalls.push(args[0]);
+      return actual.writeVaultFile(...args);
+    }),
+  };
+});
 
 describe.skipIf(!HAS_SUPABASE)('REQ-017 scanner zero-write stability integration', () => {
   let harness: Phase155Harness;
@@ -20,6 +34,10 @@ describe.skipIf(!HAS_SUPABASE)('REQ-017 scanner zero-write stability integration
 
   afterAll(async () => {
     await harness?.cleanup();
+  });
+
+  beforeEach(() => {
+    writeVaultFileCalls.length = 0;
   });
 
   async function writePlain(relativePath: string, raw: string): Promise<void> {
@@ -68,6 +86,7 @@ describe.skipIf(!HAS_SUPABASE)('REQ-017 scanner zero-write stability integration
       vaultManager.writeMarkdown = originalWriteMarkdown;
     }
     expect(firstRunWrites).toBeGreaterThan(0);
+    expect(writeVaultFileCalls.some((call) => call.endsWith('phase162/scanner-repair-once.md'))).toBe(true);
 
     let secondRunWrites = 0;
     vaultManager.writeMarkdown = (async (...args) => {

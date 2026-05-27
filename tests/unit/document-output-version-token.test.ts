@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { computeVersionToken } from '../../src/mcp/utils/document-version.js';
 import {
   buildDocumentWriteResult,
 } from '../../src/mcp/utils/document-write.js';
@@ -24,11 +25,16 @@ function expectCallerVersionToken(payload: Record<string, unknown>): void {
 
 describe('REQ-011 response version_token contract', () => {
   it('T-U-020 get_document metadata envelope exposes version_token as lowercase SHA-256, never content_hash', () => {
+    const rawBytes = '---\nfq_title: Token\nfq_updated: 2026-05-27T00:00:00.000Z\n---\nbody';
+    const rawBytesHash = computeVersionToken(rawBytes);
     const metadata = buildMetadataEnvelope(
       'Notes/Token.md',
       {
         relativePath: 'Notes/Token.md',
-        capturedFrontmatter: { fqcId: '11111111-1111-4111-8111-111111111111' },
+        capturedFrontmatter: {
+          fqcId: '11111111-1111-4111-8111-111111111111',
+          contentHash: rawBytesHash,
+        },
       },
       { fq_title: 'Token', fq_updated: '2026-05-27T00:00:00.000Z' },
       'body'
@@ -37,6 +43,21 @@ describe('REQ-011 response version_token contract', () => {
     const envelope = buildConsolidatedResponse(metadata, ['body'], { body: 'body' });
 
     expectCallerVersionToken(envelope);
+    expect(envelope.version_token).toBe(rawBytesHash);
+  });
+
+  it('T-U-020 rejects metadata snapshots that omit the raw-byte contentHash', () => {
+    expect(() =>
+      buildMetadataEnvelope(
+        'Notes/Token.md',
+        {
+          relativePath: 'Notes/Token.md',
+          capturedFrontmatter: { fqcId: '11111111-1111-4111-8111-111111111111' },
+        },
+        { fq_title: 'Token', fq_updated: '2026-05-27T00:00:00.000Z' },
+        'body'
+      )
+    ).toThrow('contentHash is required');
   });
 
   it('T-U-021 write_document success payload includes version_token and does not leak content_hash names', () => {

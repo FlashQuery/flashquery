@@ -16,10 +16,11 @@ type RegionPayload = {
   version_token?: string;
 };
 
-function expectVersionMismatchRegion(payload: RegionPayload): void {
+function expectVersionMismatchRegion(payload: RegionPayload): Record<string, unknown> {
   expect(payload).toMatchObject({ error: 'conflict', details: { reason: 'version_mismatch' } });
   expect(payload.version_token).toMatch(/^[a-f0-9]{64}$/);
   expect(payload.targeted_region).toEqual(expect.any(Object));
+  return payload.targeted_region ?? {};
 }
 
 describe.skipIf(!HAS_SUPABASE)('REQ-015 refused-write conflict envelope integration', () => {
@@ -48,42 +49,99 @@ describe.skipIf(!HAS_SUPABASE)('REQ-015 refused-write conflict envelope integrat
       content: '# Refused Regions\n\n## Target\nChanged target.\n\n## Other\nOther body.',
     });
 
-    const attempts = [
-      harness.handlers.replace_doc_section({
+    const replacePayload = parseToolJson<RegionPayload>(await harness.handlers.replace_doc_section({
         identifier: 'phase162/refused-regions.md',
         heading: 'Target',
         heading_match: 'exact',
         content: 'stale section',
         expected_version: '2'.repeat(64),
-      }),
-      harness.handlers.apply_tags({
+      }));
+    const replaceRegion = expectVersionMismatchRegion(replacePayload);
+    expect(replaceRegion).toMatchObject({
+      kind: 'section',
+      heading: 'Target',
+      body: expect.stringContaining('Changed target.'),
+    });
+
+    const tagsPayload = parseToolJson<RegionPayload>(await harness.handlers.apply_tags({
         targets: [{ entity_type: 'document', identifier: 'phase162/refused-regions.md' }],
         add_tags: ['stale'],
         expected_version: '2'.repeat(64),
-      }),
-      harness.handlers.write_document({
+      }));
+    const tagsRegion = expectVersionMismatchRegion(tagsPayload);
+    expect(tagsRegion).toMatchObject({
+      kind: 'frontmatter',
+      frontmatter: expect.objectContaining({ fq_title: 'Refused Regions' }),
+    });
+
+    const linkPayload = parseToolJson<RegionPayload>(await harness.handlers.insert_doc_link({
+      identifiers: 'phase162/refused-regions.md',
+      target_identifier: 'phase162/refused-regions.md',
+      property: 'related',
+      expected_version: '2'.repeat(64),
+    }));
+    const linkRegion = expectVersionMismatchRegion(linkPayload);
+    expect(linkRegion).toMatchObject({
+      kind: 'frontmatter',
+      frontmatter: expect.objectContaining({ fq_title: 'Refused Regions' }),
+    });
+
+    const writePayload = parseToolJson<RegionPayload>(await harness.handlers.write_document({
         mode: 'update',
         identifier: 'phase162/refused-regions.md',
         content: 'stale whole document',
         expected_version: '2'.repeat(64),
-      }),
-      harness.handlers.insert_in_doc({
+      }));
+    const writeRegion = expectVersionMismatchRegion(writePayload);
+    expect(writeRegion).toMatchObject({
+      type: 'document',
+      path: 'phase162/refused-regions.md',
+      content: expect.stringContaining('Changed target.'),
+    });
+
+    const anchorPayload = parseToolJson<RegionPayload>(await harness.handlers.insert_in_doc({
         identifier: 'phase162/refused-regions.md',
         position: 'after_heading',
         heading: 'Target',
         heading_match: 'exact',
         content: 'stale insert',
         expected_version: '2'.repeat(64),
-      }),
-      harness.handlers.archive_document({
+      }));
+    const anchorRegion = expectVersionMismatchRegion(anchorPayload);
+    expect(anchorRegion).toMatchObject({
+      kind: 'section',
+      heading: 'Target',
+      body: expect.stringContaining('Changed target.'),
+    });
+
+    const endPayload = parseToolJson<RegionPayload>(await harness.handlers.insert_in_doc({
+      identifier: 'phase162/refused-regions.md',
+      position: 'end',
+      content: 'stale append',
+      expected_version: '2'.repeat(64),
+    }));
+    const endRegion = expectVersionMismatchRegion(endPayload);
+    expect(endRegion).toMatchObject({ kind: 'document_end', position: 'end' });
+
+    const archivePayload = parseToolJson<RegionPayload>(await harness.handlers.archive_document({
         identifiers: 'phase162/refused-regions.md',
         expected_version: '2'.repeat(64),
-      }),
-    ];
+      }));
+    expect(expectVersionMismatchRegion(archivePayload)).toMatchObject({ type: 'document' });
 
-    for (const attempt of attempts) {
-      expectVersionMismatchRegion(parseToolJson<RegionPayload>(await attempt));
-    }
+    const copyPayload = parseToolJson<RegionPayload>(await harness.handlers.copy_document({
+      identifier: 'phase162/refused-regions.md',
+      destination: 'phase162/refused-regions-copy.md',
+      expected_version: '2'.repeat(64),
+    }));
+    expect(expectVersionMismatchRegion(copyPayload)).toMatchObject({ type: 'document' });
+
+    const movePayload = parseToolJson<RegionPayload>(await harness.handlers.move_document({
+      identifier: 'phase162/refused-regions.md',
+      destination: 'phase162/refused-regions-moved.md',
+      expected_version: '2'.repeat(64),
+    }));
+    expect(expectVersionMismatchRegion(movePayload)).toMatchObject({ type: 'document' });
   });
 
   it('T-I-030 removed target section returns targeted_region.not_found true', async () => {
