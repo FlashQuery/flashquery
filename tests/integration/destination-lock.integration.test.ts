@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { realpath } from 'node:fs/promises';
 import { __testing as documentLockTesting } from '../../src/services/document-lock.js';
-import { HAS_SUPABASE } from '../helpers/test-env.js';
+import { HAS_SESSION_CAPABLE_DATABASE_URL } from '../helpers/test-env.js';
 import {
   createPhase155Harness,
   parseToolJson,
@@ -37,14 +37,14 @@ function expectOneSuccessAndOneConflict(results: unknown[]): void {
   expect(conflicts).toHaveLength(1);
 }
 
-describe.skipIf(!HAS_SUPABASE)('REQ-008 destination-lock integration', () => {
+describe.skipIf(!HAS_SESSION_CAPABLE_DATABASE_URL)('REQ-008 destination-lock integration', () => {
   let harness: Phase155Harness;
 
   beforeAll(async () => {
     harness = await createPhase155Harness('fqc-destination-lock-');
     harness.vaultPath = await realpath(harness.vaultPath);
     harness.config.instance.vault.path = harness.vaultPath;
-    harness.config.locking = { enabled: false, lockTimeoutSeconds: 1 };
+    harness.config.locking = { enabled: true, lockTimeoutSeconds: 1 };
   }, 60_000);
 
   afterAll(async () => {
@@ -73,19 +73,25 @@ describe.skipIf(!HAS_SUPABASE)('REQ-008 destination-lock integration', () => {
 
     const source = `${harness.vaultPath}/phase161/sort-source.md`;
     const destination = `${harness.vaultPath}/phase161/sort-dest.md`;
-    const entries = await Promise.all([
-      documentLockTesting.deriveDocumentLockEntry(harness.config, destination),
+    const expectedEntries = await Promise.all([
       documentLockTesting.deriveDocumentLockEntry(harness.config, source),
+      documentLockTesting.deriveDocumentLockEntry(harness.config, destination),
     ]);
-    const sorted = [...entries].sort((a, b) => a.basicKey.localeCompare(b.basicKey));
+    const expectedOrder = expectedEntries
+      .sort((a, b) => a.basicKey.localeCompare(b.basicKey))
+      .map((entry) => documentLockTesting.advisoryKeyForEntry(entry));
 
-    expect(sorted.map((entry) => entry.basicKey)).toEqual(
-      entries.map((entry) => entry.basicKey).sort((a, b) => a.localeCompare(b))
-    );
-
-    const result = await harness.handlers.move_document({
-      identifier: 'phase161/sort-source.md',
-      destination: 'phase161/sort-dest.md',
+    const result = await documentLockTesting.withAdvisoryLockTrace(async (trace) => {
+      const moveResult = await harness.handlers.move_document({
+        identifier: 'phase161/sort-source.md',
+        destination: 'phase161/sort-dest.md',
+      });
+      expect(
+        trace
+          .filter((entry) => entry.label === 'document' && entry.mode === 'exclusive')
+          .map((entry) => entry.advisoryKey)
+      ).toEqual(expectedOrder);
+      return moveResult;
     });
 
     expect((result as ToolResult).isError).toBeFalsy();

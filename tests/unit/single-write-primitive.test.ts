@@ -30,6 +30,12 @@ const ALLOWED_DIRECT_WRITE_SITES = [
     reason: 'same-filesystem document move; EXDEV fallback must use writeVaultFile',
   },
   {
+    file: 'src/mcp/tools/documents/move.ts',
+    operation: 'rename',
+    snippet: 'await rename(destAbsPath, sourceAbsPath);',
+    reason: 'same-filesystem rollback after DB failure; EXDEV fallback must use writeVaultFile',
+  },
+  {
     file: 'src/mcp/tools/files.ts',
     operation: 'rename',
     snippet: 'await rename(absPath, dest.absPath);',

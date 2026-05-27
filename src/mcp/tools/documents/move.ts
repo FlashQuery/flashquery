@@ -124,7 +124,11 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
         if (!sourceFqcId) {
           const sourceContent = await readFile(sourceAbsPath, 'utf-8');
           const { data: sourceFm } = matter(sourceContent);
-          if (typeof sourceFm[FM.ID] !== 'string' || sourceFm[FM.ID].trim() === '') {
+          const sourceFrontmatterId: unknown = sourceFm[FM.ID];
+          if (
+            typeof sourceFrontmatterId !== 'string' ||
+            sourceFrontmatterId.trim() === ''
+          ) {
             return jsonExpectedError({
               error: 'invalid_input',
               message: 'move_document requires a tracked document with an fq_id.',
@@ -142,7 +146,9 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
         }
 
         // Step 3: Validate and normalize destination path
-        let destPath = destination.trim();
+        const destinationInput =
+          typeof destination === 'string' ? destination : String(destination);
+        let destPath = destinationInput.trim();
 
         // If no extension provided, use source extension
         if (!extname(destPath)) {
@@ -195,19 +201,16 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
               // Step 6: Create intermediate directories
               const destDir = dirname(destAbsPath);
               await mkdir(destDir, { recursive: true });
-              let fileMoved = false;
 
               // Step 7: Perform atomic move
               try {
                 await rename(sourceAbsPath, destAbsPath);
-                fileMoved = true;
               } catch (err) {
                 if (isCrossDeviceRenameError(err)) {
                   // Fallback: durably write dest, then delete source.
                   const content = await readFile(sourceAbsPath, 'utf-8');
                   await writeVaultFile(destAbsPath, content, { lockConfig: config });
                   await unlink(sourceAbsPath);
-                  fileMoved = true;
                   logger.info(
                     `move_document: cross-device fallback used for ${identifier} → ${destPath}`
                   );
@@ -268,14 +271,12 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
                     );
                   }
                 } catch (err) {
-                  if (fileMoved) {
-                    try {
-                      await rollbackMovedFile(config, sourceAbsPath, destAbsPath);
-                    } catch (rollbackErr) {
-                      logger.error(
-                        `move_document rollback failed after DB update error for ${destPath}: ${rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)}`
-                      );
-                    }
+                  try {
+                    await rollbackMovedFile(config, sourceAbsPath, destAbsPath);
+                  } catch (rollbackErr) {
+                    logger.error(
+                      `move_document rollback failed after DB update error for ${destPath}: ${rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)}`
+                    );
                   }
                   throw err;
                 }

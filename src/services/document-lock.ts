@@ -34,6 +34,13 @@ interface DocumentLockEntry {
   stripeIndex: number;
 }
 
+interface AdvisoryLockTraceEntry {
+  advisoryKey: string;
+  resource: string;
+  mode: 'exclusive' | 'shared';
+  label: 'document' | 'directory';
+}
+
 interface DocumentLockKeyConfig {
   instance: {
     vault?: {
@@ -56,6 +63,7 @@ interface BurstState {
 }
 
 const activeBursts = new Map<string, BurstState>();
+const advisoryLockTrace = new AsyncLocalStorage<AdvisoryLockTraceEntry[]>();
 
 function hashString(value: string): number {
   let hash = 2166136261;
@@ -311,6 +319,12 @@ async function runWithAdvisoryLocks<T>(
           const result = await client.query<{ acquired: boolean }>(acquireSql, [advisoryKey]);
           if (result.rows[0]?.acquired === true) {
             acquiredKeys.push(advisoryKey);
+            advisoryLockTrace.getStore()?.push({
+              advisoryKey,
+              resource: entries[index]?.resource ?? entries[0]?.resource ?? `${label} lock`,
+              mode,
+              label,
+            });
             break;
           }
           await sleep(Math.min(TIER2_RETRY_DELAY_MS, remainingMs(deadline)));
@@ -507,11 +521,18 @@ export async function withDocumentLocks<T>(
 
 export const __testing = {
   deriveDocumentLockEntry: toEntry,
+  advisoryKeyForEntry: toAdvisoryKey,
   deriveAdvisoryKey: async (
     config: DocumentLockKeyConfig,
     resourcePath: string,
     kind: 'file' | 'dir' = 'file'
   ) => toAdvisoryKey(await toEntry(config, resourcePath, kind)),
+  withAdvisoryLockTrace: async <T>(
+    fn: (trace: AdvisoryLockTraceEntry[]) => Promise<T>
+  ): Promise<T> => {
+    const trace: AdvisoryLockTraceEntry[] = [];
+    return advisoryLockTrace.run(trace, () => fn(trace));
+  },
   clearCaseSensitivityCache: () => vaultCaseSensitivity.clear(),
   setCaseInsensitiveForVault: async (vaultRoot: string, isInsensitive: boolean) => {
     vaultCaseSensitivity.set(await safeRealpath(vaultRoot), Promise.resolve(isInsensitive));

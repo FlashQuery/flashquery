@@ -321,7 +321,7 @@ Content here`
     expect(result?.isError).toBe(false);
     expect(JSON.parse(result?.content[0].text as string)).toMatchObject({
       error: 'invalid_input',
-      message: expect.stringContaining('escapes vault root'),
+      message: expect.stringContaining('within the vault root'),
       details: { reason: 'path_traversal' },
     });
   });

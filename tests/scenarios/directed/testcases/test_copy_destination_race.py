@@ -58,7 +58,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         vault_path=vault_path,
         managed=True,
         port_range=port_range,
-        enable_locking=False,
+        enable_locking=True,
     ) as ctx:
         create_result = ctx.client.call_tool(
             "write_document",

@@ -135,6 +135,24 @@ describe('REQ-009 withDocumentLock facade', () => {
     );
   });
 
+  it('T-U-017 records advisory acquisition trace in runtime order', async () => {
+    const config = makeConfig();
+    const unsortedPaths = ['/tmp/vault/b.md', '/tmp/vault/a.md'];
+    const expectedEntries = await Promise.all(
+      unsortedPaths.map((filePath) => __testing.deriveDocumentLockEntry(config, filePath))
+    );
+    const expectedKeys = expectedEntries
+      .sort((a, b) => a.basicKey.localeCompare(b.basicKey))
+      .map((entry) => __testing.advisoryKeyForEntry(entry));
+
+    await __testing.withAdvisoryLockTrace(async (trace) => {
+      await withDocumentLocks(config, unsortedPaths, async () => undefined);
+      expect(trace.map((entry) => entry.advisoryKey)).toEqual(expectedKeys);
+      expect(trace.map((entry) => entry.mode)).toEqual(['exclusive', 'exclusive']);
+      expect(trace.map((entry) => entry.label)).toEqual(['document', 'document']);
+    });
+  });
+
   it('T-U-018 releases Tier 1 after advisory unlock failure so a later caller can enter', async () => {
     clients.length = 0;
     __setPgPoolFactoryForTesting(() => ({

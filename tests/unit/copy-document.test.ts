@@ -110,7 +110,9 @@ describe('copy_document JSON output contract', () => {
     const copySection = readFileSync('src/mcp/tools/documents/copy.ts', 'utf8');
 
     expect(copySection).toContain('documentIdentification');
-    expect(copySection).toContain('validateVaultPath(config.instance.vault.path, requestedCopyPath)');
+    expect(copySection).toMatch(
+      /validateVaultPath\(\s*config\.instance\.vault\.path,\s*requestedCopyPath\s*\)/
+    );
     expect(copySection).toContain('Supabase copy insert failed');
     expect(copySection).not.toContain("formatKeyValueEntry('Title', copyTitle)");
     expect(copySection).toContain('path_exists');
