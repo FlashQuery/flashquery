@@ -194,6 +194,8 @@ function sectionTargetedRegion(
     kind: 'section',
     heading: resolved.heading.text,
     level: resolved.heading.level,
+    line_number: resolved.heading.line,
+    occurrence,
     body: boundaries.content,
     extracted_sections: [{ heading: resolved.heading.text, chars: boundaries.content.length }],
   };
@@ -204,6 +206,7 @@ function insertTargetedRegion(rawContent: string, input: HeadingMatchInput): Rec
   if (!input.heading) {
     return {
       kind: 'document_end',
+      position: 'end',
       body: '',
     };
   }
