@@ -83,11 +83,13 @@ export function validateWriteDocumentInput(input: WriteDocumentInput): ErrorEnve
       input.content === undefined &&
       input.title === undefined &&
       input.frontmatter === undefined &&
-      input.tags === undefined
+      input.tags === undefined &&
+      input.expected_version === undefined &&
+      input.if_match === undefined
     ) {
       return {
         error: 'invalid_input',
-        message: 'mode "update" requires at least one of content, title, frontmatter, or tags',
+        message: 'mode "update" requires at least one of content, title, frontmatter, tags, expected_version, or if_match',
         details: { reason: 'no_mutable_fields' },
       };
     }

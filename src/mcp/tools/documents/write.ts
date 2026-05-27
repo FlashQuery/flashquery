@@ -315,11 +315,40 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
                   const parsed = matter(rawContent);
                   const existingData = parsed.data;
                   const existingBody = parsed.content;
+                  const hasMutableFields =
+                    content !== undefined ||
+                    title !== undefined ||
+                    frontmatter !== undefined ||
+                    tags !== undefined;
                   const effectiveTitle =
                     title ??
                     (typeof existingData[FM.TITLE] === 'string'
                       ? (existingData[FM.TITLE] as string)
                       : resolved.relativePath);
+                  if (!hasMutableFields) {
+                    const fqcId =
+                      typeof existingData[FM.ID] === 'string'
+                        ? (existingData[FM.ID] as string)
+                        : resolved.fqcId ?? '';
+                    return {
+                      retry: false,
+                      result: jsonToolResult(
+                        buildDocumentWriteResult({
+                          mode: 'update',
+                          identifier: identifier as string,
+                          title: effectiveTitle,
+                          path: resolved.relativePath,
+                          fq_id: fqcId,
+                          modified:
+                            typeof existingData[FM.UPDATED] === 'string'
+                              ? (existingData[FM.UPDATED] as string)
+                              : new Date().toISOString(),
+                          chars: existingBody.length,
+                          version_token: currentVersionToken,
+                        })
+                      ),
+                    };
+                  }
                   const validation = validateAllTags(
                     tags ??
                       (Array.isArray(existingData[FM.TAGS])

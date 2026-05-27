@@ -111,6 +111,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
                 ? archivedAtValue
                 : null;
               const archivedAt = existingArchivedAt ?? new Date().toISOString();
+              let archivedContentHash: string | null = null;
 
               // Step 2: Call targetedScan to update frontmatter with archived status
               // Compute hash of the file with archived status
@@ -146,12 +147,15 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
                   { gitAction: 'update', gitTitle: typeof archivedTitle === 'string' ? archivedTitle : relativePath }
                 );
                 archivedFileWritten = true;
+                archivedContentHash = computeHash(
+                  await readFile(join(config.instance.vault.path, relativePath), 'utf-8')
+                );
 
                 // Step 3: Update Supabase fqc_documents
                 if (fqcId) {
                   const { data, error } = await supabase
                     .from('fqc_documents')
-                    .update({ status: 'archived', archived_at: archivedAt, updated_at: updatedAt })
+                    .update({ status: 'archived', archived_at: archivedAt, content_hash: archivedContentHash, updated_at: updatedAt })
                     .eq('id', fqcId)
                     .eq('instance_id', config.instance.id)
                     .select('id')
@@ -166,7 +170,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
                   // Fallback: update by path if no fqcId available
                   const { data, error } = await supabase
                     .from('fqc_documents')
-                    .update({ status: 'archived', archived_at: archivedAt, updated_at: updatedAt })
+                    .update({ status: 'archived', archived_at: archivedAt, content_hash: archivedContentHash, updated_at: updatedAt })
                     .eq('path', relativePath)
                     .eq('instance_id', config.instance.id)
                     .select('id')
@@ -202,7 +206,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
                 modified: archivedStats.mtime.toISOString(),
                 chars: parsed.content.length,
                 archived_at: archivedAt,
-                version_token: computeHash(
+                version_token: archivedContentHash ?? computeHash(
                   await readFile(join(config.instance.vault.path, relativePath), 'utf-8')
                 ),
               }));

@@ -138,6 +138,6 @@ describe.skipIf(!HAS_SUPABASE)('REQ-015 refused-write conflict envelope integrat
     }));
 
     expectVersionMismatchRegion(conflict);
-    expect(JSON.stringify(conflict.targeted_region)).toContain(getRegion.body);
+    expect(conflict.targeted_region?.body).toBe(getRegion.body);
   });
 });
