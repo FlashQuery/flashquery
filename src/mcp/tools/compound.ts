@@ -29,6 +29,9 @@ import {
   jsonExpectedError,
   jsonRuntimeError,
   jsonToolResult,
+  batchConflicted,
+  batchFailed,
+  batchSucceeded,
   documentIdentification,
   type ErrorEnvelope,
   memoryIdentification,
@@ -115,7 +118,7 @@ function pluginCategoryEnabled(config: FlashQueryConfig): boolean {
   );
 }
 
-function documentResolutionError(err: unknown, identifier: string): Record<string, unknown> {
+function documentResolutionError(err: unknown, identifier: string): ErrorEnvelope {
   if (err instanceof AmbiguousDocumentIdentifierError) {
     return {
       error: 'ambiguous_identifier',
@@ -292,6 +295,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const supabase = supabaseManager.getClient();
         const targetProperty = property ?? 'links';
         const sourceIdentifiers = normalizeBatchIdentifiers(identifiers);
+        const isBatchInput = Array.isArray(identifiers);
 
         let targetResolved: Awaited<ReturnType<typeof resolveDocumentIdentifier>>;
         try {
@@ -366,7 +370,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             }
 
             logger.info(`insert_doc_link: ${alreadyLinked ? 'unchanged' : 'added'} ${wikilink} in ${sourceResolved.relativePath}`);
-            results.push({
+            const data = {
               ...documentIdentification({
                 identifier: sourceIdentifier,
                 title: typeof parsed.data[FM.TITLE] === 'string' ? parsed.data[FM.TITLE] as string : sourceResolved.relativePath,
@@ -385,24 +389,30 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 path: targetResolved.relativePath,
                 title: targetTitle,
               },
-            });
+            };
+            results.push(isBatchInput ? batchSucceeded(sourceIdentifier, data) : data);
             return null;
               })
             );
             if (conflict) {
-              if (sourceIdentifiers.length === 1) return jsonExpectedError(conflict);
-              results.push(conflict);
+              if (!isBatchInput) return jsonExpectedError(conflict);
+              results.push(batchConflicted(sourceIdentifier, conflict));
             }
           } catch (sourceErr) {
             if (sourceErr instanceof LockTimeoutError) {
-              results.push(lockTimeoutError(sourceErr, sourceIdentifier));
+              results.push(
+                isBatchInput
+                  ? batchFailed(sourceIdentifier, lockTimeoutError(sourceErr, sourceIdentifier))
+                  : lockTimeoutError(sourceErr, sourceIdentifier)
+              );
               continue;
             }
-            results.push(documentResolutionError(sourceErr, sourceIdentifier));
+            const error = documentResolutionError(sourceErr, sourceIdentifier);
+            results.push(isBatchInput ? batchFailed(sourceIdentifier, error) : error);
           }
         }
 
-        return jsonToolResult({
+        return jsonToolResult(isBatchInput ? results : {
           results,
           removal_gate: 'call_macro parity',
         });
@@ -510,6 +520,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const supabase = supabaseManager.getClient();
         const canUseMemoryTargets = memoryCategoryEnabled(config);
         const results: Array<Record<string, unknown>> = [];
+        const shouldWrapDocumentResults =
+          Array.isArray(identifiers) || normalizedTargets.filter((target) => target.entity_type === 'document').length > 1;
 
         for (const target of normalizedTargets) {
           if (target.entity_type === 'document') {
@@ -555,12 +567,13 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                     ? [`Document has conflicting statuses: ${docTagValidation.conflicts.join(', ')}. Choose one to keep.`]
                     : []),
                 ];
-                results.push({
+                const envelope: ErrorEnvelope = {
                   error: 'invalid_input',
                   message: `Tag validation failed: ${messages.join('; ')}`,
                   identifier: id,
                   details: { field: 'tags' },
-                });
+                };
+                results.push(shouldWrapDocumentResults ? batchFailed(id, envelope) : envelope);
                 return;
               }
 
@@ -608,7 +621,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 }
               }
 
-              results.push({
+              const data = {
                 ...documentIdentification({
                   identifier: id,
                   title: typeof parsed.data[FM.TITLE] === 'string' ? parsed.data[FM.TITLE] as string : relativePath,
@@ -620,25 +633,28 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 }),
                 tags: dedupTagsForSync,
                 entity_type: 'document',
-              });
+              };
+              results.push(shouldWrapDocumentResults ? batchSucceeded(id, data) : data);
               return null;
                 })
               );
               if (conflict) {
-                if (normalizedTargets.length === 1) return jsonExpectedError(conflict);
-                results.push(conflict);
+                if (!shouldWrapDocumentResults) return jsonExpectedError(conflict);
+                results.push(batchConflicted(id, conflict));
               }
             } catch (itemErr) {
               if (itemErr instanceof LockTimeoutError) {
-                results.push(lockTimeoutError(itemErr, id));
+                const envelope = lockTimeoutError(itemErr, id);
+                results.push(shouldWrapDocumentResults ? batchFailed(id, envelope) : envelope);
                 continue;
               }
               const msg = itemErr instanceof Error ? itemErr.message : String(itemErr);
-              results.push({
+              const envelope: ErrorEnvelope = {
                 error: msg.toLowerCase().includes('not found') ? 'not_found' : 'runtime_error',
                 message: msg,
                 identifier: id,
-              });
+              };
+              results.push(shouldWrapDocumentResults ? batchFailed(id, envelope) : envelope);
             }
             continue;
           }
