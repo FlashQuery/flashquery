@@ -45,7 +45,7 @@
 - [x] **Phase 159: Lock Timeout + Canonical Key Derivation** - Lock acquisition is bounded and all file/directory keys resolve to canonical path-based identities. (completed 2026-05-27)
 - [x] **Phase 160: Folder Locks + Manage Directory Migration** - Folder operations coordinate safely with descendant file writes using shared/exclusive advisory locks. (completed 2026-05-27)
 - [x] **Phase 161: Destination Locks + EXDEV Fallback** - Create, copy, and move operations lock destination paths and move safely across devices. (completed 2026-05-27)
-- [ ] **Phase 162: Version-fingerprint Check** - Reads and writes expose version tokens and callers can opt into conflict detection.
+- [x] **Phase 162: Version-fingerprint Check** - Reads and writes expose version tokens and callers can opt into conflict detection. (completed 2026-05-27)
 - [ ] **Phase 163: Multi-file Batch Contract** - Batch tools accept mixed identifier/token inputs and return ordered per-item results.
 
 ## Phase Details
@@ -280,12 +280,12 @@ Plans:
 **Plans**: 6 plans
 
 Plans:
-- [ ] 162-01-PLAN.md — Unit contract for response tokens, schemas, conflict envelopes, whole-file hashes, and read-no-lock behavior.
-- [ ] 162-02-PLAN.md — Integration and directed scenario contracts for Test Plan §4.2.1 through §4.2.7.
-- [ ] 162-03-PLAN.md — Read-side `version_token` plumbing and token-equals-disk repair invariant.
-- [ ] 162-04-PLAN.md — Top-level document tool `expected_version` / `if_match` checks and success tokens.
-- [ ] 162-05-PLAN.md — Compound document tool version checks and targeted conflict regions.
-- [ ] 162-06-PLAN.md — Scanner zero-write stability, directed scenario closure, and final validation evidence.
+- [x] 162-01-PLAN.md — Unit contract for response tokens, schemas, conflict envelopes, whole-file hashes, and read-no-lock behavior.
+- [x] 162-02-PLAN.md — Integration and directed scenario contracts for Test Plan §4.2.1 through §4.2.7.
+- [x] 162-03-PLAN.md — Read-side `version_token` plumbing and token-equals-disk repair invariant.
+- [x] 162-04-PLAN.md — Top-level document tool `expected_version` / `if_match` checks and success tokens.
+- [x] 162-05-PLAN.md — Compound document tool version checks and targeted conflict regions.
+- [x] 162-06-PLAN.md — Scanner zero-write stability, directed scenario closure, and final validation evidence.
 
 ### Phase 163: Multi-file Batch Contract
 
@@ -321,7 +321,7 @@ Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 →
 | 159. Lock Timeout + Canonical Key Derivation | 5/5 | Complete    | 2026-05-27 |
 | 160. Folder Locks + Manage Directory Migration | 4/4 | Complete   | 2026-05-27 |
 | 161. Destination Locks + EXDEV Fallback | 4/4 | Complete    | 2026-05-27 |
-| 162. Version-fingerprint Check | 0/6 | Not started | - |
+| 162. Version-fingerprint Check | 6/6 | Complete    | 2026-05-27 |
 | 163. Multi-file Batch Contract | 0/TBD | Not started | - |
 
 ## Archived Milestone Details
