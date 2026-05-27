@@ -99,6 +99,9 @@ vi.mock('../../src/services/plugin-coordination-lock.js', () => ({
 
 vi.mock('../../src/services/document-lock.js', () => ({
   LockTimeoutError: class LockTimeoutError extends Error {},
+  withAncestorDirectoryLocksShared: vi.fn(
+    async (_config, _path, fn: () => Promise<unknown>) => fn()
+  ),
   withDocumentLock: vi.fn(async (_config, _path, fn: () => Promise<unknown>) => fn()),
   withDocumentLocks: vi.fn(async (_config, _paths, fn: () => Promise<unknown>) => fn()),
 }));

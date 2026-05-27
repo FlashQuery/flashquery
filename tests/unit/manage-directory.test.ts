@@ -12,6 +12,7 @@ vi.mock('node:fs/promises', () => ({
 
 const lockMock = vi.hoisted(() => ({
   withDirectoryLockExclusive: vi.fn(),
+  withDirectoryLocksExclusive: vi.fn(),
 }));
 
 vi.mock('../../src/services/document-lock.js', () => {
@@ -28,6 +29,7 @@ vi.mock('../../src/services/document-lock.js', () => {
   return {
     LockTimeoutError,
     withDirectoryLockExclusive: lockMock.withDirectoryLockExclusive,
+    withDirectoryLocksExclusive: lockMock.withDirectoryLocksExclusive,
   };
 });
 
@@ -168,6 +170,7 @@ describe('manage_directory', () => {
     vi.mocked(stat).mockRejectedValue(makeErrnoError('ENOENT'));
     vi.mocked(readdir).mockResolvedValue([] as unknown as Awaited<ReturnType<typeof readdir>>);
     lockMock.withDirectoryLockExclusive.mockImplementation(async (_config, _dirPath, fn) => fn());
+    lockMock.withDirectoryLocksExclusive.mockImplementation(async (_config, _dirPaths, fn) => fn());
   });
 
   it('registers manage_directory with action and paths schema', async () => {
@@ -329,12 +332,34 @@ describe('manage_directory', () => {
       action: 'rename',
       status: 'renamed',
     });
-    expect(lockMock.withDirectoryLockExclusive).toHaveBeenCalledWith(
+    expect(lockMock.withDirectoryLocksExclusive).toHaveBeenCalledWith(
       expect.anything(),
-      '/vault/Inbox',
+      ['/vault/Inbox', '/vault/Archive/Inbox'],
       expect.any(Function)
     );
     expect(vi.mocked(rename)).toHaveBeenCalledWith('/vault/Inbox', '/vault/Archive/Inbox');
+  });
+
+  it('serializes rename and move on the destination directory lock before checking destination existence', async () => {
+    vi.mocked(stat)
+      .mockResolvedValueOnce(makeStatResult(true))
+      .mockRejectedValueOnce(makeErrnoError('ENOENT'))
+      .mockResolvedValueOnce(makeStatResult(true));
+
+    await callManageDirectory({
+      action: 'move',
+      paths: ['Drafts'],
+      destinations: ['Archive/Inbox'],
+    });
+
+    const lockCallOrder = lockMock.withDirectoryLocksExclusive.mock.invocationCallOrder[0];
+    const statCallOrder = vi.mocked(stat).mock.invocationCallOrder[0];
+    expect(lockMock.withDirectoryLocksExclusive).toHaveBeenCalledWith(
+      expect.anything(),
+      ['/vault/Drafts', '/vault/Archive/Inbox'],
+      expect.any(Function)
+    );
+    expect(lockCallOrder).toBeLessThan(statCallOrder);
   });
 
   it('maps directory lock timeout to an ordered lock_timeout conflict result', async () => {

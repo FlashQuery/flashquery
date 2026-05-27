@@ -4,12 +4,16 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/types.js';
-import { registerFileTools } from '../../src/mcp/tools/files.js';
+import {
+  registerFileTools,
+  __setManageDirectoryCreateHookForTesting,
+} from '../../src/mcp/tools/files.js';
 import { closePgPools } from '../../src/utils/pg-client.js';
+import { withPgClient } from '../../src/utils/pg-client.js';
 import {
   withAncestorDirectoryLocksShared,
-  withDirectoryLockExclusive,
 } from '../../src/services/document-lock.js';
+import { advisoryKeyForDirectory, queryAdvisoryLocks } from '../helpers/pg-locks.js';
 import {
   HAS_SESSION_CAPABLE_DATABASE_URL,
   TEST_DATABASE_URL,
@@ -65,6 +69,7 @@ function parsePayload(result: ToolResult): { results: Array<Record<string, unkno
 describe.skipIf(!HAS_SESSION_CAPABLE_DATABASE_URL)('REQ-007 folder-lock integration', () => {
   afterAll(async () => {
     await closePgPools();
+    __setManageDirectoryCreateHookForTesting(null);
   });
 
   it('T-I-012 folder-lock shared sibling writes can overlap under the same ancestor directory', async () => {
@@ -130,7 +135,7 @@ describe.skipIf(!HAS_SESSION_CAPABLE_DATABASE_URL)('REQ-007 folder-lock integrat
     }
   }, 20_000);
 
-  it('T-I-013 folder-lock manage_directory create remains exclusive-lock compatible', async () => {
+  it('T-I-013 folder-lock manage_directory create has no exclusive advisory lock in pg_locks', async () => {
     const vault = await mkdtemp(join(tmpdir(), 'fq-folder-lock-'));
     const config = makeConfig(vault, 0.05);
     const manageDirectory = registerManageDirectory(config);
@@ -138,22 +143,28 @@ describe.skipIf(!HAS_SESSION_CAPABLE_DATABASE_URL)('REQ-007 folder-lock integrat
     const releaseHolder = createGate();
 
     try {
-      const holder = withDirectoryLockExclusive(config, join(vault, 'Created'), async () => {
+      __setManageDirectoryCreateHookForTesting(async () => {
         holderEntered.release();
         await releaseHolder.promise;
       });
+      const operation = manageDirectory({ action: 'create', paths: ['Created'] });
       await holderEntered.promise;
 
-      const result = await manageDirectory({ action: 'create', paths: ['Created'] });
+      const createdKey = await advisoryKeyForDirectory(config, join(vault, 'Created'));
+      const observed = await withPgClient(TEST_DATABASE_URL, (client) =>
+        queryAdvisoryLocks(client, { mode: 'exclusive', key: createdKey })
+      );
+      expect(observed).toHaveLength(0);
+
+      releaseHolder.release();
+      const result = await operation;
       expect(result.isError).toBe(false);
       expect(parsePayload(result).results[0]).toMatchObject({
         action: 'create',
         status: 'created',
       });
-
-      releaseHolder.release();
-      await holder;
     } finally {
+      __setManageDirectoryCreateHookForTesting(null);
       releaseHolder.release();
       await rm(vault, { recursive: true, force: true });
     }

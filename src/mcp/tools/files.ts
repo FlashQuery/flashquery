@@ -37,9 +37,36 @@ import {
   jsonRuntimeError,
   jsonToolResult,
 } from '../utils/response-formats.js';
-import { LockTimeoutError, withDirectoryLockExclusive } from '../../services/document-lock.js';
+import {
+  LockTimeoutError,
+  withDirectoryLockExclusive,
+  withDirectoryLocksExclusive,
+} from '../../services/document-lock.js';
 
 const DEFAULT_MARKDOWN_EXTENSIONS: string[] = ['.md'];
+
+let manageDirectoryLockHookForTesting:
+  | ((context: {
+      action: 'remove' | 'rename' | 'move';
+      sourcePath: string;
+      destinationPath?: string;
+    }) => Promise<void> | void)
+  | null = null;
+let manageDirectoryCreateHookForTesting:
+  | ((context: { action: 'create'; path: string }) => Promise<void> | void)
+  | null = null;
+
+export function __setManageDirectoryLockHookForTesting(
+  hook: typeof manageDirectoryLockHookForTesting
+): void {
+  manageDirectoryLockHookForTesting = hook;
+}
+
+export function __setManageDirectoryCreateHookForTesting(
+  hook: typeof manageDirectoryCreateHookForTesting
+): void {
+  manageDirectoryCreateHookForTesting = hook;
+}
 
 /**
  * Register filesystem primitive tools on the MCP server.
@@ -247,6 +274,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
             }
 
             try {
+              await manageDirectoryCreateHookForTesting?.({ action, path: absPath });
               await mkdir(absPath, { recursive: true });
               results.push(directoryResult({
                 path: safePath,
@@ -279,7 +307,25 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
             continue;
           }
 
-          await withDirectoryLockExclusive(config, absPath, async () => {
+          const lockedPaths =
+            action === 'rename' || action === 'move'
+              ? [absPath, (destinationValidation as NonNullable<typeof destinationValidation>).absPath]
+              : [absPath];
+          const runLocked = <T>(fn: () => Promise<T>) =>
+            lockedPaths.length === 1
+              ? withDirectoryLockExclusive(config, lockedPaths[0], fn)
+              : withDirectoryLocksExclusive(config, lockedPaths, fn);
+
+          await runLocked(async () => {
+            await manageDirectoryLockHookForTesting?.({
+              action,
+              sourcePath: absPath,
+              destinationPath:
+                action === 'rename' || action === 'move'
+                  ? (destinationValidation as NonNullable<typeof destinationValidation>).absPath
+                  : undefined,
+            });
+
             let dirStat: Awaited<ReturnType<typeof stat>>;
             try {
               dirStat = await stat(absPath);

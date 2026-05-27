@@ -3,8 +3,11 @@ import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { FlashQueryConfig } from '../../src/config/types.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerFileTools, __setManageDirectoryLockHookForTesting } from '../../src/mcp/tools/files.js';
 import { closePgPools } from '../../src/utils/pg-client.js';
-import { withDirectoryLockExclusive } from '../../src/services/document-lock.js';
+import { withPgClient } from '../../src/utils/pg-client.js';
+import { advisoryKeyForDirectory, queryAdvisoryLocks } from '../helpers/pg-locks.js';
 import {
   HAS_SESSION_CAPABLE_DATABASE_URL,
   TEST_DATABASE_URL,
@@ -37,50 +40,115 @@ function createGate(): { promise: Promise<void>; release: () => void } {
   return { promise, release };
 }
 
+type ToolResult = {
+  content: Array<{ type: string; text: string }>;
+  isError?: boolean;
+};
+
+function registerManageDirectory(config: FlashQueryConfig) {
+  const handlers: Record<string, (params: Record<string, unknown>) => Promise<ToolResult>> = {};
+  const server = {
+    registerTool: (name: string, _cfg: unknown, handler: (params: Record<string, unknown>) => Promise<ToolResult>) => {
+      handlers[name] = handler;
+    },
+  } as unknown as McpServer;
+  registerFileTools(server, config);
+  return handlers.manage_directory;
+}
+
+function parsePayload(result: ToolResult): { results: Array<Record<string, unknown>> } {
+  return JSON.parse(result.content[0]?.text ?? '{"results":[]}') as { results: Array<Record<string, unknown>> };
+}
+
 describe.skipIf(!HAS_SESSION_CAPABLE_DATABASE_URL)('REQ-024 manage-directory-advisory integration', () => {
   afterAll(async () => {
     await closePgPools();
+    __setManageDirectoryLockHookForTesting(null);
   });
 
-  it('T-I-046 manage-directory-advisory exclusive directory locks block a second structural holder', async () => {
+  it('T-I-046 manage_directory holds an exclusive advisory lock visible in pg_locks', async () => {
     const vault = await mkdtemp(join(tmpdir(), 'fq-manage-directory-advisory-'));
-    const config = makeConfig(vault, 0.05);
+    const config = makeConfig(vault);
+    const manageDirectory = registerManageDirectory(config);
     const holderEntered = createGate();
     const releaseHolder = createGate();
 
     try {
       await mkdir(join(vault, 'Folder'), { recursive: true });
-      const holder = withDirectoryLockExclusive(config, join(vault, 'Folder'), async () => {
+      __setManageDirectoryLockHookForTesting(async () => {
         holderEntered.release();
         await releaseHolder.promise;
       });
+
+      const operation = manageDirectory({ action: 'remove', paths: ['Folder'] });
       await holderEntered.promise;
 
-      await expect(
-        withDirectoryLockExclusive(config, join(vault, 'Folder'), async () => 'second')
-      ).rejects.toMatchObject({ reason: 'lock_timeout' });
+      const expectedKey = await advisoryKeyForDirectory(config, join(vault, 'Folder'));
+      const observed = await withPgClient(TEST_DATABASE_URL, (client) =>
+        queryAdvisoryLocks(client, { mode: 'exclusive', key: expectedKey })
+      );
+      expect(observed).toHaveLength(1);
 
       releaseHolder.release();
-      await holder;
+      const result = await operation;
+      expect(parsePayload(result).results[0]).toMatchObject({ status: 'removed' });
     } finally {
+      __setManageDirectoryLockHookForTesting(null);
       releaseHolder.release();
       await rm(vault, { recursive: true, force: true });
     }
   }, 20_000);
 
-  it('T-I-047 manage-directory-advisory different folder locks can proceed independently', async () => {
+  it('T-I-047 manage_directory same-folder contention returns one success and one lock_timeout conflict', async () => {
+    const vault = await mkdtemp(join(tmpdir(), 'fq-manage-directory-advisory-'));
+    const config = makeConfig(vault, 0.05);
+    const manageDirectory = registerManageDirectory(config);
+    const holderEntered = createGate();
+    const releaseHolder = createGate();
+
+    try {
+      await mkdir(join(vault, 'Folder'), { recursive: true });
+      __setManageDirectoryLockHookForTesting(async () => {
+        holderEntered.release();
+        await releaseHolder.promise;
+      });
+
+      const first = manageDirectory({ action: 'remove', paths: ['Folder'] });
+      await holderEntered.promise;
+      const second = await manageDirectory({ action: 'remove', paths: ['Folder'] });
+
+      releaseHolder.release();
+      const firstResult = await first;
+      const results = [
+        parsePayload(firstResult).results[0],
+        parsePayload(second).results[0],
+      ];
+
+      expect(results.filter((entry) => entry.status === 'removed')).toHaveLength(1);
+      expect(
+        results.filter((entry) => entry.error === 'conflict' && (entry.details as { reason?: string })?.reason === 'lock_timeout')
+      ).toHaveLength(1);
+    } finally {
+      __setManageDirectoryLockHookForTesting(null);
+      releaseHolder.release();
+      await rm(vault, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it('manage-directory-advisory disjoint folder locks can proceed independently', async () => {
     const vault = await mkdtemp(join(tmpdir(), 'fq-manage-directory-advisory-'));
     const config = makeConfig(vault);
-    const entered: string[] = [];
+    const manageDirectory = registerManageDirectory(config);
 
     try {
       await mkdir(join(vault, 'A'), { recursive: true });
       await mkdir(join(vault, 'B'), { recursive: true });
-      await Promise.all([
-        withDirectoryLockExclusive(config, join(vault, 'A'), async () => entered.push('A')),
-        withDirectoryLockExclusive(config, join(vault, 'B'), async () => entered.push('B')),
+      const [first, second] = await Promise.all([
+        manageDirectory({ action: 'remove', paths: ['A'] }),
+        manageDirectory({ action: 'remove', paths: ['B'] }),
       ]);
-      expect(entered.sort()).toEqual(['A', 'B']);
+      expect(parsePayload(first).results[0]).toMatchObject({ status: 'removed' });
+      expect(parsePayload(second).results[0]).toMatchObject({ status: 'removed' });
     } finally {
       await rm(vault, { recursive: true, force: true });
     }

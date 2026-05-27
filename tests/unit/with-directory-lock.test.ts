@@ -80,7 +80,7 @@ describe('REQ-007 with-directory-lock shared ancestor facade', () => {
     __setPgPoolFactoryForTesting(null);
   });
 
-  it('T-I-011 T-I-012 derives shared dir locks for file parent ancestors through vault root', async () => {
+  it('T-U-039 derives shared dir locks for file parent ancestors through vault root', async () => {
     const events: string[] = [];
 
     await withAncestorDirectoryLocksShared(
@@ -105,7 +105,7 @@ describe('REQ-007 with-directory-lock shared ancestor facade', () => {
     expect(clients[0].released).toBe(true);
   });
 
-  it('T-I-013 releases acquired shared dir locks in reverse order after partial timeout', async () => {
+  it('T-U-040 releases acquired shared dir locks in reverse order after partial timeout', async () => {
     const { clients: installedClients } = installFakePool();
     clients = installedClients;
     let attempts = 0;
@@ -145,7 +145,7 @@ describe('REQ-007 with-directory-lock shared ancestor facade', () => {
     );
   });
 
-  it('T-I-046 uses an exclusive dir lock for structural folder operations', async () => {
+  it('T-U-041 uses an exclusive dir lock for structural folder operations', async () => {
     await expect(
       withDirectoryLockExclusive(makeConfig(), '/tmp/vault/Notes', async () => 'renamed')
     ).resolves.toBe('renamed');
@@ -156,7 +156,7 @@ describe('REQ-007 with-directory-lock shared ancestor facade', () => {
     ]);
   });
 
-  it('T-I-047 preserves callback errors when shared dir release also fails', async () => {
+  it('T-U-042 preserves callback errors when shared dir release also fails', async () => {
     const callbackError = new Error('callback failed');
 
     await expect(
@@ -171,7 +171,7 @@ describe('REQ-007 with-directory-lock shared ancestor facade', () => {
     );
   });
 
-  it('T-I-047 surfaces shared dir release failures when the callback succeeds', async () => {
+  it('T-U-043 surfaces shared dir release failures when the callback succeeds', async () => {
     await expect(
       withAncestorDirectoryLocksShared(makeConfig(), '/tmp/vault/Notes/A.md', async () => {
         clients[0].releaseSucceeds = false;

@@ -197,6 +197,18 @@ async function uniqueSortedEntries(
   return [...byKey.values()].sort((a, b) => a.basicKey.localeCompare(b.basicKey));
 }
 
+async function uniqueSortedDirectoryEntries(
+  config: FlashQueryConfig,
+  dirPaths: string[]
+): Promise<DocumentLockEntry[]> {
+  const byKey = new Map<string, DocumentLockEntry>();
+  for (const dirPath of dirPaths) {
+    const entry = await toEntry(config, dirPath, 'dir');
+    byKey.set(entry.basicKey, entry);
+  }
+  return [...byKey.values()].sort((a, b) => a.basicKey.localeCompare(b.basicKey));
+}
+
 async function ancestorDirectoryEntries(
   config: FlashQueryConfig,
   filePath: string
@@ -285,6 +297,7 @@ async function runWithAdvisoryLocks<T>(
     const acquiredKeys: string[] = [];
     let callbackResult: T | undefined;
     let callbackError: unknown;
+    let releaseError: Error | undefined;
 
     try {
       for (const [index, advisoryKey] of advisoryKeys.entries()) {
@@ -310,7 +323,6 @@ async function runWithAdvisoryLocks<T>(
         callbackError = err;
       }
     } finally {
-      let releaseError: Error | undefined;
       for (const advisoryKey of [...acquiredKeys].reverse()) {
         try {
           const result = await client.query<{ released: boolean }>(
@@ -327,9 +339,9 @@ async function runWithAdvisoryLocks<T>(
               : new Error(`Failed to release advisory ${label} lock ${advisoryKey}`);
         }
       }
-      if (!callbackError && releaseError) throw releaseError;
     }
 
+    if (!callbackError && releaseError) throw releaseError;
     if (callbackError) {
       if (callbackError instanceof Error) throw callbackError;
       throw new Error('Document lock callback threw a non-Error value.');
@@ -363,8 +375,16 @@ export async function withDirectoryLockExclusive<T>(
   dirPath: string,
   fn: () => Promise<T>
 ): Promise<T> {
-  const entry = await toEntry(config, dirPath, 'dir');
-  return runWithDirectoryLocks(config, [entry], 'exclusive', fn);
+  return withDirectoryLocksExclusive(config, [dirPath], fn);
+}
+
+export async function withDirectoryLocksExclusive<T>(
+  config: FlashQueryConfig,
+  dirPaths: string[],
+  fn: () => Promise<T>
+): Promise<T> {
+  const entries = await uniqueSortedDirectoryEntries(config, dirPaths);
+  return runWithDirectoryLocks(config, entries, 'exclusive', fn);
 }
 
 export async function withDocumentLock<T>(
@@ -487,6 +507,11 @@ export async function withDocumentLocks<T>(
 
 export const __testing = {
   deriveDocumentLockEntry: toEntry,
+  deriveAdvisoryKey: async (
+    config: DocumentLockKeyConfig,
+    resourcePath: string,
+    kind: 'file' | 'dir' = 'file'
+  ) => toAdvisoryKey(await toEntry(config, resourcePath, kind)),
   clearCaseSensitivityCache: () => vaultCaseSensitivity.clear(),
   setCaseInsensitiveForVault: async (vaultRoot: string, isInsensitive: boolean) => {
     vaultCaseSensitivity.set(await safeRealpath(vaultRoot), Promise.resolve(isInsensitive));

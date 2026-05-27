@@ -14,6 +14,7 @@ describe('REQ-009 document lock facade only', () => {
         'isDocumentLockHeldForPath',
         'withAncestorDirectoryLocksShared',
         'withDirectoryLockExclusive',
+        'withDirectoryLocksExclusive',
         'withDocumentLock',
         'withDocumentLocks',
       ].sort()

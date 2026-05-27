@@ -143,7 +143,7 @@ describe('REQ-001/REQ-010 document tool lock call sites', () => {
     expect(lockToWriteSlice).toMatch(/readFile\(resolved\.absPath/);
   });
 
-  it('REQ-007 T-I-012 file-writing tools hold shared ancestor directory locks outside file locks', async () => {
+  it('REQ-007 file-writing tools hold shared ancestor directory locks outside file locks', async () => {
     for (const site of SHARED_DIRECTORY_LOCK_SITES) {
       const source = await readFile(new URL(`../../${site.file}`, import.meta.url), 'utf-8');
       expect(source, `${site.file} must import shared directory lock helper`).toContain(
