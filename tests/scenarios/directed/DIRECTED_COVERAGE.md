@@ -369,7 +369,7 @@ Per-file document write locking and public-surface concurrent write behaviors.
 | D-WCO-03 | T-S-003: two parallel `copy_document` calls to one destination produce exactly one success and one structured conflict. | test_copy_destination_race | 2026-05-27 | 2026-05-27 |
 | D-WCO-04 | T-S-004: two concurrent `apply_tags` calls with disjoint tags on one document preserve the union of both updates. | test_apply_tags_no_lost_update | 2026-05-26 | 2026-05-26 |
 | D-WCO-05 | T-S-005: public read-edit-write round trip uses `version_token`; a stale second write is refused with `details.reason="version_mismatch"`. | test_version_token_round_trip | 2026-05-27 | 2026-05-27 |
-| D-WCO-06 | T-S-006: read-triggered frontmatter repair returns the post-repair token accepted by a follow-up no-op write. | test_read_triggered_repair_token | 2026-05-27 | 2026-05-27 |
+| D-WCO-06 | T-S-006: read-triggered frontmatter repair returns the post-repair token accepted by a follow-up no-op write. | test_read_triggered_repair_token | 2026-05-27 | 2026-05-28 |
 | D-WCO-07 | T-S-007: consecutive managed scans of an untouched vault leave `fq_updated` timestamps unchanged. | test_scanner_token_stability | 2026-05-27 | 2026-05-27 |
 | D-WCO-08 | T-S-008: two parallel `call_macro` invocations rely on per-step tool locks and preserve structural document changes. | test_parallel_macros_per_file_lock | 2026-05-26 | 2026-05-26 |
 

@@ -47,7 +47,7 @@
 - [x] **Phase 161: Destination Locks + EXDEV Fallback** - Create, copy, and move operations lock destination paths and move safely across devices. (completed 2026-05-27)
 - [x] **Phase 162: Version-fingerprint Check** - Reads and writes expose version tokens and callers can opt into conflict detection. (completed 2026-05-27)
 - [x] **Phase 163: Multi-file Batch Contract** - Batch tools accept mixed identifier/token inputs and return ordered per-item results. (completed 2026-05-27)
-- [ ] **Phase 164: Close gap: document repair and plugin reconciliation lock contract** - Repair and reconciliation write side effects use the same ambient file + ancestor directory lock contract as normal document writes. (planned)
+- [x] **Phase 164: Close gap: document repair and plugin reconciliation lock contract** - Repair and reconciliation write side effects use the same ambient file + ancestor directory lock contract as normal document writes. (planned) (completed 2026-05-28)
 
 ## Phase Details
 
@@ -357,12 +357,12 @@ Plans:
 
 **Wave 1**
 
-- [ ] 164-01-PLAN.md — Lock get_document repair writes while preserving read-lock-free cache-hit paths.
-- [ ] 164-02-PLAN.md — Lock plugin reconciliation frontmatter writes while preserving REQ-023 coordination.
+- [x] 164-01-PLAN.md — Lock get_document repair writes while preserving read-lock-free cache-hit paths.
+- [x] 164-02-PLAN.md — Lock plugin reconciliation frontmatter writes while preserving REQ-023 coordination.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 164-03-PLAN.md — Run combined focused validation, D-WCO-06 evidence, and final source audit.
+- [x] 164-03-PLAN.md — Run combined focused validation, D-WCO-06 evidence, and final source audit.
 
 ## Progress
 
@@ -380,7 +380,7 @@ Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 →
 | 161. Destination Locks + EXDEV Fallback | 4/4 | Complete    | 2026-05-27 |
 | 162. Version-fingerprint Check | 6/6 | Complete    | 2026-05-27 |
 | 163. Multi-file Batch Contract | 4/4 | Complete    | 2026-05-27 |
-| 164. Close gap: document repair and plugin reconciliation lock contract | 0/3 | Not started | - |
+| 164. Close gap: document repair and plugin reconciliation lock contract | 3/3 | Complete   | 2026-05-28 |
 
 ## Archived Milestone Details
 
