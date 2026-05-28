@@ -130,7 +130,7 @@ Note: Test Plan §4.10.6 reserved `IS-09`, `IS-10`, `IS-11`, and `IA-09`; the li
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| INT-WCO-01 | T-Y-001 / REQ-007 public folder coordination workflow: write a descendant document, rename the folder through `manage_directory`, and read the descendant at the destination path. | folder_coordination          | 2026-05-27   | 2026-05-27   |
+| INT-WCO-01 | T-Y-001 / REQ-007 public folder coordination workflow: write a descendant document, rename the folder through `manage_directory`, and read the descendant at the destination path. | folder_coordination          | 2026-05-28   | 2026-05-28   |
 
 ## Phase 163 Vault Write Coherency Batch Contract
 
