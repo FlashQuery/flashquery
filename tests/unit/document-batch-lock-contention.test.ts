@@ -22,6 +22,7 @@ const resolverMock = vi.hoisted(() => ({
 const lockMock = vi.hoisted(() => ({
   withAncestorDirectoryLocksShared: vi.fn(),
   withDocumentLock: vi.fn(),
+  withDocumentLocks: vi.fn(),
 }));
 
 const fsPromisesMock = vi.hoisted(() => ({
@@ -54,6 +55,7 @@ vi.mock('../../src/services/document-lock.js', () => {
     LockTimeoutError,
     withAncestorDirectoryLocksShared: lockMock.withAncestorDirectoryLocksShared,
     withDocumentLock: lockMock.withDocumentLock,
+    withDocumentLocks: lockMock.withDocumentLocks,
   };
 });
 
@@ -138,6 +140,7 @@ describe('document batch lock-contention envelopes', () => {
     const { LockTimeoutError } = await import('../../src/services/document-lock.js');
     lockMock.withAncestorDirectoryLocksShared.mockImplementation(async (_config, _filePath, fn) => fn());
     lockMock.withDocumentLock.mockRejectedValue(new LockTimeoutError('/tmp/fq-unit/Notes/Busy.md'));
+    lockMock.withDocumentLocks.mockRejectedValue(new LockTimeoutError('/tmp/fq-unit/Notes/Busy.md'));
   });
 
   it('archive_document batch item lock timeouts use failed lock_timeout envelopes', async () => {

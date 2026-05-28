@@ -10,7 +10,7 @@ import { logger } from '../../../logging/logger.js';
 import {
   LockTimeoutError,
   withAncestorDirectoryLocksShared,
-  withDocumentLock,
+  withDocumentLocks,
 } from '../../../services/document-lock.js';
 import { resolveDocumentIdentifier, targetedScan } from '../../utils/resolve-document.js';
 import { getIsShuttingDown } from '../../../server/shutdown-state.js';
@@ -106,129 +106,148 @@ export function registerRemoveDocumentTool(server: McpServer, deps: DocumentTool
               }
 
               const resolved = await resolveDocumentIdentifier(config, supabase, id, logger);
-              await withAncestorDirectoryLocksShared(config, resolved.absPath, async () =>
-                withDocumentLock(config, resolved.absPath, async () => {
               const relativePath = resolved.relativePath;
-              const rawContent = await readFile(resolved.absPath, 'utf-8');
-              const currentVersionToken = computeVersionToken(rawContent);
-              const itemExpectedVersion = isBatch ? item.version_token : item.version_token ?? expectedVersion;
-              if (itemExpectedVersion && itemExpectedVersion !== currentVersionToken) {
-                pushConflict(id, buildVersionMismatchEnvelope({
-                  identifier: id,
-                  versionToken: currentVersionToken,
-                  targetedRegion: buildWholeDocumentTargetedRegion({
-                    path: relativePath,
-                    rawContent,
-                  }),
-                }));
-                return;
-              }
-              const parsed = await vaultManager.readMarkdown(relativePath);
-              const archivedAtValue = parsed.data[FM.ARCHIVED_AT];
-              const existingArchivedAt = typeof archivedAtValue === 'string' && archivedAtValue.length > 0
-                ? archivedAtValue
+              const activeTrashRoot = config.trashFolder.enabled
+                ? (trashRoot as { absPath: string })
                 : null;
-              const archivedAt = existingArchivedAt ?? new Date().toISOString();
-              const title = stringField(parsed.data, FM.TITLE, relativePath);
-
-              const archivedFm: Record<string, unknown> = {
-                ...parsed.data,
-                [FM.STATUS]: 'archived',
-                [FM.ARCHIVED_AT]: archivedAt,
-              };
-              if (config.trashFolder.enabled) {
-                archivedFm[FM.ORIGINAL_PATH] = relativePath;
-              }
-
-              const serialized = matter.stringify(parsed.content, archivedFm);
-              const newContentHash = computeHash(serialized);
-              const preScan = await targetedScan(config, supabase, resolved, newContentHash, logger);
-              const fqcId = resolved.fqcId ?? stringField(preScan.capturedFrontmatter, 'fqcId', '');
-              archivedFm[FM.ID] = fqcId;
-
-              let archivedFileWritten = false;
-              let archivedRowWritten = false;
-
-              try {
-                await vaultManager.writeMarkdown(relativePath, archivedFm, parsed.content);
-                archivedFileWritten = true;
-
-                const updatedAt = new Date().toISOString();
-                const { data: updatedRow, error: updateError } = await supabase
-                  .from('fqc_documents')
-                  .update({ status: 'archived', archived_at: archivedAt, updated_at: updatedAt })
-                  .eq('id', fqcId)
-                  .eq('instance_id', config.instance.id)
-                  .select('id')
-                  .maybeSingle();
-                if (updateError) {
-                  throw new Error(`Supabase removal archive update failed for ${relativePath}: ${updateError.message}`);
-                }
-                if (!updatedRow) {
-                  throw new Error(`Supabase removal archive update affected no document row for ${relativePath}`);
-                }
-                archivedRowWritten = true;
-
-                const archivedStats = await stat(join(vaultRoot, relativePath));
-                const baseResult = {
-                  identifier: id,
-                  title,
-                  path: relativePath,
-                  fq_id: fqcId,
-                  modified: archivedStats.mtime.toISOString(),
-                  chars: parsed.content.length,
-                  archived_at: archivedAt,
-                };
-
-                if (config.trashFolder.enabled) {
-                  const activeTrashRoot = trashRoot as { absPath: string };
-                  const trashDestination = buildTrashDestination(
+              const trashDestination = activeTrashRoot
+                ? buildTrashDestination(
                     vaultRoot,
                     relativePath,
                     activeTrashRoot.absPath,
                     config.trashFolder.collisionStrategy
-                  );
-                  await vaultManager.moveMarkdownToTrash(relativePath, trashDestination.absPath, {
-                    gitTitle: title,
-                  });
-                  pushSuccess(id, documentRemovalResult({
-                    ...baseResult,
-                    moved_to: trashDestination.responsePath,
+                  )
+                : null;
+              const lockedPaths = trashDestination
+                ? [resolved.absPath, trashDestination.absPath]
+                : [resolved.absPath];
+              const removeUnderLocks = async () => {
+                const rawContent = await readFile(resolved.absPath, 'utf-8');
+                const currentVersionToken = computeVersionToken(rawContent);
+                const itemExpectedVersion = isBatch ? item.version_token : item.version_token ?? expectedVersion;
+                if (itemExpectedVersion && itemExpectedVersion !== currentVersionToken) {
+                  pushConflict(id, buildVersionMismatchEnvelope({
+                    identifier: id,
+                    versionToken: currentVersionToken,
+                    targetedRegion: buildWholeDocumentTargetedRegion({
+                      path: relativePath,
+                      rawContent,
+                    }),
                   }));
-                } else {
-                  await vaultManager.removeMarkdown(relativePath, { gitTitle: title });
-                  pushSuccess(id, documentRemovalResult({ ...baseResult, moved_to: null }));
+                  return;
                 }
-              } catch (removalErr) {
-                if (archivedFileWritten && existsSync(join(vaultRoot, relativePath))) {
-                  await vaultManager.writeMarkdown(relativePath, parsed.data, parsed.content);
+                const parsed = await vaultManager.readMarkdown(relativePath);
+                const archivedAtValue = parsed.data[FM.ARCHIVED_AT];
+                const existingArchivedAt = typeof archivedAtValue === 'string' && archivedAtValue.length > 0
+                  ? archivedAtValue
+                  : null;
+                const archivedAt = existingArchivedAt ?? new Date().toISOString();
+                const title = stringField(parsed.data, FM.TITLE, relativePath);
+
+                const archivedFm: Record<string, unknown> = {
+                  ...parsed.data,
+                  [FM.STATUS]: 'archived',
+                  [FM.ARCHIVED_AT]: archivedAt,
+                };
+                if (config.trashFolder.enabled) {
+                  archivedFm[FM.ORIGINAL_PATH] = relativePath;
                 }
-                if (archivedRowWritten) {
-                  const originalStatus = stringField(parsed.data, FM.STATUS, 'active');
-                  const originalArchivedAtValue = parsed.data[FM.ARCHIVED_AT];
-                  const originalArchivedAt =
-                    typeof originalArchivedAtValue === 'string' && originalArchivedAtValue.length > 0
-                      ? originalArchivedAtValue
-                      : null;
-                  const { error: restoreError } = await supabase
+
+                const serialized = matter.stringify(parsed.content, archivedFm);
+                const newContentHash = computeHash(serialized);
+                const preScan = await targetedScan(config, supabase, resolved, newContentHash, logger);
+                const fqcId = resolved.fqcId ?? stringField(preScan.capturedFrontmatter, 'fqcId', '');
+                archivedFm[FM.ID] = fqcId;
+
+                let archivedFileWritten = false;
+                let archivedRowWritten = false;
+
+                try {
+                  await vaultManager.writeMarkdown(relativePath, archivedFm, parsed.content);
+                  archivedFileWritten = true;
+
+                  const updatedAt = new Date().toISOString();
+                  const { data: updatedRow, error: updateError } = await supabase
                     .from('fqc_documents')
-                    .update({
-                      status: originalStatus,
-                      archived_at: originalArchivedAt,
-                      updated_at: new Date().toISOString(),
-                    })
+                    .update({ status: 'archived', archived_at: archivedAt, updated_at: updatedAt })
                     .eq('id', fqcId)
-                    .eq('instance_id', config.instance.id);
-                  if (restoreError) {
-                    logger.error(
-                      `remove_document rollback failed for ${relativePath}: ${restoreError.message}`
-                    );
+                    .eq('instance_id', config.instance.id)
+                    .select('id')
+                    .maybeSingle();
+                  if (updateError) {
+                    throw new Error(`Supabase removal archive update failed for ${relativePath}: ${updateError.message}`);
                   }
+                  if (!updatedRow) {
+                    throw new Error(`Supabase removal archive update affected no document row for ${relativePath}`);
+                  }
+                  archivedRowWritten = true;
+
+                  const archivedStats = await stat(join(vaultRoot, relativePath));
+                  const baseResult = {
+                    identifier: id,
+                    title,
+                    path: relativePath,
+                    fq_id: fqcId,
+                    modified: archivedStats.mtime.toISOString(),
+                    chars: parsed.content.length,
+                    archived_at: archivedAt,
+                  };
+
+                  if (config.trashFolder.enabled) {
+                    if (!trashDestination) {
+                      throw new Error(`Trash destination was not prepared for ${relativePath}`);
+                    }
+                    await vaultManager.moveMarkdownToTrash(relativePath, trashDestination.absPath, {
+                      gitTitle: title,
+                    });
+                    pushSuccess(id, documentRemovalResult({
+                      ...baseResult,
+                      moved_to: trashDestination.responsePath,
+                    }));
+                  } else {
+                    await vaultManager.removeMarkdown(relativePath, { gitTitle: title });
+                    pushSuccess(id, documentRemovalResult({ ...baseResult, moved_to: null }));
+                  }
+                } catch (removalErr) {
+                  if (archivedFileWritten && existsSync(join(vaultRoot, relativePath))) {
+                    await vaultManager.writeMarkdown(relativePath, parsed.data, parsed.content);
+                  }
+                  if (archivedRowWritten) {
+                    const originalStatus = stringField(parsed.data, FM.STATUS, 'active');
+                    const originalArchivedAtValue = parsed.data[FM.ARCHIVED_AT];
+                    const originalArchivedAt =
+                      typeof originalArchivedAtValue === 'string' && originalArchivedAtValue.length > 0
+                        ? originalArchivedAtValue
+                        : null;
+                    const { error: restoreError } = await supabase
+                      .from('fqc_documents')
+                      .update({
+                        status: originalStatus,
+                        archived_at: originalArchivedAt,
+                        updated_at: new Date().toISOString(),
+                      })
+                      .eq('id', fqcId)
+                      .eq('instance_id', config.instance.id);
+                    if (restoreError) {
+                      logger.error(
+                        `remove_document rollback failed for ${relativePath}: ${restoreError.message}`
+                      );
+                    }
+                  }
+                  throw removalErr;
                 }
-                throw removalErr;
+              };
+              if (trashDestination) {
+                await withAncestorDirectoryLocksShared(config, resolved.absPath, async () =>
+                  withAncestorDirectoryLocksShared(config, trashDestination.absPath, async () =>
+                    withDocumentLocks(config, lockedPaths, removeUnderLocks)
+                  )
+                );
+              } else {
+                await withAncestorDirectoryLocksShared(config, resolved.absPath, async () =>
+                  withDocumentLocks(config, lockedPaths, removeUnderLocks)
+                );
               }
-                })
-              );
             } catch (itemErr) {
               if (itemErr instanceof LockTimeoutError) {
                 pushFailure(id, {

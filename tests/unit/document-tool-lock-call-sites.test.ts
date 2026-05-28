@@ -27,7 +27,7 @@ const SHARED_DIRECTORY_LOCK_SITES = [
   {
     file: 'src/mcp/tools/documents/remove.ts',
     patterns: [
-      /withAncestorDirectoryLocksShared\(\s*config,\s*resolved\.absPath[\s\S]*withDocumentLock\(\s*config,\s*resolved\.absPath/,
+      /withAncestorDirectoryLocksShared\(\s*config,\s*resolved\.absPath[\s\S]*withDocumentLocks\(\s*config,\s*lockedPaths/,
     ],
   },
   {
