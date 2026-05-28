@@ -102,15 +102,16 @@ describe.skipIf(!HAS_SESSION_CAPABLE_DATABASE_URL)('REQ-007 folder-lock integrat
 
   it('T-I-011 folder-lock public manage_directory rename returns lock_timeout behind a descendant shared write', async () => {
     const vault = await mkdtemp(join(tmpdir(), 'fq-folder-lock-'));
-    const config = makeConfig(vault, 0.05);
-    const manageDirectory = registerManageDirectory(config);
+    const holderConfig = makeConfig(vault);
+    const contenderConfig = makeConfig(vault, 0.05);
+    const manageDirectory = registerManageDirectory(contenderConfig);
     const holderEntered = createGate();
     const releaseHolder = createGate();
 
     try {
       await mkdir(join(vault, 'Notes'), { recursive: true });
       await writeFile(join(vault, 'Notes', 'A.md'), 'a\n', 'utf8');
-      const holder = withAncestorDirectoryLocksShared(config, join(vault, 'Notes', 'A.md'), async () => {
+      const holder = withAncestorDirectoryLocksShared(holderConfig, join(vault, 'Notes', 'A.md'), async () => {
         holderEntered.release();
         await releaseHolder.promise;
       });

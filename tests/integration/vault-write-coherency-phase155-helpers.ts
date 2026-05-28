@@ -91,6 +91,10 @@ export function parseToolJson<T = Record<string, unknown>>(result: unknown): T {
   return JSON.parse((result as { content: Array<{ text: string }> }).content[0]?.text ?? '{}') as T;
 }
 
+function toolResultText(result: unknown): string {
+  return (result as { content: Array<{ text: string }> }).content[0]?.text ?? '{}';
+}
+
 export async function writeDocument(
   handlers: Record<string, ToolHandler>,
   path: string,
@@ -105,10 +109,11 @@ export async function writeDocument(
     content,
     tags,
   });
-  if ((result as { isError?: boolean }).isError) {
-    throw new Error(`write_document create failed: ${(result as { content: Array<{ text: string }> }).content[0]?.text}`);
+  const payload = parseToolJson<Record<string, unknown>>(result);
+  if ((result as { isError?: boolean }).isError || typeof payload.error === 'string') {
+    throw new Error(`write_document create failed: ${toolResultText(result)}`);
   }
-  return parseToolJson(result);
+  return payload;
 }
 
 export function createGate(): { promise: Promise<void>; release: () => void } {

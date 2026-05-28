@@ -42,7 +42,9 @@ export async function queryAdvisoryLocks(
 
   return result.rows
     .map((row) => {
-      const unsignedKey = (BigInt(row.classid) << 32n) | BigInt(row.objid);
+      const classid = BigInt.asUintN(32, BigInt(row.classid));
+      const objid = BigInt.asUintN(32, BigInt(row.objid));
+      const unsignedKey = (classid << 32n) | objid;
       return {
         mode: row.mode,
         classid: row.classid,

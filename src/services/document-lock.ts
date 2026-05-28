@@ -132,6 +132,22 @@ async function safeRealpath(filePath: string): Promise<string> {
   }
 }
 
+async function canonicalPathThroughExistingAncestor(filePath: string): Promise<string> {
+  const normalizedPath = path.normalize(filePath);
+  const missingSegments: string[] = [];
+  let current = normalizedPath;
+
+  while (!(await pathExists(current))) {
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    missingSegments.unshift(path.basename(current));
+    current = parent;
+  }
+
+  const resolvedExistingAncestor = await safeRealpath(current);
+  return path.join(resolvedExistingAncestor, ...missingSegments);
+}
+
 async function isCaseInsensitiveVault(vaultRoot: string): Promise<boolean> {
   const resolvedVault = await safeRealpath(vaultRoot);
   const cached = vaultCaseSensitivity.get(resolvedVault);
@@ -165,12 +181,11 @@ async function canonicalPathFor(
   let canonicalPath: string;
 
   if (kind === 'dir') {
-    canonicalPath = await safeRealpath(normalizedPath);
+    canonicalPath = await canonicalPathThroughExistingAncestor(normalizedPath);
   } else if (await pathExists(normalizedPath)) {
     canonicalPath = await safeRealpath(normalizedPath);
   } else {
-    const parent = await safeRealpath(path.dirname(normalizedPath));
-    canonicalPath = path.join(parent, path.basename(normalizedPath));
+    canonicalPath = await canonicalPathThroughExistingAncestor(normalizedPath);
   }
 
   return (await isCaseInsensitiveVault(resolvedVault))
@@ -274,16 +289,14 @@ export async function isDocumentLockHeldForPath(
 async function runWithTier2<T>(
   config: FlashQueryConfig,
   entries: DocumentLockEntry[],
-  deadline: number,
   fn: () => Promise<T>
 ): Promise<T> {
-  return runWithAdvisoryLocks(config, entries, deadline, 'exclusive', 'document', fn);
+  return runWithAdvisoryLocks(config, entries, 'exclusive', 'document', fn);
 }
 
 async function runWithAdvisoryLocks<T>(
   config: FlashQueryConfig,
   entries: DocumentLockEntry[],
-  deadline: number,
   mode: 'exclusive' | 'shared',
   label: 'document' | 'directory',
   fn: () => Promise<T>
@@ -302,6 +315,7 @@ async function runWithAdvisoryLocks<T>(
       : 'SELECT pg_advisory_unlock($1::bigint) AS released';
 
   return withPgClient(config.supabase.databaseUrl, async (client) => {
+    const acquireDeadline = Date.now() + timeoutMs(config);
     const acquiredKeys: string[] = [];
     let callbackResult: T | undefined;
     let callbackError: unknown;
@@ -310,7 +324,7 @@ async function runWithAdvisoryLocks<T>(
     try {
       for (const [index, advisoryKey] of advisoryKeys.entries()) {
         while (true) {
-          if (remainingMs(deadline) <= 0) {
+          if (remainingMs(acquireDeadline) <= 0) {
             throw new LockTimeoutError(
               entries[index]?.resource ?? entries[0]?.resource ?? `${label} lock`,
               configuredTimeoutSeconds
@@ -327,7 +341,7 @@ async function runWithAdvisoryLocks<T>(
             });
             break;
           }
-          await sleep(Math.min(TIER2_RETRY_DELAY_MS, remainingMs(deadline)));
+          await sleep(Math.min(TIER2_RETRY_DELAY_MS, remainingMs(acquireDeadline)));
         }
       }
 
@@ -371,8 +385,7 @@ async function runWithDirectoryLocks<T>(
   fn: () => Promise<T>
 ): Promise<T> {
   if (entries.length === 0) return fn();
-  const deadline = Date.now() + timeoutMs(config);
-  return runWithAdvisoryLocks(config, entries, deadline, mode, 'directory', fn);
+  return runWithAdvisoryLocks(config, entries, mode, 'directory', fn);
 }
 
 export async function withAncestorDirectoryLocksShared<T>(
@@ -473,7 +486,7 @@ export async function withDocumentLocks<T>(
         tier1Releases.push(releaseTier1);
       }
 
-      await runWithTier2(config, entries, deadline, async () => {
+      await runWithTier2(config, entries, async () => {
         while (burstState.queue.length > 0) {
           const request = burstState.queue.shift();
           if (!request) continue;

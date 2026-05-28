@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import type { PoolClient } from 'pg';
 import { createHash } from 'node:crypto';
-import { withDocumentLock } from '../../src/services/document-lock.js';
+import { __testing as documentLockTesting, withDocumentLock } from '../../src/services/document-lock.js';
 import { withPluginCoordinationLock } from '../../src/services/plugin-coordination-lock.js';
 import { closePgPools } from '../../src/utils/pg-client.js';
 import {
@@ -11,6 +11,7 @@ import {
   TEST_SUPABASE_KEY,
   TEST_SUPABASE_URL,
 } from '../helpers/test-env.js';
+import { queryAdvisoryLocks } from '../helpers/pg-locks.js';
 import type { FlashQueryConfig } from '../../src/config/types.js';
 
 function makeConfig(): FlashQueryConfig {
@@ -30,24 +31,14 @@ function makeConfig(): FlashQueryConfig {
   } as FlashQueryConfig;
 }
 
-function advisoryKeyForPath(filePath: string): string {
+function rawAdvisoryKeyForPath(filePath: string): string {
   const digest = createHash('sha256').update(`file:${filePath}`).digest();
   return digest.readBigInt64BE(0).toString();
 }
 
 async function advisoryLockVisible(client: PoolClient, key: string): Promise<boolean> {
-  const result = await client.query<{ visible: boolean }>(
-    `SELECT EXISTS (
-      SELECT 1
-      FROM pg_locks
-      WHERE locktype = 'advisory'
-        AND objsubid = 1
-        AND granted = true
-        AND ((classid::bigint << 32) | objid::bigint) = $1::bigint
-    ) AS visible`,
-    [key]
-  );
-  return result.rows[0]?.visible === true;
+  const locks = await queryAdvisoryLocks(client, { mode: 'exclusive', key: BigInt(key) });
+  return locks.length > 0;
 }
 
 async function pluginAdvisoryLockVisible(client: PoolClient, key: string): Promise<boolean> {
@@ -82,7 +73,7 @@ describe.skipIf(!HAS_SESSION_CAPABLE_DATABASE_URL)('REQ-002 two-tier advisory-lo
     const pool = new pg.Pool({ connectionString: TEST_DATABASE_URL, allowExitOnIdle: true });
     const observer = await pool.connect();
     const filePath = '/tmp/vault/two-tier-same-file.md';
-    const key = advisoryKeyForPath(filePath);
+    const key = await documentLockTesting.deriveAdvisoryKey(makeConfig(), filePath);
     const holderEntered = createGate();
     const releaseHolder = createGate();
     const secondEntered = createGate();
@@ -119,7 +110,7 @@ describe.skipIf(!HAS_SESSION_CAPABLE_DATABASE_URL)('REQ-002 two-tier advisory-lo
     const holder = new pg.Client({ connectionString: TEST_DATABASE_URL });
     const contender = new pg.Client({ connectionString: TEST_DATABASE_URL });
     const filePath = '/tmp/vault/two-tier-session-end.md';
-    const key = advisoryKeyForPath(filePath);
+    const key = rawAdvisoryKeyForPath(filePath);
 
     try {
       await holder.connect();
