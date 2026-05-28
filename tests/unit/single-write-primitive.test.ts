@@ -117,7 +117,7 @@ describe('T-U-030 single durable vault write primitive guard', () => {
     expect(frontmatterSource).toMatch(/await writeVaultFile\(absolutePath, updatedContent, \{ lockConfig \}\)/);
     expect(resolverSource).toMatch(/import .*writeVaultFile.* from '\.\.\/\.\.\/storage\/vault-write\.js'/s);
     expect(resolverSource).toMatch(/await writeVaultFile\(absolutePath, output, \{ lockConfig: config \}\)/);
-    expect(pluginSource).toMatch(/await atomicWriteFrontmatter\(toAbsolutePath\(doc\.path\)/);
+    expect(pluginSource).toMatch(/withAncestorDirectoryLocksShared[\s\S]*withDocumentLock[\s\S]*atomicWriteFrontmatter\(absPath, updates, lockConfig\)/);
     expect(gitSource).toMatch(/await writeVaultFile\(dumpAbsPath, output\)/);
     expect(moveSource).toMatch(/await writeVaultFile\(destAbsPath, sourceRawContent, \{ lockConfig: config \}\)/);
   });

@@ -10,16 +10,13 @@ import { writeVaultFile } from '../../storage/vault-write.js';
 import { isValidUuid } from '../../utils/uuid.js';
 import { propagateFqcIdChange } from '../../services/plugin-propagation.js';
 import { FM } from '../../constants/frontmatter-fields.js';
+import {
+  withAncestorDirectoryLocksShared,
+  withDocumentLock,
+} from '../../services/document-lock.js';
+import type { FlashQueryConfig } from '../../config/types.js';
 
-interface DocumentResolverConfig {
-  instance: {
-    id: string;
-    vault: {
-      path: string;
-      markdownExtensions: string[];
-    };
-  };
-}
+type DocumentResolverConfig = FlashQueryConfig;
 
 interface DocumentResolverLogger {
   debug(message: string): void;
@@ -469,11 +466,19 @@ export async function targetedScan(
     // Write updated frontmatter to vault only if something actually changed
     let snapshotContentHash = newContentHash;
     if (frontmatterChanged) {
-      snapshotContentHash = await writeMarkdownFile(
+      snapshotContentHash = await withAncestorDirectoryLocksShared(
         config,
         resolved.absPath,
-        parsed.data,
-        parsed.content
+        () => withDocumentLock(
+          config,
+          resolved.absPath,
+          () => writeMarkdownFile(
+            config,
+            resolved.absPath,
+            parsed.data,
+            parsed.content
+          )
+        )
       );
     }
 

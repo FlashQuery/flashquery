@@ -31,6 +31,10 @@ vi.mock('../../src/storage/vault.js', () => ({
 vi.mock('../../src/utils/frontmatter.js', () => ({
   atomicWriteFrontmatter: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock('../../src/services/document-lock.js', () => ({
+  withAncestorDirectoryLocksShared: vi.fn(async (_config, _path, fn) => fn()),
+  withDocumentLock: vi.fn(async (_config, _path, fn) => fn()),
+}));
 vi.mock('../../src/plugins/manager.js', () => ({
   pluginManager: { getEntry: vi.fn(), getAllEntries: vi.fn() },
   getTypeRegistryMap: vi.fn(() => new Map()),
@@ -52,6 +56,10 @@ import { supabaseManager } from '../../src/storage/supabase.js';
 import { createPgClientIPv4 } from '../../src/utils/pg-client.js';
 import { pluginManager } from '../../src/plugins/manager.js';
 import { atomicWriteFrontmatter } from '../../src/utils/frontmatter.js';
+import {
+  withAncestorDirectoryLocksShared,
+  withDocumentLock,
+} from '../../src/services/document-lock.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -187,6 +195,8 @@ function setupPgClient(pluginTableRows: PluginRow[], fqcDocRows: FqcDocRow[] = [
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(readFile).mockResolvedValue('---\nfqc_id: test-id\n---\nContent');
+  vi.mocked(withAncestorDirectoryLocksShared).mockImplementation(async (_config, _path, fn) => fn());
+  vi.mocked(withDocumentLock).mockImplementation(async (_config, _path, fn) => fn());
   invalidateReconciliationCache();
   process.env.DATABASE_URL = 'postgres://fake/test';
 });
@@ -593,6 +603,102 @@ describe('reconcilePluginDocuments — missing plugin entry returns empty result
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('executeReconciliationActions — RECON-05 added path (post-write updated_at re-query)', () => {
+  it('T-U-038 D-05 wraps added-document frontmatter writes in directory then document locks', async () => {
+    const events: string[] = [];
+    vi.mocked(withAncestorDirectoryLocksShared).mockImplementation(async (_config, _path, fn) => {
+      events.push('directory:start');
+      const value = await fn();
+      events.push('directory:end');
+      return value;
+    });
+    vi.mocked(withDocumentLock).mockImplementation(async (_config, _path, fn) => {
+      events.push('document:start');
+      const value = await fn();
+      events.push('document:end');
+      return value;
+    });
+    vi.mocked(atomicWriteFrontmatter).mockImplementation(async () => {
+      events.push('frontmatter');
+    });
+
+    const addedDoc = {
+      fqcId: 'doc-lock-contract',
+      path: 'CRM/Contacts/lock-contract.md',
+      typeId: 'contact',
+      tableName: 'fqcp_crm_default_contacts',
+    };
+    setupPluginEntry();
+
+    const chain: Record<string, unknown> = {};
+    chain.select = vi.fn().mockReturnValue(chain);
+    chain.eq = vi.fn().mockReturnValue(chain);
+    chain.single = vi.fn().mockResolvedValue({
+      data: { updated_at: '2026-04-20T10:01:00Z', content_hash: 'hash-post' },
+      error: null,
+    });
+    chain.insert = vi.fn().mockResolvedValue({ data: null, error: null });
+    chain.update = vi.fn().mockReturnValue(chain);
+    chain.delete = vi.fn().mockReturnValue(chain);
+    vi.mocked(supabaseManager.getClient).mockReturnValue({
+      from: vi.fn().mockReturnValue(chain),
+    } as any);
+    vi.mocked(createPgClientIPv4).mockReturnValue({
+      connect: vi.fn().mockResolvedValue(undefined),
+      query: vi.fn().mockResolvedValue({ rows: [], rowCount: 1 }),
+      end: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    await executeReconciliationActions(
+      {
+        added: [addedDoc],
+        resurrected: [],
+        deleted: [],
+        disassociated: [],
+        moved: [],
+        modified: [],
+        unchanged: 0,
+      },
+      'crm',
+      'default',
+      'instance-1',
+      'postgres://fake/test',
+      {
+        instance: {
+          name: 'test',
+          id: 'instance-1',
+          vault: { path: '/vault', markdownExtensions: ['.md'] },
+        },
+        server: { host: '127.0.0.1', port: 0 },
+        supabase: { url: 'http://localhost', serviceRoleKey: 'test', databaseUrl: 'postgres://fake/test', skipDdl: true },
+        git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
+        mcp: { transport: 'stdio' },
+        locking: { enabled: true, lockTimeoutSeconds: 10 },
+        trashFolder: { enabled: true, path: '.trash', collisionStrategy: 'suffix' },
+        mcpServers: {},
+        host: { mcpServers: [], toolSearch: 'disabled' },
+        macro: { defaultTimeoutMs: 1000 },
+        logging: { level: 'error', output: 'stdout' },
+      }
+    );
+
+    expect(withAncestorDirectoryLocksShared).toHaveBeenCalledWith(
+      expect.any(Object),
+      '/vault/CRM/Contacts/lock-contract.md',
+      expect.any(Function)
+    );
+    expect(withDocumentLock).toHaveBeenCalledWith(
+      expect.any(Object),
+      '/vault/CRM/Contacts/lock-contract.md',
+      expect.any(Function)
+    );
+    expect(atomicWriteFrontmatter).toHaveBeenCalledWith(
+      '/vault/CRM/Contacts/lock-contract.md',
+      expect.objectContaining({ fq_owner: 'crm', fq_type: 'contact' }),
+      expect.any(Object)
+    );
+    expect(events).toEqual(['directory:start', 'document:start', 'frontmatter', 'document:end', 'directory:end']);
+  });
+
   it('RECON-05: writes frontmatter, INSERTs plugin row with post-write updated_at from fqc_documents re-query', async () => {
     // Arrange — build a ReconciliationResult with one added DocumentInfo
     const addedDoc = {

@@ -169,7 +169,8 @@ async function runScopedReconciliation(
         pluginId,
         instanceName,
         config.instance.id,
-        config.supabase.databaseUrl
+        config.supabase.databaseUrl,
+        config
       );
       return buildReconciliationPayload(actionSummary);
     }

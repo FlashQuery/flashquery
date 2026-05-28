@@ -9,6 +9,7 @@ import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { initEmbedding } from '../../src/embedding/provider.js';
 import { initLogger } from '../../src/logging/logger.js';
 import { registerPluginTools } from '../../src/mcp/tools/plugins.js';
+import { registerDocumentTools } from '../../src/mcp/tools/documents.js';
 import { registerRecordTools } from '../../src/mcp/tools/records.js';
 import { invalidateReconciliationCache } from '../../src/services/plugin-reconciliation.js';
 import { initSupabase, supabaseManager } from '../../src/storage/supabase.js';
@@ -59,6 +60,10 @@ function createMockServer() {
     },
   } as unknown as McpServer;
   return { server, getHandler: (name: string) => handlers[name] };
+}
+
+function parseToolJson<T = Record<string, unknown>>(result: unknown): T {
+  return JSON.parse((result as { content: Array<{ text: string }> }).content[0]?.text ?? '{}') as T;
 }
 
 describe.skipIf(!HAS_SUPABASE)('records-reconciliation T-I-044', () => {
@@ -135,5 +140,52 @@ describe.skipIf(!HAS_SUPABASE)('records-reconciliation T-I-044', () => {
       .eq('fqc_id', fqcId);
     expect(pendingError).toBeNull();
     expect(pending ?? []).toHaveLength(1);
+  }, 60_000);
+
+  it('T-I-044 same-file reconciliation frontmatter write can race a normal write_document without losing either change', async () => {
+    await mkdir(join(vaultPath, 'records-reconciliation'), { recursive: true });
+    const { server, getHandler } = createMockServer();
+    registerRecordTools(server, config);
+    registerDocumentTools(server, config);
+
+    const relPath = `records-reconciliation/${randomUUID()}-same-file.md`;
+    const created = parseToolJson<{ fq_id?: string }>(
+      await getHandler('write_document')({
+        mode: 'create',
+        path: relPath,
+        title: 'Same File Race',
+        content: '# Same File Race',
+      })
+    );
+    const fqcId = String(created.fq_id);
+    expect(fqcId).toMatch(/^[0-9a-f-]{36}$/);
+
+    invalidateReconciliationCache();
+    const [recordResult, documentResult] = await Promise.all([
+      getHandler('write_record')({ mode: 'create', plugin_id: PLUGIN_ID, table: 'contacts', data: { name: 'Same File' } }),
+      getHandler('write_document')({
+        mode: 'update',
+        identifier: relPath,
+        content: '# Same File Race\n\nDocument body survived the race.',
+      }),
+    ]);
+
+    expect((recordResult as { isError?: boolean }).isError).not.toBe(true);
+    expect((documentResult as { isError?: boolean }).isError).not.toBe(true);
+    const writePayload = parseToolJson<{ version_token?: string }>(documentResult);
+    expect(writePayload.version_token).toMatch(/^[a-f0-9]{64}$/);
+
+    const raw = await import('node:fs/promises').then(({ readFile }) =>
+      readFile(join(vaultPath, relPath), 'utf8')
+    );
+    expect(raw).toContain('fq_owner: phase157_records_recon');
+    expect(raw).toContain('fq_type: contact-doc');
+    expect(raw).toContain('Document body survived the race.');
+
+    const tracked = await pgClient.query(
+      `SELECT COUNT(*)::int AS count FROM ${pg.escapeIdentifier(TABLE_NAME)} WHERE instance_id = $1 AND fqc_id = $2`,
+      [INSTANCE_ID, fqcId]
+    );
+    expect(Number(tracked.rows[0].count)).toBe(1);
   }, 60_000);
 });

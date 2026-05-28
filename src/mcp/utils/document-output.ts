@@ -24,16 +24,9 @@ import { extractHeadings } from './markdown-utils.js';
 import { computeSectionChars, extractSection, extractMultipleSections, findHeadingOccurrence, SectionExtractError } from './markdown-sections.js';
 import { computeVersionToken } from './document-version.js';
 import { isValidUuid } from '../../utils/uuid.js';
+import type { FlashQueryConfig } from '../../config/types.js';
 
-interface DocumentOutputConfig {
-  instance: {
-    id: string;
-    vault: {
-      path: string;
-      markdownExtensions: string[];
-    };
-  };
-}
+type DocumentOutputConfig = FlashQueryConfig;
 
 interface DocumentOutputLogger {
   info(message: string): void;

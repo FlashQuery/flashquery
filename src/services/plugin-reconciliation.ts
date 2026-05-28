@@ -17,6 +17,11 @@ import { pluginManager } from '../plugins/manager.js';
 import type { DocumentTypePolicy, RegistryEntry } from '../plugins/manager.js';
 import { FM } from '../constants/frontmatter-fields.js';
 import { ensureLastSeenColumn } from './plugin-table-schema.js';
+import {
+  withAncestorDirectoryLocksShared,
+  withDocumentLock,
+} from './document-lock.js';
+import type { FlashQueryConfig } from '../config/types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Exported types (D-02)
@@ -286,6 +291,7 @@ export async function executeReconciliationActions(
   instanceId: string,
   fqcInstanceId?: string,
   databaseUrl?: string,
+  lockConfig?: FlashQueryConfig,
 ): Promise<ReconciliationActionSummary> {
   const dbUrl = databaseUrl || process.env.DATABASE_URL;
   if (!dbUrl) {
@@ -378,10 +384,21 @@ export async function executeReconciliationActions(
       const shouldWriteFrontmatter = !existingOwner || existingOwner === pluginId;
 
       if (shouldWriteFrontmatter) {
-        await atomicWriteFrontmatter(toAbsolutePath(doc.path), {
+        const absPath = toAbsolutePath(doc.path);
+        const updates = {
           [FM.OWNER]: pluginId,
           [FM.TYPE]: doc.typeId,
-        });
+        };
+        const writeFrontmatter = () => lockConfig
+          ? atomicWriteFrontmatter(absPath, updates, lockConfig)
+          : atomicWriteFrontmatter(absPath, updates);
+        if (lockConfig) {
+          await withAncestorDirectoryLocksShared(lockConfig, absPath, () =>
+            withDocumentLock(lockConfig, absPath, writeFrontmatter)
+          );
+        } else {
+          await writeFrontmatter();
+        }
       } else {
         // eslint-disable-next-line @typescript-eslint/no-base-to-string
         logger.debug(`[RECON] Document ${doc.path} already owned by ${typeof existingOwner === 'string' ? existingOwner : String(existingOwner)}, skipping frontmatter write for ${pluginId}`);
