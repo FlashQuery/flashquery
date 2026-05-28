@@ -94,6 +94,7 @@ import { logger } from '../../src/logging/logger.js';
 import * as nodeFs from 'node:fs';
 import pg from 'pg';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
+import { LockTimeoutError } from '../../src/services/document-lock.js';
 import { withPluginCoordinationLock } from '../../src/services/plugin-coordination-lock.js';
 
 function parseToolText(result: { content: Array<{ text: string }> }): Record<string, unknown> {
@@ -621,6 +622,28 @@ describe('unregister_plugin', () => {
       expect.objectContaining({ pluginId: 'crm', pluginInstance: 'default' }),
       expect.any(Function)
     );
+    expect(pluginManager.removeEntry).not.toHaveBeenCalled();
+  });
+
+  it('maps plugin coordination lock timeout to a conflict envelope', async () => {
+    const config = makeConfig();
+    vi.mocked(withPluginCoordinationLock).mockRejectedValueOnce(
+      new LockTimeoutError('plugin:test-instance-id:crm:default', 1)
+    );
+    const { server, getHandler } = createMockServer();
+    registerPluginTools(server, config);
+
+    const result = await getHandler('unregister_plugin')({ plugin_id: 'crm' }) as {
+      content: Array<{ text: string }>;
+      isError?: boolean;
+    };
+
+    expect(result.isError).toBe(false);
+    expect(parseToolText(result)).toMatchObject({
+      error: 'conflict',
+      identifier: 'crm',
+      details: { reason: 'lock_timeout', timeout_seconds: 1 },
+    });
     expect(pluginManager.removeEntry).not.toHaveBeenCalled();
   });
 });

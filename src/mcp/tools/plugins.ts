@@ -18,6 +18,7 @@ import { createPgClientIPv4 } from '../../utils/pg-client.js';
 import { compareSchemaVersions, analyzeSchemaChanges } from '../../utils/schema-migration.js';
 import { reloadManifests } from '../../services/manifest-loader.js';
 import { withPluginCoordinationLock } from '../../services/plugin-coordination-lock.js';
+import { LockTimeoutError } from '../../services/document-lock.js';
 import {
   jsonExpectedError,
   jsonRuntimeError,
@@ -589,6 +590,18 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
         );
         });
       } catch (err) {
+        if (err instanceof LockTimeoutError) {
+          return jsonExpectedError({
+            error: 'conflict',
+            message: err.message,
+            identifier: plugin_id,
+            details: {
+              reason: 'lock_timeout',
+              timeout_seconds: err.timeoutSeconds,
+              plugin_instance: plugin_instance ?? 'default',
+            },
+          });
+        }
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`unregister_plugin failed: ${msg}`);
         return jsonRuntimeError(msg);

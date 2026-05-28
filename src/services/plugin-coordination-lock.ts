@@ -1,8 +1,10 @@
 import type { FlashQueryConfig } from '../config/loader.js';
 import { withPgClient } from '../utils/pg-client.js';
 import { Mutex } from 'async-mutex';
+import { LockTimeoutError } from './document-lock.js';
 
 const PLUGIN_LOCK_STRIPE_COUNT = 256;
+const PLUGIN_TIER2_RETRY_DELAY_MS = 25;
 const pluginLockStripes = Array.from({ length: PLUGIN_LOCK_STRIPE_COUNT }, () => new Mutex());
 
 function hashString(value: string): number {
@@ -12,6 +14,18 @@ function hashString(value: string): number {
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
+}
+
+function timeoutMs(config: FlashQueryConfig): number {
+  return (config.locking.lockTimeoutSeconds ?? 10) * 1000;
+}
+
+function remainingMs(deadline: number): number {
+  return Math.max(0, deadline - Date.now());
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function withPluginCoordinationLock<T>(
@@ -28,11 +42,36 @@ export async function withPluginCoordinationLock<T>(
     }
 
     return await withPgClient(config.supabase.databaseUrl, async (client) => {
-      await client.query('SELECT pg_advisory_lock(hashtextextended($1, 0)::bigint)', [lockKey]);
+      const acquireDeadline = Date.now() + timeoutMs(config);
+      const configuredTimeoutSeconds = config.locking.lockTimeoutSeconds ?? 10;
+      let acquired = false;
+
       try {
+        while (true) {
+          if (remainingMs(acquireDeadline) <= 0) {
+            throw new LockTimeoutError(lockKey, configuredTimeoutSeconds);
+          }
+
+          const result = await client.query<{ acquired: boolean }>(
+            'SELECT pg_try_advisory_lock(hashtextextended($1, 0)::bigint) AS acquired',
+            [lockKey]
+          );
+          if (result.rows[0]?.acquired === true) {
+            acquired = true;
+            break;
+          }
+
+          await sleep(Math.min(PLUGIN_TIER2_RETRY_DELAY_MS, remainingMs(acquireDeadline)));
+        }
+
         return await fn();
       } finally {
-        await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0)::bigint)', [lockKey]);
+        if (acquired) {
+          await client.query(
+            'SELECT pg_advisory_unlock(hashtextextended($1, 0)::bigint)',
+            [lockKey]
+          );
+        }
       }
     });
   } finally {
