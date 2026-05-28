@@ -84,6 +84,7 @@ export interface FrontmatterSnapshot {
   created: string; // ISO timestamp
   status: string; // 'active' or preserved value
   contentHash: string; // pre-computed hash of content about to be written
+  rawContent?: string; // post-repair raw markdown when targetedScan wrote the file
 }
 
 function sanitizeFrontmatterValues(
@@ -102,7 +103,7 @@ async function writeMarkdownFile(
   absolutePath: string,
   frontmatter: Record<string, unknown>,
   content: string
-): Promise<string> {
+): Promise<{ contentHash: string; rawContent: string }> {
   await mkdir(dirname(absolutePath), { recursive: true });
   const fm = sanitizeFrontmatterValues({
     ...frontmatter,
@@ -110,7 +111,7 @@ async function writeMarkdownFile(
   });
   const output = matter.stringify(content, fm);
   const result = await writeVaultFile(absolutePath, output, { lockConfig: config });
-  return result.contentHash;
+  return { contentHash: result.contentHash, rawContent: output };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -348,128 +349,33 @@ export async function targetedScan(
     // Parse frontmatter
     const parsed = matter(raw);
     const existingFqcId = parsed.data[FM.ID] as string | undefined;
-    const oldFqcId = existingFqcId; // Track original ID to detect changes
 
-    // Step 1: Validate UUID format
-    let validatedFqcId: string | undefined;
-    if (existingFqcId) {
-      if (isValidUuid(existingFqcId)) {
-        validatedFqcId = existingFqcId;
-      } else {
-        log.warn(
-          `targetedScan: malformed fqc_id="${existingFqcId}" in "${resolved.relativePath}" — attempting path fallback`
-        );
-      }
-    }
-
-    // Step 2: DB ownership check
-    if (validatedFqcId) {
-      const { data: ownerRow } = await supabase
-        .from('fqc_documents')
-        .select('id, path')
-        .eq('id', validatedFqcId)
-        .eq('instance_id', config.instance.id)
-        .single();
-
-      if (ownerRow && (ownerRow as { path: string }).path === resolved.relativePath) {
-        // Ownership confirmed — use existing fqc_id
-        parsed.data[FM.ID] = validatedFqcId;
-      } else if (!ownerRow) {
-        // Foreign UUID — adopt as-is
-        log.info(
-          `targetedScan: adopted foreign UUID=${validatedFqcId} for "${resolved.relativePath}"`
-        );
-        parsed.data[FM.ID] = validatedFqcId;
-      } else {
-        // UUID owned by different file — fall through to path-based fallback
-        log.warn(
-          `targetedScan: fqc_id=${validatedFqcId} is not owned by "${resolved.relativePath}" — falling back`
-        );
-        validatedFqcId = undefined;
-      }
-    }
-
-    // Step 3: Path-based fallback
-    if (!validatedFqcId) {
-      const { data: pathRow } = await supabase
-        .from('fqc_documents')
-        .select('id, path')
-        .eq('path', resolved.relativePath)
-        .eq('instance_id', config.instance.id)
-        .single();
-
-      if (pathRow) {
-        const reconnectedId = (pathRow as { id: string }).id;
-        log.info(`targetedScan: path-based reconnect for "${resolved.relativePath}" → fqc_id=${reconnectedId}`);
-        parsed.data[FM.ID] = reconnectedId;
-        validatedFqcId = reconnectedId;
-      }
-    }
-
-    // Step 4: Generate new fqc_id if needed
-    if (!validatedFqcId) {
-      validatedFqcId = uuidv4();
-      parsed.data[FM.ID] = validatedFqcId;
-    }
-
-    // Step 4a: Call propagateFqcIdChange if identity changed (PLG-03)
-    const newFqcId = validatedFqcId;
-    if (oldFqcId && newFqcId && oldFqcId !== newFqcId) {
-      try {
-        await propagateFqcIdChange(
-          supabase,
-          oldFqcId,
-          newFqcId,
-          resolved.relativePath,
-          new Map(), // pathToRow not available in MCP tool context, empty map for fallback
-          log,
-          process.env.DATABASE_URL
-        );
-      } catch (propError) {
-        log.warn(
-          `Failed to propagate during targeted pre-scan: ${propError instanceof Error ? propError.message : String(propError)}`
-        );
-        // Continue — propagation failure should not block MCP tool execution
-      }
-    }
-
-    // Apply frontmatter field rules (D-06 through D-10)
-    // Track whether frontmatter needs updating to avoid spurious rewrites (which change
-    // the `updated` timestamp and invalidate content_hash comparisons).
+    // Cheap pre-lock predicate only. Identity resolution, UUID generation, DB
+    // lookups, and propagation are performed after re-reading inside the lock.
     let frontmatterChanged = false;
-
-    // fqc_id: already set above — detect if it changed
-    if (parsed.data[FM.ID] !== existingFqcId) {
+    if (!existingFqcId || !isValidUuid(existingFqcId)) {
       frontmatterChanged = true;
     }
-
-    // created: set to now if missing
-    if (!parsed.data[FM.CREATED]) {
-      parsed.data[FM.CREATED] = new Date().toISOString();
-      frontmatterChanged = true;
-    }
-    // status: preserve if present, set to 'active' if missing
     if (!parsed.data[FM.STATUS]) {
-      parsed.data[FM.STATUS] = 'active';
       frontmatterChanged = true;
     }
-
-    // SPEC-08: content_hash is DB-only — must NOT appear in vault frontmatter.
-    // If it was written to the file by an older code path, remove it defensively.
+    if (!parsed.data[FM.CREATED]) {
+      frontmatterChanged = true;
+    }
     if ('content_hash' in parsed.data) {
-      delete parsed.data.content_hash;
       frontmatterChanged = true;
     }
-
-    // Do NOT touch: updated, title, tags, project, author, or other fields
 
     // Write updated frontmatter to vault only if something actually changed.
     // Re-read while holding the document lock so a repair cannot serialize stale
     // content over a concurrent writer that acquired the same lock first.
     let snapshotContentHash = newContentHash;
-    let snapshotFqcId = validatedFqcId;
+    let snapshotFqcId = existingFqcId && isValidUuid(existingFqcId)
+      ? existingFqcId
+      : (resolved.fqcId ?? existingFqcId ?? '');
     let snapshotCreated = parsed.data[FM.CREATED] as string;
     let snapshotStatus = parsed.data[FM.STATUS] as string;
+    let snapshotRawContent: string | undefined;
     if (frontmatterChanged) {
       const lockedSnapshot = await withAncestorDirectoryLocksShared(
         config,
@@ -571,20 +477,21 @@ export async function targetedScan(
             }
 
             const shouldWriteLockedRepair = lockedFrontmatterChanged || frontmatterChanged;
-            const lockedContentHash = shouldWriteLockedRepair
+            const lockedWriteResult = shouldWriteLockedRepair
               ? await writeMarkdownFile(
                   config,
                   resolved.absPath,
                   lockedParsed.data,
                   lockedParsed.content
                 )
-              : computeHash(lockedRaw);
+              : undefined;
 
             return {
               fqcId: lockedValidatedFqcId,
               created: lockedParsed.data[FM.CREATED] as string,
               status: lockedParsed.data[FM.STATUS] as string,
-              contentHash: lockedContentHash,
+              contentHash: lockedWriteResult?.contentHash ?? computeHash(lockedRaw),
+              rawContent: lockedWriteResult?.rawContent,
             };
           }
         )
@@ -593,6 +500,7 @@ export async function targetedScan(
       snapshotCreated = lockedSnapshot.created;
       snapshotStatus = lockedSnapshot.status;
       snapshotContentHash = lockedSnapshot.contentHash;
+      snapshotRawContent = lockedSnapshot.rawContent;
     }
 
     // Build and return snapshot
@@ -601,11 +509,12 @@ export async function targetedScan(
       created: snapshotCreated,
       status: snapshotStatus,
       contentHash: snapshotContentHash,
+      rawContent: snapshotRawContent,
     };
 
     return {
       ...resolved,
-      fqcId: validatedFqcId,
+      fqcId: snapshotFqcId,
       capturedFrontmatter: snapshot,
     };
   } catch (fileErr) {

@@ -126,6 +126,26 @@ function makeDocType(overrides: Partial<{
   };
 }
 
+function makeLockConfig() {
+  return {
+    instance: {
+      name: 'test',
+      id: 'instance-1',
+      vault: { path: '/vault', markdownExtensions: ['.md'] },
+    },
+    server: { host: '127.0.0.1', port: 0 },
+    supabase: { url: 'http://localhost', serviceRoleKey: 'test', databaseUrl: 'postgres://fake/test', skipDdl: true },
+    git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
+    mcp: { transport: 'stdio' },
+    locking: { enabled: true, lockTimeoutSeconds: 10 },
+    trashFolder: { enabled: true, path: '.trash', collisionStrategy: 'suffix' },
+    mcpServers: {},
+    host: { mcpServers: [], toolSearch: 'disabled' },
+    macro: { defaultTimeoutMs: 1000 },
+    logging: { level: 'error', output: 'stdout' },
+  } as any;
+}
+
 function setupPluginEntry(docTypes?: ReturnType<typeof makeDocType>[]) {
   const types = docTypes ?? [makeDocType()];
   vi.mocked(pluginManager.getEntry).mockReturnValue({
@@ -728,23 +748,7 @@ describe('executeReconciliationActions — RECON-05 added path (post-write updat
       'default',
       'instance-1',
       'postgres://fake/test',
-      {
-        instance: {
-          name: 'test',
-          id: 'instance-1',
-          vault: { path: '/vault', markdownExtensions: ['.md'] },
-        },
-        server: { host: '127.0.0.1', port: 0 },
-        supabase: { url: 'http://localhost', serviceRoleKey: 'test', databaseUrl: 'postgres://fake/test', skipDdl: true },
-        git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
-        mcp: { transport: 'stdio' },
-        locking: { enabled: true, lockTimeoutSeconds: 10 },
-        trashFolder: { enabled: true, path: '.trash', collisionStrategy: 'suffix' },
-        mcpServers: {},
-        host: { mcpServers: [], toolSearch: 'disabled' },
-        macro: { defaultTimeoutMs: 1000 },
-        logging: { level: 'error', output: 'stdout' },
-      }
+      makeLockConfig()
     );
 
     expect(withAncestorDirectoryLocksShared).toHaveBeenCalledWith(
@@ -763,6 +767,54 @@ describe('executeReconciliationActions — RECON-05 added path (post-write updat
       expect.any(Object)
     );
     expect(events).toEqual(['directory:start', 'document:start', 'frontmatter', 'document:end', 'directory:end']);
+  });
+
+  it('T-U-038a rejects added-document frontmatter writes when no lock config is supplied', async () => {
+    const addedDoc = {
+      fqcId: 'doc-missing-lock-config',
+      path: 'CRM/Contacts/missing-lock-config.md',
+      typeId: 'contact',
+      tableName: 'fqcp_crm_default_contacts',
+    };
+    setupPluginEntry();
+
+    const chain: Record<string, unknown> = {};
+    chain.select = vi.fn().mockReturnValue(chain);
+    chain.eq = vi.fn().mockReturnValue(chain);
+    chain.single = vi.fn().mockResolvedValue({
+      data: { updated_at: '2026-04-20T10:01:00Z', content_hash: 'hash-post' },
+      error: null,
+    });
+    chain.insert = vi.fn().mockResolvedValue({ data: null, error: null });
+    chain.update = vi.fn().mockReturnValue(chain);
+    chain.delete = vi.fn().mockReturnValue(chain);
+    vi.mocked(supabaseManager.getClient).mockReturnValue({
+      from: vi.fn().mockReturnValue(chain),
+    } as any);
+    vi.mocked(createPgClientIPv4).mockReturnValue({
+      connect: vi.fn().mockResolvedValue(undefined),
+      query: vi.fn().mockResolvedValue({ rows: [], rowCount: 1 }),
+      end: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    await expect(
+      executeReconciliationActions(
+        {
+          added: [addedDoc],
+          resurrected: [],
+          deleted: [],
+          disassociated: [],
+          moved: [],
+          modified: [],
+          unchanged: 0,
+        },
+        'crm',
+        'default',
+        'instance-1',
+        'postgres://fake/test'
+      )
+    ).rejects.toThrow('executeReconciliationActions requires lockConfig for added-document frontmatter writes');
+    expect(atomicWriteFrontmatter).not.toHaveBeenCalled();
   });
 
   it('RECON-05: writes frontmatter, INSERTs plugin row with post-write updated_at from fqc_documents re-query', async () => {
@@ -839,7 +891,14 @@ describe('executeReconciliationActions — RECON-05 added path (post-write updat
 
     // Act
     await expect(
-      executeReconciliationActions(reconciliationResult, 'crm', 'default')
+      executeReconciliationActions(
+        reconciliationResult,
+        'crm',
+        'default',
+        'instance-1',
+        'postgres://fake/test',
+        makeLockConfig()
+      )
     ).resolves.toBeDefined();
 
     // Assert 1 — atomicWriteFrontmatter was called once (fqc_owner written)
@@ -847,6 +906,7 @@ describe('executeReconciliationActions — RECON-05 added path (post-write updat
     expect(vi.mocked(atomicWriteFrontmatter)).toHaveBeenCalledWith(
       expect.stringContaining('recon05.md'),
       expect.objectContaining({ fq_owner: 'crm', fq_type: 'contact' }),
+      expect.any(Object),
     );
 
     // Assert 2 — pg.query called at least once for the INSERT into the plugin table

@@ -2,6 +2,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import matter from 'gray-matter';
+import { FM } from '../../src/constants/frontmatter-fields.js';
+import { __testing as documentLockTesting } from '../../src/services/document-lock.js';
 import { HAS_SUPABASE } from '../helpers/test-env.js';
 import {
   createPhase155Harness,
@@ -53,12 +56,67 @@ describe.skipIf(!HAS_SUPABASE)('REQ-014 token equals disk integration', () => {
     const beforeHash = sha256(beforeRaw);
 
     const result = await harness.handlers.get_document({ identifiers: relativePath, include: ['frontmatter', 'body'] });
-    const payload = parseToolJson<{ version_token?: string }>(result);
+    const payload = parseToolJson<{
+      body?: string;
+      fq_id?: string;
+      frontmatter?: Record<string, unknown>;
+      version_token?: string;
+    }>(result);
     const afterRaw = await readFile(absPath, 'utf-8');
+    const afterParsed = matter(afterRaw);
 
     expect(afterRaw).not.toBe(beforeRaw);
     expect(payload.version_token).toBe(sha256(afterRaw));
     expect(payload.version_token).not.toBe(beforeHash);
+    expect(payload.frontmatter?.[FM.ID]).toBe(payload.fq_id);
+    expect(payload.frontmatter).toMatchObject(afterParsed.data);
+    expect(payload.body).toBe(afterParsed.content);
+  });
+
+  it('T-I-026a repair-triggered get_document holds ancestor directory and document locks at runtime', async () => {
+    const relativePath = 'phase162/repair-lock-trace.md';
+    const absPath = join(harness.vaultPath, relativePath);
+    await mkdir(dirname(absPath), { recursive: true });
+    await writeFile(absPath, '---\nfq_title: Repair Lock Trace\n---\nMissing fq_id triggers repair.\n');
+
+    const previousLocking = harness.config.locking.enabled;
+    harness.config.locking.enabled = true;
+    try {
+      await documentLockTesting.withAdvisoryLockTrace(async (trace) => {
+        const result = await harness.handlers.get_document({ identifiers: relativePath, include: ['frontmatter'] });
+        expect((result as { isError?: boolean }).isError).toBeFalsy();
+
+        expect(trace.some((entry) => entry.label === 'document' && entry.mode === 'exclusive')).toBe(true);
+        const directoryEntries = trace.filter((entry) => entry.label === 'directory' && entry.mode === 'shared');
+        expect(directoryEntries.length).toBeGreaterThanOrEqual(2);
+        expect(trace.findIndex((entry) => entry.label === 'directory')).toBeLessThan(
+          trace.findIndex((entry) => entry.label === 'document')
+        );
+      });
+    } finally {
+      harness.config.locking.enabled = previousLocking;
+    }
+  });
+
+  it('T-U-037 runtime cache-hit get_document path acquires no advisory locks', async () => {
+    const created = await writeDocument(
+      harness.handlers,
+      'phase162/cache-hit-lock-free.md',
+      'Cache Hit Lock Free',
+      'cache hit body'
+    );
+
+    const previousLocking = harness.config.locking.enabled;
+    harness.config.locking.enabled = true;
+    try {
+      await documentLockTesting.withAdvisoryLockTrace(async (trace) => {
+        const result = await harness.handlers.get_document({ identifiers: String(created.fq_id), include: ['frontmatter'] });
+        expect((result as { isError?: boolean }).isError).toBeFalsy();
+        expect(trace).toEqual([]);
+      });
+    } finally {
+      harness.config.locking.enabled = previousLocking;
+    }
   });
 
   it('T-I-027 follow-up write_document accepts the post-repair returned token', async () => {

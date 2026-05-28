@@ -155,7 +155,29 @@ describe('plugin reconciliation write routing', () => {
       'routing-plugin',
       'default',
       'fqc-test-instance',
-      'postgresql://localhost/test'
+      'postgresql://localhost/test',
+      {
+        instance: {
+          name: 'test',
+          id: 'fqc-test-instance',
+          vault: { path: '/vault', markdownExtensions: ['.md'] },
+        },
+        server: { host: '127.0.0.1', port: 0 },
+        supabase: {
+          url: 'http://localhost',
+          serviceRoleKey: 'test',
+          databaseUrl: 'postgresql://localhost/test',
+          skipDdl: true,
+        },
+        git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
+        mcp: { transport: 'stdio' },
+        locking: { enabled: false, lockTimeoutSeconds: 10 },
+        trashFolder: { enabled: false, path: '.trash', collisionStrategy: 'suffix' },
+        mcpServers: {},
+        host: { mcpServers: [], toolSearch: 'disabled' },
+        macro: { defaultTimeoutMs: 1000 },
+        logging: { level: 'error', output: 'stdout' },
+      } as any
     );
 
     expect(mocks.writeVaultFile).toHaveBeenCalledTimes(1);

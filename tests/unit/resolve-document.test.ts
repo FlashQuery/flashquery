@@ -90,6 +90,7 @@ import * as fsPromises from 'node:fs/promises';
 import { listMarkdownFiles } from '../../src/storage/document-primitives.js';
 import { writeVaultFile } from '../../src/storage/vault-write.js';
 import { logger } from '../../src/logging/logger.js';
+import { propagateFqcIdChange } from '../../src/services/plugin-propagation.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -645,5 +646,29 @@ describe('PLG-03: targetedScan propagation', () => {
     expect(result.capturedFrontmatter.created).toBeDefined();
     expect(result.capturedFrontmatter.status).toBe('active');
     expect(result.capturedFrontmatter.contentHash).toBe('test-hash');
+  });
+
+  it('PLG-03: malformed fqc_id repair propagates once using the id written under the document lock', async () => {
+    mockUuid.v4
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000aa')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000bb');
+    vi.mocked(fsPromises.readFile).mockResolvedValue(
+      `---\nfq_id: malformed-id\nfq_title: Broken Identity\n---\n# Content` as never
+    );
+    const supabase = makeSupabaseMock({ data: null, error: null });
+
+    const result = await targetedScan(config, supabase as never, RESOLVED_NO_ID, 'test-hash', logger);
+
+    expect(propagateFqcIdChange).toHaveBeenCalledTimes(1);
+    expect(propagateFqcIdChange).toHaveBeenCalledWith(
+      supabase,
+      'malformed-id',
+      result.capturedFrontmatter.fqcId,
+      RESOLVED_NO_ID.relativePath,
+      expect.any(Map),
+      logger,
+      process.env.DATABASE_URL
+    );
+    expect(result.fqcId).toBe(result.capturedFrontmatter.fqcId);
   });
 });

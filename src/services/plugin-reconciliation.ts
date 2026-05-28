@@ -412,11 +412,10 @@ export async function executeReconciliationActions(
           [FM.OWNER]: pluginId,
           [FM.TYPE]: doc.typeId,
         };
-        if (lockConfig) {
-          await atomicWriteFrontmatter(absPath, updates, lockConfig);
-        } else {
-          await atomicWriteFrontmatter(absPath, updates);
+        if (!lockConfig) {
+          throw new Error('executeReconciliationActions requires lockConfig for added-document frontmatter writes');
         }
+        await atomicWriteFrontmatter(absPath, updates, lockConfig);
         const updatedRaw = await readFile(absPath, 'utf-8');
         const updatedHash = computeHash(updatedRaw);
         const parsed = matter(updatedRaw);

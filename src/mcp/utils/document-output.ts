@@ -452,7 +452,10 @@ export async function resolveAndBuildDocument(
   const relativePath = preScan.relativePath;
   const fqcId = preScan.capturedFrontmatter.fqcId;
   const versionToken = preScan.capturedFrontmatter.contentHash;
-  const { data, content } = parsed;
+  const responseParsed = preScan.capturedFrontmatter.rawContent
+    ? matter(preScan.capturedFrontmatter.rawContent)
+    : parsed;
+  const { data, content } = responseParsed;
 
   log.info(`get_document: read ${relativePath}`);
 
