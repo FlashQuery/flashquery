@@ -80,7 +80,7 @@ Phase 164 is a focused lock-contract closure: the existing vault coherency primi
 
 The second gap is plugin reconciliation: `executeReconciliationActions` writes ownership/type frontmatter via `atomicWriteFrontmatter(toAbsolutePath(doc.path), ...)`, and `atomicWriteFrontmatter` delegates to `writeVaultFile` with an optional lock config but does not acquire the document-path lock itself. [VERIFIED: src/services/plugin-reconciliation.ts:380] [VERIFIED: src/utils/frontmatter.ts:38] Existing records/plugin sequencing must stay intact; plugin coordination serialization and document-file locking solve different problems. [CITED: Vault Write Coherency Locking Requirements.md Sec. 6.5.1]
 
-**Primary recommendation:** Add a narrow document-write-contract wrapper for side-effect frontmatter repair/reconciliation writes: `withAncestorDirectoryLocksShared(config, absPath, () => withDocumentLock(config, absPath, () => write...))`, and keep pure `get_document` cache-hit reads lock-free. [VERIFIED: src/mcp/tools/documents/write.ts:138] [VERIFIED: tests/unit/get-document-no-lock.test.ts]
+**Primary recommendation:** Add a narrow document-write-contract wrapper for side-effect frontmatter repair/reconciliation writes: `withAncestorDirectoryLocksShared(config, absPath, () => withDocumentLock(config, absPath, () => write...))`. For `get_document`, place this wrapper at the actual repair-write branch after `targetedScan` has determined `frontmatterChanged` is true; do not wrap the stale/missing-hash scan generally, because that branch can complete without any repair write. Keep pure `get_document` cache-hit reads and stale/missing-hash reads with no repair lock-free. [VERIFIED: src/mcp/tools/documents/write.ts:138] [VERIFIED: tests/unit/get-document-no-lock.test.ts]
 
 ## Architectural Responsibility Map
 
@@ -346,22 +346,22 @@ FQC_LOCK_ASSERT=true npm test -- tests/unit/document-output-version-token.test.t
 | A1 | `targetedScan` is the only `get_document` path that can perform a read-triggered vault-file repair write. [ASSUMED] | Summary / Architecture Patterns | Planner may miss another read-triggered repair call path; mitigate with `rg writeVaultFile src/mcp src/services src/utils` during Wave 0. |
 | A2 | Adding a lock wrapper inside `targetedScan` or a local repair helper is safer than locking in `document-output.ts` because it can be conditional on `frontmatterChanged`. [ASSUMED] | Primary recommendation | If helper signatures make that awkward, planner can wrap only a new `repairWriteMarkdownFile` call site while preserving pure read tests. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Where should the narrow wrapper live?**
    - What we know: `writeMarkdownFile` in `document-resolver-primitives.ts` is private and already returns the post-write hash. [VERIFIED: src/mcp/utils/document-resolver-primitives.ts:102]
-   - What's unclear: Whether the implementation should wrap inside `writeMarkdownFile` or split a `writeMarkdownFileLocked` helper to avoid locking non-repair uses.
-   - Recommendation: Prefer the smallest helper that locks only when `frontmatterChanged` is true; add a unit/static test if the branch is easy to isolate. [ASSUMED]
+   - RESOLVED: The wrapper must live at the actual repair-write point, likely inside `targetedScan` or a narrow repair-write helper that surrounds `writeMarkdownFile` / `writeVaultFile` only after `frontmatterChanged` is true. Do not wrap the stale/missing-hash `targetedScan` call generally, because D-03 allows `get_document` to enter the write lock contract only when repair will actually write.
+   - Implementation decision: Tests must cover three paths independently: cache hit no lock, stale/missing hash with no repair no lock, and repair write with `withAncestorDirectoryLocksShared` outside `withDocumentLock` before `writeVaultFile`.
 
 2. **Should `atomicWriteFrontmatter` require `lockConfig`?**
    - What we know: The helper currently accepts optional `lockConfig` and passes it to `writeVaultFile`. [VERIFIED: src/utils/frontmatter.ts:38]
-   - What's unclear: Making it required may touch more tests/callers than necessary.
-   - Recommendation: Keep the signature compatible, but make plugin reconciliation pass config and acquire the ambient lock before calling. [ASSUMED]
+   - RESOLVED: Keep the `atomicWriteFrontmatter` signature compatible unless implementation evidence shows a required parameter is necessary. Plugin reconciliation must call it under the document-path lock contract and pass the config/lock assertion context through to `writeVaultFile`.
+   - Implementation decision: Do not make `writeVaultFile` acquire locks, and do not import document-lock helpers into `src/utils/frontmatter.ts`; lock acquisition belongs at the plugin reconciliation call site or a narrow reconciliation helper.
 
 3. **Is `D-WCO-06` still required as a directed scenario?**
    - What we know: Existing integration tests cover `T-I-026` and `T-I-027` for the same repair-token regression. [VERIFIED: tests/integration/token-equals-disk.integration.test.ts]
-   - What's unclear: Whether the directed scenario exists and is stable in this repo.
-   - Recommendation: Planner may accept equivalent focused integration coverage only if the plan records why `D-WCO-06` is superseded, per D-07 discretion. [VERIFIED: 164-CONTEXT.md]
+   - RESOLVED: Keep `D-WCO-06` as required evidence when it is applicable and runnable. If an executor skips it, the executor must document concrete equivalent focused integration evidence, including why T-I-026/T-I-027/T-I-028 cover the same source requirement and why the directed scenario is superseded for this phase.
+   - Implementation decision: Plan 03 must either run `python3 tests/scenarios/directed/run_suite.py --managed read_triggered_repair_token` or record the focused integration substitute in `164-VALIDATION.md` and the plan summary.
 
 ## Environment Availability
 
