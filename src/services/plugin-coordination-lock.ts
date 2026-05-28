@@ -28,13 +28,49 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function acquireTier1StripeWithTimeout(
+  stripeIndex: number,
+  lockKey: string,
+  deadline: number,
+  timeoutSeconds: number
+): Promise<() => void> {
+  let timeout: NodeJS.Timeout | undefined;
+  let acquired = false;
+  const acquire = pluginLockStripes[stripeIndex].acquire();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(
+      () => reject(new LockTimeoutError(lockKey, timeoutSeconds)),
+      remainingMs(deadline)
+    );
+    timeout.unref?.();
+  });
+
+  try {
+    const release = await Promise.race([acquire, timeoutPromise]);
+    acquired = true;
+    return release;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    if (!acquired) {
+      acquire.then((release) => release()).catch(() => undefined);
+    }
+  }
+}
+
 export async function withPluginCoordinationLock<T>(
   config: FlashQueryConfig,
   input: { pluginId: string; pluginInstance: string },
   fn: () => Promise<T>
 ): Promise<T> {
   const lockKey = `plugin:${config.instance.id}:${input.pluginId}:${input.pluginInstance}`;
-  const releaseTier1 = await pluginLockStripes[hashString(lockKey) % PLUGIN_LOCK_STRIPE_COUNT].acquire();
+  const configuredTimeoutSeconds = config.locking.lockTimeoutSeconds ?? 10;
+  const acquireDeadline = Date.now() + timeoutMs(config);
+  const releaseTier1 = await acquireTier1StripeWithTimeout(
+    hashString(lockKey) % PLUGIN_LOCK_STRIPE_COUNT,
+    lockKey,
+    acquireDeadline,
+    configuredTimeoutSeconds
+  );
 
   try {
     if (!config.locking.enabled) {
@@ -42,8 +78,6 @@ export async function withPluginCoordinationLock<T>(
     }
 
     return await withPgClient(config.supabase.databaseUrl, async (client) => {
-      const acquireDeadline = Date.now() + timeoutMs(config);
-      const configuredTimeoutSeconds = config.locking.lockTimeoutSeconds ?? 10;
       let acquired = false;
 
       try {

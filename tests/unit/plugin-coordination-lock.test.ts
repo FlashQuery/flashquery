@@ -32,7 +32,7 @@ class FakePoolClient {
   }
 }
 
-function makeConfig(lockTimeoutSeconds = 0.05): FlashQueryConfig {
+function makeConfig(lockTimeoutSeconds = 0.05, lockingEnabled = true): FlashQueryConfig {
   return {
     instance: {
       name: 'plugin-coordination-lock-test',
@@ -45,7 +45,7 @@ function makeConfig(lockTimeoutSeconds = 0.05): FlashQueryConfig {
       databaseUrl: 'postgres://fq/test',
       skipDdl: true,
     },
-    locking: { enabled: true, lockTimeoutSeconds },
+    locking: { enabled: lockingEnabled, lockTimeoutSeconds },
   } as FlashQueryConfig;
 }
 
@@ -95,5 +95,54 @@ describe('REQ-023 plugin coordination lock', () => {
     );
     expect(clients).toHaveLength(2);
     expect(clients[1].released).toBe(true);
+  });
+
+  it('times out same-process Tier 1 contention and releases the stripe for later callers', async () => {
+    const { clients } = installFakePool(() => true);
+    const plugin = { pluginId: 'crm', pluginInstance: 'default' };
+    let releaseHolder: (() => void) | undefined;
+    let holderPromise: Promise<void> | undefined;
+    const holderEntered = new Promise<void>((resolve) => {
+      holderPromise = withPluginCoordinationLock(makeConfig(), plugin, async () => {
+        resolve();
+        await new Promise<void>((release) => {
+          releaseHolder = release;
+        });
+      });
+    });
+    await holderEntered;
+
+    await expect(
+      withPluginCoordinationLock(makeConfig(), plugin, async () => 'blocked')
+    ).rejects.toMatchObject({
+      name: 'LockTimeoutError',
+      reason: 'lock_timeout',
+      timeoutSeconds: 0.05,
+    });
+    expect(clients).toHaveLength(1);
+
+    releaseHolder?.();
+    await holderPromise;
+    await expect(withPluginCoordinationLock(makeConfig(), plugin, async () => 'entered')).resolves.toBe(
+      'entered'
+    );
+    expect(clients).toHaveLength(2);
+    expect(clients.every((client) => client.released)).toBe(true);
+  });
+
+  it('bypasses the PG advisory lock when locking is disabled', async () => {
+    const { clients } = installFakePool(() => {
+      throw new Error('PG advisory lock should not be acquired');
+    });
+
+    await expect(
+      withPluginCoordinationLock(
+        makeConfig(0.05, false),
+        { pluginId: 'crm', pluginInstance: 'default' },
+        async () => 'entered'
+      )
+    ).resolves.toBe('entered');
+
+    expect(clients).toHaveLength(0);
   });
 });
