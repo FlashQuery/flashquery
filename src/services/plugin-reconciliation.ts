@@ -125,6 +125,15 @@ type FrontmatterReadResult =
   | { ok: true; data: Record<string, unknown> }
   | { ok: false };
 
+function throwIfSupabaseError(
+  context: string,
+  result: { error?: { message?: string } | null }
+): void {
+  if (result.error) {
+    throw new Error(`${context}: ${result.error.message ?? 'unknown Supabase error'}`);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Staleness cache helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -141,6 +150,10 @@ function isWithinStaleness(pluginId: string, instanceId: string): boolean {
 
 function markReconciled(pluginId: string, instanceId: string): void {
   reconciliationTimestamps.set(staleCacheKey(pluginId, instanceId), Date.now());
+}
+
+export function markPluginReconciled(pluginId: string, instanceId: string): void {
+  markReconciled(pluginId, instanceId);
 }
 
 function emptyResult(): ReconciliationResult {
@@ -356,7 +369,7 @@ export async function executeReconciliationActions(
         // 'ignore' or undefined → no additional action; pending review still created below
       }
 
-      await supabase.from('fqc_pending_plugin_review').insert({
+      const resurrectedReview = await supabase.from('fqc_pending_plugin_review').insert({
         fqc_id: ref.fqcId,
         plugin_id: pluginId,
         instance_id: fqcInstanceId ?? instanceId ?? 'default',
@@ -364,6 +377,7 @@ export async function executeReconciliationActions(
         review_type: 'resurrected',
         context: {},
       });
+      throwIfSupabaseError(`Failed to create resurrected pending review for ${ref.fqcId}`, resurrectedReview);
       pendingReviewsCreated++;
     }
 
@@ -376,40 +390,57 @@ export async function executeReconciliationActions(
         continue;
       }
 
-      // OQ-3: Check existing frontmatter ownership BEFORE writing
-      const existingFrontmatter = await tryReadFrontmatterFromDisk(doc.path);
-      if (!existingFrontmatter.ok) continue;
-      const existingFm = existingFrontmatter.data;
-      const existingOwner = existingFm[FM.OWNER];
-      const shouldWriteFrontmatter = !existingOwner || existingOwner === pluginId;
-
-      if (shouldWriteFrontmatter) {
-        const absPath = toAbsolutePath(doc.path);
+      const absPath = toAbsolutePath(doc.path);
+      const applyAddedFrontmatter = async (): Promise<{
+        postWriteFrontmatter: FrontmatterReadResult;
+        shouldWriteFrontmatter: boolean;
+        updatedHash?: string;
+      }> => {
+        // OQ-3: Check existing frontmatter ownership while holding the same
+        // document lock that protects the optional frontmatter write.
+        const existingFrontmatter = await tryReadFrontmatterFromDisk(doc.path);
+        if (!existingFrontmatter.ok) {
+          return { postWriteFrontmatter: existingFrontmatter, shouldWriteFrontmatter: false };
+        }
+        const existingFm = existingFrontmatter.data;
+        const existingOwner = existingFm[FM.OWNER];
+        const shouldWriteFrontmatter = !existingOwner || existingOwner === pluginId;
+        if (!shouldWriteFrontmatter) {
+          return { postWriteFrontmatter: existingFrontmatter, shouldWriteFrontmatter };
+        }
         const updates = {
           [FM.OWNER]: pluginId,
           [FM.TYPE]: doc.typeId,
         };
-        const writeFrontmatter = () => lockConfig
-          ? atomicWriteFrontmatter(absPath, updates, lockConfig)
-          : atomicWriteFrontmatter(absPath, updates);
         if (lockConfig) {
-          await withAncestorDirectoryLocksShared(lockConfig, absPath, () =>
-            withDocumentLock(lockConfig, absPath, writeFrontmatter)
-          );
+          await atomicWriteFrontmatter(absPath, updates, lockConfig);
         } else {
-          await writeFrontmatter();
+          await atomicWriteFrontmatter(absPath, updates);
         }
-      } else {
+        const updatedRaw = await readFile(absPath, 'utf-8');
+        const updatedHash = computeHash(updatedRaw);
+        const parsed = matter(updatedRaw);
+        return {
+          postWriteFrontmatter: { ok: true, data: parsed.data ?? {} },
+          shouldWriteFrontmatter,
+          updatedHash,
+        };
+      };
+
+      const frontmatterResult = lockConfig
+        ? await withAncestorDirectoryLocksShared(lockConfig, absPath, () =>
+            withDocumentLock(lockConfig, absPath, applyAddedFrontmatter)
+          )
+        : await applyAddedFrontmatter();
+
+      if (!frontmatterResult.postWriteFrontmatter.ok) continue;
+      const { shouldWriteFrontmatter, updatedHash } = frontmatterResult;
+      const postWriteFm = frontmatterResult.postWriteFrontmatter.data;
+      if (!shouldWriteFrontmatter) {
+        const existingOwner = postWriteFm[FM.OWNER];
         // eslint-disable-next-line @typescript-eslint/no-base-to-string
         logger.debug(`[RECON] Document ${doc.path} already owned by ${typeof existingOwner === 'string' ? existingOwner : String(existingOwner)}, skipping frontmatter write for ${pluginId}`);
       }
-
-      // Re-read frontmatter for field_map application
-      const postWriteFrontmatter = shouldWriteFrontmatter
-        ? await tryReadFrontmatterFromDisk(doc.path)
-        : existingFrontmatter;
-      if (!postWriteFrontmatter.ok) continue;
-      const postWriteFm = postWriteFrontmatter.data;
       const fieldMapCols = applyFieldMap(policy.field_map, postWriteFm);
 
       // PIR-02 + ownership update: combine content_hash update and ownership write into a
@@ -425,44 +456,36 @@ export async function executeReconciliationActions(
       // so we only update the ownership fields (keeping updated_at in sync).
       const finalTs = new Date().toISOString();
       if (shouldWriteFrontmatter) {
-        try {
-          const absPath = toAbsolutePath(doc.path);
-          const updatedRaw = await readFile(absPath, 'utf-8');
-          const updatedHash = computeHash(updatedRaw);
-          await supabase
-            .from('fqc_documents')
-            .update({
-              content_hash: updatedHash,
-              ownership_plugin_id: pluginId,
-              ownership_type: doc.typeId,
-              updated_at: finalTs,
-            })
-            .eq('id', doc.fqcId);
-          logger.debug(`[RECON] PIR-02: updated content_hash + ownership in single write for ${doc.path}`);
-        } catch (hashErr) {
-          logger.warn(`[RECON] PIR-02: failed to update content_hash after frontmatter write for ${doc.path}: ${hashErr instanceof Error ? hashErr.message : String(hashErr)}`);
-          // Fall back to ownership-only update
-          await supabase
-            .from('fqc_documents')
-            .update({ ownership_plugin_id: pluginId, ownership_type: doc.typeId, updated_at: finalTs })
-            .eq('id', doc.fqcId);
-        }
+        const updateResult = await supabase
+          .from('fqc_documents')
+          .update({
+            content_hash: updatedHash,
+            ownership_plugin_id: pluginId,
+            ownership_type: doc.typeId,
+            updated_at: finalTs,
+          })
+          .eq('id', doc.fqcId);
+        throwIfSupabaseError(`Failed to update fqc_documents for ${doc.path}`, updateResult);
+        logger.debug(`[RECON] PIR-02: updated content_hash + ownership in single write for ${doc.path}`);
       } else {
         // No frontmatter written — content_hash is already current; update ownership only
-        await supabase
+        const ownershipUpdate = await supabase
           .from('fqc_documents')
           .update({ ownership_plugin_id: pluginId, ownership_type: doc.typeId, updated_at: finalTs })
           .eq('id', doc.fqcId);
+        throwIfSupabaseError(`Failed to update fqc_documents ownership for ${doc.path}`, ownershipUpdate);
       }
 
       // RECON-05 / D-13 + PIR-02: re-query fqc_documents.updated_at AFTER the combined update.
       // last_seen_updated_at must equal the final updated_at in fqc_documents so the next
       // reconcile classifies the doc as 'unchanged', not 'modified'.
-      const { data: postWriteRow } = await supabase
+      const postWriteResult = await supabase
         .from('fqc_documents')
         .select('updated_at, content_hash')
         .eq('id', doc.fqcId)
-        .single() as { data: { updated_at: string; content_hash: string } | null };
+        .single() as { data: { updated_at: string; content_hash: string } | null; error?: { message?: string } | null };
+      throwIfSupabaseError(`Failed to re-query fqc_documents after frontmatter write for ${doc.path}`, postWriteResult);
+      const postWriteRow = postWriteResult.data;
       const postWriteUpdatedAt = postWriteRow?.updated_at ?? finalTs;
 
       // INSERT plugin row — always include instance_id (NOT NULL) and last_seen_updated_at
@@ -495,7 +518,7 @@ export async function executeReconciliationActions(
         if (doc.designatedFolder) {
           reviewContext.designatedFolder = doc.designatedFolder;
         }
-        await supabase.from('fqc_pending_plugin_review').insert({
+        const templateReview = await supabase.from('fqc_pending_plugin_review').insert({
           fqc_id: doc.fqcId,
           plugin_id: pluginId,
           instance_id: rowInstanceId,
@@ -503,6 +526,7 @@ export async function executeReconciliationActions(
           review_type: 'template_available',
           context: reviewContext,
         });
+        throwIfSupabaseError(`Failed to create template pending review for ${doc.fqcId}`, templateReview);
         pendingReviewsCreated++;
       }
     }
@@ -512,10 +536,11 @@ export async function executeReconciliationActions(
       const sql = `UPDATE ${pg.escapeIdentifier(ref.tableName)} SET status = 'archived' WHERE id = $1`;
       await pgClient.query(sql, [ref.pluginRowId]);
       archived++;
-      await supabase.from('fqc_pending_plugin_review')
+      const deletePending = await supabase.from('fqc_pending_plugin_review')
         .delete()
         .eq('fqc_id', ref.fqcId)
         .eq('plugin_id', pluginId);
+      throwIfSupabaseError(`Failed to clear pending reviews for deleted ${ref.fqcId}`, deletePending);
       pendingReviewsCleared++;
     }
 
@@ -524,10 +549,11 @@ export async function executeReconciliationActions(
       const sql = `UPDATE ${pg.escapeIdentifier(ref.tableName)} SET status = 'archived' WHERE id = $1`;
       await pgClient.query(sql, [ref.pluginRowId]);
       archived++;
-      await supabase.from('fqc_pending_plugin_review')
+      const deletePending = await supabase.from('fqc_pending_plugin_review')
         .delete()
         .eq('fqc_id', ref.fqcId)
         .eq('plugin_id', pluginId);
+      throwIfSupabaseError(`Failed to clear pending reviews for disassociated ${ref.fqcId}`, deletePending);
       pendingReviewsCleared++;
     }
 
@@ -590,6 +616,7 @@ export async function reconcilePluginDocuments(
   pluginId: string,
   instanceId: string,
   databaseUrl?: string,
+  options: { markFresh?: boolean } = {},
 ): Promise<ReconciliationResult> {
   // Step A — Staleness check FIRST, before any DB or registry access (RECON-07 / RESEARCH.md pitfall)
   if (isWithinStaleness(pluginId, instanceId)) {
@@ -802,8 +829,11 @@ export async function reconcilePluginDocuments(
       }
     }
 
-    // Step I — Mark reconciled (inside try, before finally closes pgClient)
-    markReconciled(pluginId, instanceId);
+    // Step I — Mark reconciled for callers that only classify. Record tools defer
+    // this until action execution succeeds so failed writes do not poison staleness.
+    if (options.markFresh !== false) {
+      markReconciled(pluginId, instanceId);
+    }
   } finally {
     await pgClient.end();
   }

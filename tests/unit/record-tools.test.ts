@@ -10,6 +10,7 @@ vi.mock('../../src/storage/supabase.js', () => ({
 vi.mock('../../src/plugins/manager.js', () => ({
   pluginManager: {
     getTableSpec: vi.fn(),
+    getAllEntries: vi.fn(),
   },
   resolveTableName: vi.fn(() => 'fqcp_crm_unit_contacts'),
 }));
@@ -156,6 +157,7 @@ describe('record tools final surface', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setTableSpec();
+    vi.mocked(pluginManager.getAllEntries).mockReturnValue([]);
     vi.mocked(queryPgPool).mockResolvedValue({ rows: [] } as Awaited<ReturnType<typeof queryPgPool>>);
   });
 
@@ -277,6 +279,52 @@ describe('record tools final surface', () => {
 
     expect(result.isError).toBeUndefined();
     expectPluginCoordinationLock();
+  });
+
+  it('search_records taggable_tables_only filters scalar tag columns with equality', async () => {
+    const eq = vi.fn().mockReturnThis();
+    const contains = vi.fn().mockReturnThis();
+    const limit = vi.fn().mockResolvedValue({
+      data: [{ id: 'row-1', tag: 'vip', name: 'Ada' }],
+      error: null,
+    });
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq,
+      contains,
+      limit,
+    };
+    vi.mocked(pluginManager.getAllEntries).mockReturnValue([{
+      plugin_id: 'crm',
+      plugin_instance: 'unit',
+      table_prefix: 'fqcp_crm_unit_',
+      schema: {
+        plugin: { id: 'crm', name: 'CRM', version: '1.0.0' },
+        tables: [{
+          name: 'contacts',
+          columns: [
+            { name: 'name', type: 'text' },
+            { name: 'tag', type: 'text' },
+          ],
+        }],
+      },
+    }]);
+    vi.mocked(supabaseManager.getClient).mockReturnValue({
+      from: vi.fn(() => query),
+    } as unknown as ReturnType<typeof supabaseManager.getClient>);
+    const { server, getHandler } = makeServer();
+    registerRecordTools(server, makeConfig());
+
+    const result = await getHandler('search_records')({
+      tag: 'vip',
+      taggable_tables_only: true,
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(eq).toHaveBeenCalledWith('instance_id', 'unit');
+    expect(eq).toHaveBeenCalledWith('status', 'active');
+    expect(eq).toHaveBeenCalledWith('tag', 'vip');
+    expect(contains).not.toHaveBeenCalled();
   });
 
   it('T-U-023: filters-only search_records logs safe timing metadata on success', async () => {

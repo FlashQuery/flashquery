@@ -18,6 +18,7 @@ import { queryPgPool } from '../../utils/pg-client.js';
 import {
   reconcilePluginDocuments,
   executeReconciliationActions,
+  markPluginReconciled,
 } from '../../services/plugin-reconciliation.js';
 import type { ReconciliationActionSummary } from '../../services/plugin-reconciliation.js';
 import {
@@ -163,7 +164,12 @@ async function runScopedReconciliation(
     config,
     { pluginId, pluginInstance: instanceName },
     async () => {
-      const result = await reconcilePluginDocuments(pluginId, instanceName, config.supabase.databaseUrl);
+      const result = await reconcilePluginDocuments(
+        pluginId,
+        instanceName,
+        config.supabase.databaseUrl,
+        { markFresh: false }
+      );
       const actionSummary = await executeReconciliationActions(
         result,
         pluginId,
@@ -172,6 +178,7 @@ async function runScopedReconciliation(
         config.supabase.databaseUrl,
         config
       );
+      markPluginReconciled(pluginId, instanceName);
       return buildReconciliationPayload(actionSummary);
     }
   );
@@ -637,17 +644,47 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             });
           }
 
+          const reconciliationPayloads: Record<string, unknown>[] = [];
+          const reconciledPlugins = new Set<string>();
+          for (const item of taggable) {
+            const key = `${item.entry.plugin_id}:${item.entry.plugin_instance}`;
+            if (reconciledPlugins.has(key)) continue;
+            reconciledPlugins.add(key);
+            try {
+              const payload = await runScopedReconciliation(
+                config,
+                item.entry.plugin_id,
+                item.entry.plugin_instance
+              );
+              if (payload !== undefined) {
+                reconciliationPayloads.push({
+                  plugin_id: item.entry.plugin_id,
+                  plugin_instance: item.entry.plugin_instance,
+                  ...payload,
+                });
+              }
+            } catch (err) {
+              logger.warn(`[record tool] taggable reconciliation warning: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+
           const rows: Array<Record<string, unknown>> = [];
           for (const item of taggable) {
             const fullTableName = resolveTableName(item.entry.plugin_id, item.entry.plugin_instance, item.tableSpec.name);
-            const tagColumn = item.tableSpec.columns.some((column) => column.name === 'tags') ? 'tags' : 'tag';
-            const { data, error } = await supabaseManager.getClient()
+            const tagColumn = item.tableSpec.columns.find((column) => column.name === 'tags' || column.name === 'tag');
+            if (tagColumn === undefined) continue;
+
+            let qb = supabaseManager.getClient()
               .from(fullTableName)
               .select('*')
               .eq('instance_id', config.instance.id)
-              .eq('status', 'active')
-              .contains(tagColumn, tag === undefined ? [] : [tag])
-              .limit(maxResults);
+              .eq('status', 'active');
+
+            if (tag !== undefined) {
+              qb = qb.eq(tagColumn.name, tag);
+            }
+
+            const { data, error } = await qb.limit(maxResults);
             if (error) {
               logger.warn(`search_records taggable query failed for ${fullTableName}: ${error.message}`);
               continue;
@@ -665,6 +702,9 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             rows: rows.slice(0, maxResults),
             include: effectiveInclude,
             tableSpec: taggable[0].tableSpec,
+            reconciliation: reconciliationPayloads.length > 0
+              ? { taggable_tables: reconciliationPayloads }
+              : undefined,
           }));
         }
 

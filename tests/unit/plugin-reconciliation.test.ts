@@ -603,6 +603,72 @@ describe('reconcilePluginDocuments — missing plugin entry returns empty result
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('executeReconciliationActions — RECON-05 added path (post-write updated_at re-query)', () => {
+  it('throws when post-frontmatter fqc_documents content_hash update fails', async () => {
+    const addedDoc = {
+      fqcId: 'doc-update-fails',
+      path: 'CRM/Contacts/update-fails.md',
+      typeId: 'contact',
+      tableName: 'fqcp_crm_default_contacts',
+    };
+    setupPluginEntry();
+
+    const chain: Record<string, unknown> = {};
+    chain.select = vi.fn().mockReturnValue(chain);
+    chain.eq = vi.fn().mockReturnValue(chain);
+    chain.single = vi.fn().mockResolvedValue({
+      data: { updated_at: '2026-04-20T10:01:00Z', content_hash: 'hash-post' },
+      error: null,
+    });
+    chain.insert = vi.fn().mockResolvedValue({ data: null, error: null });
+    chain.update = vi.fn().mockReturnValue({
+      eq: vi.fn().mockResolvedValue({ data: null, error: { message: 'update denied' } }),
+    });
+    chain.delete = vi.fn().mockReturnValue(chain);
+    vi.mocked(supabaseManager.getClient).mockReturnValue({
+      from: vi.fn().mockReturnValue(chain),
+    } as any);
+    vi.mocked(createPgClientIPv4).mockReturnValue({
+      connect: vi.fn().mockResolvedValue(undefined),
+      query: vi.fn().mockResolvedValue({ rows: [], rowCount: 1 }),
+      end: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    await expect(
+      executeReconciliationActions(
+        {
+          added: [addedDoc],
+          resurrected: [],
+          deleted: [],
+          disassociated: [],
+          moved: [],
+          modified: [],
+          unchanged: 0,
+        },
+        'crm',
+        'default',
+        'instance-1',
+        'postgres://fake/test',
+        {
+          instance: {
+            name: 'test',
+            id: 'instance-1',
+            vault: { path: '/vault', markdownExtensions: ['.md'] },
+          },
+          server: { host: '127.0.0.1', port: 0 },
+          supabase: { url: 'http://localhost', serviceRoleKey: 'test', databaseUrl: 'postgres://fake/test', skipDdl: true },
+          git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
+          mcp: { transport: 'stdio' },
+          locking: { enabled: true, lockTimeoutSeconds: 10 },
+          trashFolder: { enabled: true, path: '.trash', collisionStrategy: 'suffix' },
+          mcpServers: {},
+          host: { mcpServers: [], toolSearch: 'disabled' },
+          macro: { defaultTimeoutMs: 1000 },
+          logging: { level: 'error', output: 'stdout' },
+        }
+      )
+    ).rejects.toThrow('Failed to update fqc_documents for CRM/Contacts/update-fails.md: update denied');
+  });
+
   it('T-U-038 D-05 wraps added-document frontmatter writes in directory then document locks', async () => {
     const events: string[] = [];
     vi.mocked(withAncestorDirectoryLocksShared).mockImplementation(async (_config, _path, fn) => {

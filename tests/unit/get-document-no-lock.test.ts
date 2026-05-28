@@ -44,9 +44,8 @@ describe('REQ-011 read path lock contract', () => {
       'utf-8'
     );
 
-    const repairBranch = source.match(/if \(frontmatterChanged\) {[\s\S]*?\n\s*}/)?.[0] ?? '';
-
-    expect(repairBranch).toMatch(/withAncestorDirectoryLocksShared[\s\S]*withDocumentLock[\s\S]*writeMarkdownFile/);
+    expect(source).toMatch(/if \(frontmatterChanged\) {[\s\S]*withAncestorDirectoryLocksShared[\s\S]*withDocumentLock[\s\S]*writeMarkdownFile/);
+    expect(source).toMatch(/withDocumentLock[\s\S]*readFile\(resolved\.absPath, 'utf-8'\)[\s\S]*writeMarkdownFile/);
     expect(source).toMatch(/let snapshotContentHash = newContentHash/);
     expect(source).toMatch(/if \(frontmatterChanged\) {/);
   });

@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import matter from 'gray-matter';
 import { Mutex } from 'async-mutex';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { listMarkdownFiles } from '../../storage/document-primitives.js';
+import { computeHash, listMarkdownFiles } from '../../storage/document-primitives.js';
 import { writeVaultFile } from '../../storage/vault-write.js';
 import { isValidUuid } from '../../utils/uuid.js';
 import { propagateFqcIdChange } from '../../services/plugin-propagation.js';
@@ -463,30 +463,143 @@ export async function targetedScan(
 
     // Do NOT touch: updated, title, tags, project, author, or other fields
 
-    // Write updated frontmatter to vault only if something actually changed
+    // Write updated frontmatter to vault only if something actually changed.
+    // Re-read while holding the document lock so a repair cannot serialize stale
+    // content over a concurrent writer that acquired the same lock first.
     let snapshotContentHash = newContentHash;
+    let snapshotFqcId = validatedFqcId;
+    let snapshotCreated = parsed.data[FM.CREATED] as string;
+    let snapshotStatus = parsed.data[FM.STATUS] as string;
     if (frontmatterChanged) {
-      snapshotContentHash = await withAncestorDirectoryLocksShared(
+      const lockedSnapshot = await withAncestorDirectoryLocksShared(
         config,
         resolved.absPath,
         () => withDocumentLock(
           config,
           resolved.absPath,
-          () => writeMarkdownFile(
-            config,
-            resolved.absPath,
-            parsed.data,
-            parsed.content
-          )
+          async () => {
+            const lockedRaw = await readFile(resolved.absPath, 'utf-8');
+            const lockedParsed = matter(lockedRaw);
+            const lockedExistingFqcId = lockedParsed.data[FM.ID] as string | undefined;
+            const lockedOldFqcId = lockedExistingFqcId;
+
+            let lockedValidatedFqcId: string | undefined;
+            if (lockedExistingFqcId) {
+              if (isValidUuid(lockedExistingFqcId)) {
+                lockedValidatedFqcId = lockedExistingFqcId;
+              } else {
+                log.warn(
+                  `targetedScan: malformed fqc_id="${lockedExistingFqcId}" in "${resolved.relativePath}" — attempting path fallback`
+                );
+              }
+            }
+
+            if (lockedValidatedFqcId) {
+              const { data: ownerRow } = await supabase
+                .from('fqc_documents')
+                .select('id, path')
+                .eq('id', lockedValidatedFqcId)
+                .eq('instance_id', config.instance.id)
+                .single();
+
+              if (ownerRow && (ownerRow as { path: string }).path === resolved.relativePath) {
+                lockedParsed.data[FM.ID] = lockedValidatedFqcId;
+              } else if (!ownerRow) {
+                log.info(
+                  `targetedScan: adopted foreign UUID=${lockedValidatedFqcId} for "${resolved.relativePath}"`
+                );
+                lockedParsed.data[FM.ID] = lockedValidatedFqcId;
+              } else {
+                log.warn(
+                  `targetedScan: fqc_id=${lockedValidatedFqcId} is not owned by "${resolved.relativePath}" — falling back`
+                );
+                lockedValidatedFqcId = undefined;
+              }
+            }
+
+            if (!lockedValidatedFqcId) {
+              const { data: pathRow } = await supabase
+                .from('fqc_documents')
+                .select('id, path')
+                .eq('path', resolved.relativePath)
+                .eq('instance_id', config.instance.id)
+                .single();
+
+              if (pathRow) {
+                const reconnectedId = (pathRow as { id: string }).id;
+                log.info(`targetedScan: path-based reconnect for "${resolved.relativePath}" → fqc_id=${reconnectedId}`);
+                lockedParsed.data[FM.ID] = reconnectedId;
+                lockedValidatedFqcId = reconnectedId;
+              }
+            }
+
+            if (!lockedValidatedFqcId) {
+              lockedValidatedFqcId = uuidv4();
+              lockedParsed.data[FM.ID] = lockedValidatedFqcId;
+            }
+
+            if (lockedOldFqcId && lockedValidatedFqcId && lockedOldFqcId !== lockedValidatedFqcId) {
+              try {
+                await propagateFqcIdChange(
+                  supabase,
+                  lockedOldFqcId,
+                  lockedValidatedFqcId,
+                  resolved.relativePath,
+                  new Map(),
+                  log,
+                  process.env.DATABASE_URL
+                );
+              } catch (propError) {
+                log.warn(
+                  `Failed to propagate during targeted pre-scan: ${propError instanceof Error ? propError.message : String(propError)}`
+                );
+              }
+            }
+
+            let lockedFrontmatterChanged = lockedParsed.data[FM.ID] !== lockedExistingFqcId;
+            if (!lockedParsed.data[FM.CREATED]) {
+              lockedParsed.data[FM.CREATED] = new Date().toISOString();
+              lockedFrontmatterChanged = true;
+            }
+            if (!lockedParsed.data[FM.STATUS]) {
+              lockedParsed.data[FM.STATUS] = 'active';
+              lockedFrontmatterChanged = true;
+            }
+            if ('content_hash' in lockedParsed.data) {
+              delete lockedParsed.data.content_hash;
+              lockedFrontmatterChanged = true;
+            }
+
+            const shouldWriteLockedRepair = lockedFrontmatterChanged || frontmatterChanged;
+            const lockedContentHash = shouldWriteLockedRepair
+              ? await writeMarkdownFile(
+                  config,
+                  resolved.absPath,
+                  lockedParsed.data,
+                  lockedParsed.content
+                )
+              : computeHash(lockedRaw);
+
+            return {
+              fqcId: lockedValidatedFqcId,
+              created: lockedParsed.data[FM.CREATED] as string,
+              status: lockedParsed.data[FM.STATUS] as string,
+              contentHash: lockedContentHash,
+            };
+          }
         )
       );
+      snapshotFqcId = lockedSnapshot.fqcId;
+      snapshotCreated = lockedSnapshot.created;
+      snapshotStatus = lockedSnapshot.status;
+      snapshotContentHash = lockedSnapshot.contentHash;
     }
 
     // Build and return snapshot
     const snapshot: FrontmatterSnapshot = {
-      fqcId: validatedFqcId,
-      created: parsed.data[FM.CREATED] as string,
-      status: parsed.data[FM.STATUS] as string,
+      fqcId: snapshotFqcId,
+      created: snapshotCreated,
+      status: snapshotStatus,
       contentHash: snapshotContentHash,
     };
 
