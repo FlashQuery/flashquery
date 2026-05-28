@@ -364,7 +364,7 @@ Per-file document write locking and public-surface concurrent write behaviors.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| D-WCO-01 | T-S-001: two parallel `write_document` calls to different files complete through the public MCP surface with locking enabled. | test_per_file_lock_parallel | 2026-05-26 | 2026-05-26 |
+| D-WCO-01 | T-S-001: public-surface smoke coverage that two parallel `write_document` calls to different files both complete with locking enabled; deterministic per-file non-contention timing is covered by T-I-001. | test_per_file_lock_parallel | 2026-05-28 | 2026-05-28 |
 | D-WCO-02 | T-S-002: case-variant public paths serialize read-modify-write document updates by preserving both concurrent `apply_tags` additions on case-insensitive vault filesystems, and skip clearly on case-sensitive filesystems. | test_case_variant_path_locking | 2026-05-27 | 2026-05-26 |
 | D-WCO-03 | T-S-003: two parallel `copy_document` calls to one destination produce exactly one success and one structured conflict. | test_copy_destination_race | 2026-05-27 | 2026-05-27 |
 | D-WCO-04 | T-S-004: two concurrent `apply_tags` calls with disjoint tags on one document preserve the union of both updates. | test_apply_tags_no_lost_update | 2026-05-26 | 2026-05-26 |

@@ -60,11 +60,52 @@ describe.skipIf(!HAS_SUPABASE)('REQ-025 call_macro per-step document lock integr
     expect(second).toMatchObject({ result: { path: 'phase155/macro-same-file.md' } });
   }, 40_000);
 
-  it.skip('T-I-050 deferred to Phase 162 / REQ-012 version_token expected_version conflict handling', () => {
-    // Phase 155 intentionally keeps macro writes per-step and does not auto-thread
-    // version_token / expected_version. REQ-012 and the positive conflict envelope
-    // assertion land in Phase 162.
-  });
+  it('T-I-050 macro-threaded expected_version refuses a concurrent modification', async () => {
+    const created = await client.callTool({
+      name: 'write_document',
+      arguments: {
+        mode: 'create',
+        path: 'phase155/macro-token.md',
+        title: 'Macro Token',
+        content: 'initial',
+        tags: ['wco-phase-155'],
+      },
+    });
+    expect(created.isError).toBeFalsy();
+
+    const [threaded, concurrent] = await Promise.all([
+      callMacro(`
+        original = fq.get_document({ identifiers: "phase155/macro-token.md" })
+        sleep 200
+        result = fq.write_document({
+          mode: "update",
+          identifier: "phase155/macro-token.md",
+          content: "threaded stale update",
+          expected_version: $original.version_token
+        })
+        exit $result
+      `),
+      callMacro(`
+        sleep 50
+        exit fq.write_document({
+          mode: "update",
+          identifier: "phase155/macro-token.md",
+          content: "concurrent update"
+        })
+      `),
+    ]);
+
+    expect(concurrent).toMatchObject({ result: { path: 'phase155/macro-token.md' } });
+    expect(threaded).toMatchObject({
+      result: {
+        error: 'conflict',
+        details: { reason: 'version_mismatch' },
+      },
+    });
+
+    const raw = await readFile(join(harness.vaultPath, 'phase155/macro-token.md'), 'utf-8');
+    expect(matter(raw).content.trim()).toBe('concurrent update');
+  }, 40_000);
 
   it('T-I-051 macro writes without expected_version retain opt-in last-writer-wins behavior', async () => {
     const created = await client.callTool({

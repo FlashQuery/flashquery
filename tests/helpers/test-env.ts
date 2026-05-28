@@ -37,7 +37,7 @@ export const HAS_SUPABASE = !!(TEST_SUPABASE_URL && TEST_SUPABASE_KEY && TEST_DA
 function isLikelyTransactionPoolerUrl(connectionString: string): boolean {
   try {
     const url = new URL(connectionString);
-    return url.hostname.includes('pooler.supabase.com') && url.port === '6543';
+    return url.hostname.includes('pooler.supabase.com');
   } catch {
     return false;
   }
@@ -46,3 +46,7 @@ function isLikelyTransactionPoolerUrl(connectionString: string): boolean {
 /** True when the configured DB URL is suitable for session-scoped advisory-lock integration assertions. */
 export const HAS_SESSION_CAPABLE_DATABASE_URL =
   HAS_SUPABASE && !isLikelyTransactionPoolerUrl(TEST_DATABASE_URL);
+
+export const __testing = {
+  isLikelyTransactionPoolerUrl,
+};

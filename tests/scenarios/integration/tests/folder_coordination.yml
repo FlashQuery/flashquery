@@ -1,12 +1,26 @@
 name: folder_coordination
 description: >
   INT-WCO-01 / T-Y-001 public folder coordination workflow for Phase 160.
-  Exercises write_document plus manage_directory rename/move using the public
-  managed scenario runner surface.
+  Exercises concurrent write_document plus manage_directory rename/move using
+  the public managed scenario runner surface. Deterministic in-flight lock
+  ordering is asserted by T-I-011 where the Vitest harness can pause inside the
+  held lock.
 coverage:
   - INT-WCO-01
   - T-Y-001
   - REQ-007
+deps: [locking]
+server_modes: [managed]
+
+extra_config:
+  locking:
+    enabled: true
+  host_mcp_tools:
+    tools:
+      - call_macro
+      - write_document
+      - get_document
+      - manage_directory
 
 steps:
   - label: "Create source folder"
@@ -26,22 +40,39 @@ steps:
       content: "INT-WCO-01 descendant write before folder rename."
       tags: [phase160, folder-coordination]
 
-  - label: "Public manage_directory rename moves the folder"
-    assert:
-      op: manage_directory
-      args:
-        action: rename
-        paths:
-          - "_wco/notes"
-        destinations:
-          - "_wco/renamed-notes"
-      expect_json_equals:
-        path: results[0].status
-        value: renamed
+  - label: "Concurrent public descendant write and folder rename both succeed"
+    parallel:
+      - label: "Public descendant write at renamed path succeeds while rename is in flight"
+        assert:
+          op: call_macro
+          args:
+            source: |
+              sleep 300
+              updated = fq.write_document({
+                mode: "update",
+                identifier: "_wco/renamed-notes/A.md",
+                content: "INT-WCO-01 descendant write during folder rename."
+              })
+              exit { path: $updated.path }
+          expect_json_equals:
+            path: result.path
+            value: "_wco/renamed-notes/A.md"
+      - label: "Public manage_directory rename moves the folder"
+        assert:
+          op: manage_directory
+          args:
+            action: rename
+            paths:
+              - "_wco/notes"
+            destinations:
+              - "_wco/renamed-notes"
+          expect_json_equals:
+            path: results[0].status
+            value: renamed
 
   - label: "Moved descendant remains readable from destination"
     assert:
       op: get_document
       args:
         identifiers: "_wco/renamed-notes/A.md"
-      expect_contains: "Folder Coordination A"
+      expect_contains: "INT-WCO-01 descendant write during folder rename."

@@ -437,7 +437,6 @@ export async function executeReconciliationActions(
       const postWriteFm = frontmatterResult.postWriteFrontmatter.data;
       if (!shouldWriteFrontmatter) {
         const existingOwner = postWriteFm[FM.OWNER];
-        // eslint-disable-next-line @typescript-eslint/no-base-to-string
         logger.debug(`[RECON] Document ${doc.path} already owned by ${typeof existingOwner === 'string' ? existingOwner : String(existingOwner)}, skipping frontmatter write for ${pluginId}`);
       }
       const fieldMapCols = applyFieldMap(policy.field_map, postWriteFm);

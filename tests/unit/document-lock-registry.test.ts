@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FlashQueryConfig } from '../../src/config/types.js';
-import { withDocumentLock } from '../../src/services/document-lock.js';
+import { __testing, withDocumentLock } from '../../src/services/document-lock.js';
 
 function makeConfig(enabled = false): FlashQueryConfig {
   return {
@@ -57,14 +57,24 @@ describe('REQ-001 document-lock Tier 1 registry', () => {
     expect(events).toContain('distinct:b-enter');
   });
 
-  it('T-U-002 uses bounded 1024 stripe allocation and full canonical key derivation', async () => {
-    const source = await import('node:fs/promises').then((fs) =>
-      fs.readFile(new URL('../../src/services/document-lock.ts', import.meta.url), 'utf-8')
-    );
-    expect(source).toContain('TIER1_STRIPE_COUNT = 1024');
-    expect(source).toContain('canonicalPathFor');
-    expect(source).toMatch(/path\.isAbsolute/);
-    expect(source).not.toMatch(/relativePath.*resource/i);
-  });
+  it('T-U-002 maps many canonical lock keys into a bounded 1024-stripe Tier 1 registry', async () => {
+    const config = makeConfig();
+    const stripeIndices = new Set<number>();
+
+    for (let index = 0; index < 5000; index += 1) {
+      const entry = await __testing.deriveDocumentLockEntry(
+        config,
+        `/tmp/vault/generated/doc-${index}.md`
+      );
+      stripeIndices.add(entry.stripeIndex);
+      expect(entry.stripeIndex).toBeGreaterThanOrEqual(0);
+      expect(entry.stripeIndex).toBeLessThan(1024);
+      expect(entry.resource).toMatch(/^file:/);
+      expect(entry.resource).toContain('/tmp/vault/generated/doc-');
+      expect(entry.resource).not.toBe(`generated/doc-${index}.md`);
+    }
+
+    expect(stripeIndices.size).toBeLessThanOrEqual(1024);
+  }, 15_000);
 
 });

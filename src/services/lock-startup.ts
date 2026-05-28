@@ -1,7 +1,7 @@
 import { withPgClient } from '../utils/pg-client.js';
 import type { FlashQueryConfig } from '../config/types.js';
 
-export type SessionAdvisoryLockFailureReason =
+type SessionAdvisoryLockFailureReason =
   | 'session_not_stable'
   | 'release_failed'
   | 'query_failed';
@@ -34,7 +34,7 @@ function failure(
   };
 }
 
-export function formatSessionAdvisoryLockStartupError(
+function formatSessionAdvisoryLockStartupError(
   result: Exclude<SessionAdvisoryLockCheckResult, { ok: true }>
 ): string {
   return result.message;

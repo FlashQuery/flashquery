@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Directed scenario: D-WCO-01 parallel writes to different files complete."""
+"""Directed scenario: D-WCO-01 public parallel-write smoke coverage."""
 from __future__ import annotations
 
 COVERAGE = ["D-WCO-01"]
@@ -64,7 +64,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         passed = result_a.ok and result_b.ok and ctx.vault.read_file(path_a).body.strip() and ctx.vault.read_file(path_b).body.strip()
         detail = "" if passed else f"a={expectation_detail(result_a) or result_a.error}; b={expectation_detail(result_b) or result_b.error}"
         run.step(
-            label="D-WCO-01: parallel write_document calls to different files both complete",
+            label="D-WCO-01: public parallel write_document calls to different files both complete",
             passed=bool(passed),
             detail=detail,
             timing_ms=max(result_a.timing_ms, result_b.timing_ms),

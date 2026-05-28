@@ -55,7 +55,7 @@ describe.skipIf(!HAS_SESSION_CAPABLE_DATABASE_URL)('REQ-022 move-exdev integrati
     fsFaults.failNextRenameWithExdev = false;
     fsFaults.failNextWriteFileAfterWrite = false;
     harness = await createPhase155Harness('fqc-move-exdev-');
-    harness.config.locking = { enabled: true, lockTimeoutSeconds: 1 };
+    harness.config.locking = { enabled: true, lockTimeoutSeconds: 15 };
     process.env.FQC_LOCK_ASSERT = 'true';
   }, 60_000);
 

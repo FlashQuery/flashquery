@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const batchIdentifierObjectSchema = z.strictObject({
+const batchIdentifierObjectSchema = z.strictObject({
   identifier: z.string(),
   version_token: z.string(),
 });

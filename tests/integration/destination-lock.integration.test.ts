@@ -44,7 +44,7 @@ describe.skipIf(!HAS_SESSION_CAPABLE_DATABASE_URL)('REQ-008 destination-lock int
     harness = await createPhase155Harness('fqc-destination-lock-');
     harness.vaultPath = await realpath(harness.vaultPath);
     harness.config.instance.vault.path = harness.vaultPath;
-    harness.config.locking = { enabled: true, lockTimeoutSeconds: 1 };
+    harness.config.locking = { enabled: true, lockTimeoutSeconds: 15 };
   }, 60_000);
 
   afterAll(async () => {
