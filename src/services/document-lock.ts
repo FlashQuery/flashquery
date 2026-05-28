@@ -313,9 +313,10 @@ async function runWithAdvisoryLocks<T>(
     mode === 'shared'
       ? 'SELECT pg_advisory_unlock_shared($1::bigint) AS released'
       : 'SELECT pg_advisory_unlock($1::bigint) AS released';
+  const acquireDeadline = Date.now() + timeoutMs(config);
+  const timeoutResource = entries[0]?.resource ?? `${label} lock`;
 
   return withPgClient(config.supabase.databaseUrl, async (client) => {
-    const acquireDeadline = Date.now() + timeoutMs(config);
     const acquiredKeys: string[] = [];
     let callbackResult: T | undefined;
     let callbackError: unknown;
@@ -326,7 +327,7 @@ async function runWithAdvisoryLocks<T>(
         while (true) {
           if (remainingMs(acquireDeadline) <= 0) {
             throw new LockTimeoutError(
-              entries[index]?.resource ?? entries[0]?.resource ?? `${label} lock`,
+              entries[index]?.resource ?? timeoutResource,
               configuredTimeoutSeconds
             );
           }
@@ -375,6 +376,9 @@ async function runWithAdvisoryLocks<T>(
       throw new Error('Document lock callback threw a non-Error value.');
     }
     return callbackResult as T;
+  }, {
+    connectTimeoutMs: remainingMs(acquireDeadline),
+    timeoutError: new LockTimeoutError(timeoutResource, configuredTimeoutSeconds),
   });
 }
 

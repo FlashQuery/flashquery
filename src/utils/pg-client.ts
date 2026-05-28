@@ -35,6 +35,11 @@ interface PgPoolLike {
   end(): Promise<void>;
 }
 
+interface WithPgClientOptions {
+  connectTimeoutMs?: number;
+  timeoutError?: Error;
+}
+
 let pgPoolFactory: (connectionString: string) => PgPoolLike = (connectionString) =>
   new Pool({
     connectionString,
@@ -64,9 +69,47 @@ export async function queryPgPool<Row extends QueryResultRow = QueryResultRow>(
 
 export async function withPgClient<T>(
   connectionString: string,
-  fn: (client: PoolClient) => Promise<T>
+  fn: (client: PoolClient) => Promise<T>,
+  options: WithPgClientOptions = {}
 ): Promise<T> {
-  const client = await getPgPool(connectionString).connect();
+  const pool = getPgPool(connectionString);
+  let client: PoolClient;
+  if (options.connectTimeoutMs === undefined) {
+    client = await pool.connect();
+  } else {
+    const connectTimeoutMs = options.connectTimeoutMs;
+    let timeout: NodeJS.Timeout | undefined;
+    let timedOut = false;
+    const connectPromise = pool.connect();
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => {
+        timedOut = true;
+        reject(options.timeoutError ?? new Error('pg pool checkout timed out'));
+      }, Math.max(0, connectTimeoutMs));
+      timeout.unref?.();
+    });
+
+    connectPromise
+      .then((lateClient) => {
+        if (!timedOut) return;
+        try {
+          lateClient.release();
+        } catch (err) {
+          logger.warn(
+            `pg client release failed after checkout timeout: ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          );
+        }
+      })
+      .catch(() => undefined);
+
+    try {
+      client = await Promise.race([connectPromise, timeoutPromise]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }
   try {
     return await fn(client);
   } finally {

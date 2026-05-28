@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const loggerMock = vi.hoisted(() => ({
   warn: vi.fn(),
@@ -24,6 +24,10 @@ describe('pg pool helper', () => {
     await closePgPools();
     __setPgPoolFactoryForTesting(null);
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('preserves IPv4 connection-string behavior and pool query configuration', async () => {
@@ -76,5 +80,28 @@ describe('pg pool helper', () => {
       expect.stringContaining('pg client release failed')
     );
     expect(loggerMock.warn).toHaveBeenCalledWith(expect.stringContaining('pg pool close failed'));
+  });
+
+  it('bounds pool checkout when a connect timeout is provided', async () => {
+    vi.useFakeTimers();
+    __setPgPoolFactoryForTesting(() => ({
+      query: vi.fn(),
+      connect: vi.fn(() => new Promise<never>(() => undefined)),
+      end: vi.fn().mockResolvedValue(undefined),
+    }));
+    const timeoutError = new Error('pool checkout timed out');
+
+    const result = withPgClient(
+      'postgres://user:pass@localhost:5432/fq',
+      async () => 'entered',
+      { connectTimeoutMs: 25, timeoutError }
+    ).then(
+      () => 'resolved',
+      (err: unknown) => err
+    );
+
+    await vi.advanceTimersByTimeAsync(26);
+
+    expect(await Promise.race([result, Promise.resolve('pending')])).toBe(timeoutError);
   });
 });
