@@ -47,6 +47,7 @@
 - [x] **Phase 161: Destination Locks + EXDEV Fallback** - Create, copy, and move operations lock destination paths and move safely across devices. (completed 2026-05-27)
 - [x] **Phase 162: Version-fingerprint Check** - Reads and writes expose version tokens and callers can opt into conflict detection. (completed 2026-05-27)
 - [x] **Phase 163: Multi-file Batch Contract** - Batch tools accept mixed identifier/token inputs and return ordered per-item results. (completed 2026-05-27)
+- [ ] **Phase 164: Close gap: document repair and plugin reconciliation lock contract** - Repair and reconciliation write side effects use the same ambient file + ancestor directory lock contract as normal document writes. (planned)
 
 ## Phase Details
 
@@ -314,10 +315,59 @@ Plans:
 - [x] 163-03-PLAN.md — insert_doc_link/apply_tags mixed input handling, help updates, and T-I-038 coverage.
 - [x] 163-04-PLAN.md — INT-WCO-02/INT-WCO-03 scenario coverage and final Phase 163 evidence.
 
+### Phase 164: Close gap: document repair and plugin reconciliation lock contract
+
+**Goal**: Every FlashQuery-mediated vault-file write that can happen as a side effect of read-triggered repair or plugin reconciliation runs under the same coherency contract as normal document writes: shared ancestor directory locks outside a per-file `withDocumentLock`, then the single durable `writeVaultFile` primitive. `get_document` remains read-lock-free unless a repair write is actually required.
+**Depends on**: Phases 155, 156, 157, 160, 162
+**Requirements**: REQ-001, REQ-007, REQ-009, REQ-014, REQ-020, REQ-023
+**Source Requirements**: `/Users/matt/Documents/Claude/Projects/FlashQuery/flashquery-product/Roadmap/Features/Vault Write Coherency Locking Research/Vault Write Coherency Locking Requirements.md`
+**Source Test Plan**: `/Users/matt/Documents/Claude/Projects/FlashQuery/flashquery-product/Roadmap/Features/Vault Write Coherency Locking Research/Vault Write Coherency Locking Test Plan.md`
+**Success Criteria** (what must be TRUE):
+
+  1. A `get_document` cache-hit/read-only path still takes no document lock, preserving INV-07 and Test Plan `T-U-037`.
+  2. A `get_document` path that triggers `targetedScan` frontmatter repair takes shared ancestor directory locks and the per-file document lock before the repair write reaches `writeVaultFile`.
+  3. The repaired file's returned `version_token`, `fqc_documents.content_hash`, and on-disk bytes still match exactly, preserving REQ-014 and Test Plan `T-I-026` through `T-I-028` plus `D-WCO-06`.
+  4. Plugin reconciliation frontmatter writes (`atomicWriteFrontmatter` from `plugin-reconciliation.ts`) take the document-path lock contract, not only the plugin coordination lock, before reaching `writeVaultFile`.
+  5. `writeVaultFile` remains a primitive with an ambient-lock assertion, not a lock-acquiring API; callers must acquire the correct lock contract before invoking it.
+  6. Existing Phase 157 behavior remains intact: memory needs no document lock, record/plugin reconciliation remains serialized where required, and concurrent plugin unregister behavior is unchanged.
+
+**Reasoning**:
+
+  - REQ-001 and REQ-009 make the individual document path the write-locking unit and require document-touching write call sites to use the lock helper. The gap is not in the main `write_document` handler; it is in helper paths that write files indirectly.
+  - REQ-007 says file writes hold shared locks on ancestor folders so folder structural operations cannot move a file during a write. Repair/reconciliation frontmatter writes are file writes and must participate.
+  - REQ-014 explicitly calls out `get_document` -> `targetedScan` repair: if repair writes, the post-write hash is the value returned and stored. That token correctness must be preserved while adding the missing ambient lock.
+  - REQ-020 says all vault writes route through `writeVaultFile`, but `writeVaultFile`'s own contract says callers must already hold `withDocumentLock`; passing `lockConfig` is an assertion hook, not lock acquisition.
+  - REQ-023 replaced coarse records/plugins locks with scoped coordination. That protects reconciliation sequencing, but it does not by itself serialize writes against normal document tools touching the same markdown file.
+
+**Test Gate**:
+
+  - Create or update tests aligned to Test Plan §4.1.1, §4.1.7, §4.1.9, §4.2.4, §4.4.1, and §4.5.1.
+  - Required targeted coverage:
+    - `T-U-037` remains green: `get_document` handler does not acquire locks for pure reads.
+    - Add a regression proving read-triggered repair writes hold the document lock before `writeVaultFile` assertion executes.
+    - Add a regression proving read-triggered repair also holds shared ancestor directory locks, or a source-order guard equivalent if advisory visibility is environment-gated.
+    - Extend `T-I-026`, `T-I-027`, and `T-I-028` so the repair-token round trip still passes with lock assertions enabled.
+    - Extend `T-I-040` / `T-U-030` style write-path evidence so `targetedScan` repair and plugin reconciliation frontmatter writes are counted as `writeVaultFile` callers with ambient locks held.
+    - Extend `T-I-044` or add focused integration coverage for concurrent `write_record` reconciliation and document writes to the same file: no lost owner/type/frontmatter changes, no missing lock assertion.
+  - Required execution evidence: `FQC_LOCK_ASSERT=true npm test -- tests/unit/document-output-version-token.test.ts tests/unit/get-document-no-lock.test.ts tests/unit/single-write-primitive.test.ts`; focused integration for `token-equals-disk`, `atomic-write-frontmatter`, and records reconciliation; `D-WCO-06` if the directed scenario remains applicable.
+
+**Plans**: 3 plans
+
+Plans:
+
+**Wave 1**
+
+- [ ] 164-01-PLAN.md — Lock get_document repair writes while preserving read-lock-free cache-hit paths.
+- [ ] 164-02-PLAN.md — Lock plugin reconciliation frontmatter writes while preserving REQ-023 coordination.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 164-03-PLAN.md — Run combined focused validation, D-WCO-06 evidence, and final source audit.
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 → 161 → 162 → 163
+Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 → 161 → 162 → 163 → 164
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -330,6 +380,7 @@ Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 →
 | 161. Destination Locks + EXDEV Fallback | 4/4 | Complete    | 2026-05-27 |
 | 162. Version-fingerprint Check | 6/6 | Complete    | 2026-05-27 |
 | 163. Multi-file Batch Contract | 4/4 | Complete    | 2026-05-27 |
+| 164. Close gap: document repair and plugin reconciliation lock contract | 0/3 | Not started | - |
 
 ## Archived Milestone Details
 
