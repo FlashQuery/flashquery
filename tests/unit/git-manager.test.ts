@@ -134,6 +134,7 @@ function testConfig(overrides?: Partial<FlashQueryConfig['git']>): FlashQueryCon
     git: { autoCommit: true, autoPush: false, remote: 'origin', branch: 'main', ...overrides },
     mcp: { transport: 'stdio' },
     embedding: { provider: 'openai', model: 'text-embedding-3-small', dimensions: 1536 },
+    locking: { enabled: false, lockTimeoutSeconds: 10 },
     logging: { level: 'info', output: 'stdout' },
   } as FlashQueryConfig;
 }
@@ -421,11 +422,13 @@ describe('GitManager', () => {
       expect(mocks.mockPgConnect).toHaveBeenCalled();
       expect(mocks.mockWriteVaultFile).toHaveBeenCalledWith(
         expect.stringContaining('backup.json'),
-        expect.stringContaining('"exported_at"')
+        expect.stringContaining('"exported_at"'),
+        expect.objectContaining({ lockConfig: expect.any(Object) })
       );
       expect(mocks.mockWriteVaultFile).toHaveBeenCalledWith(
         expect.any(String),
-        expect.stringContaining('"fqc_memory"')
+        expect.stringContaining('"fqc_memory"'),
+        expect.objectContaining({ lockConfig: expect.any(Object) })
       );
     });
 

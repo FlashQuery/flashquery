@@ -22,6 +22,7 @@ export default defineConfig({
       'tests/integration/folder-lock.integration.test.ts',
       'tests/integration/destination-lock.integration.test.ts',
       'tests/integration/move-exdev-fallback.integration.test.ts',
+      'tests/integration/lock-assert-non-document.integration.test.ts',
       'tests/integration/manage-directory-advisory-lock.integration.test.ts',
       'tests/integration/apply-tags-concurrent.integration.test.ts',
       'tests/integration/insert-doc-link-race.integration.test.ts',

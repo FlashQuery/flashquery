@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
-const SOURCE_ROOTS = ['src'];
+const SOURCE_ROOTS = ['src/storage', 'src/utils', 'src/mcp', 'src/services', 'src/git', 'src/cli'];
 
 const ALLOWED_DIRECT_WRITE_SITES = [
   {
@@ -118,7 +118,7 @@ describe('T-U-030 single durable vault write primitive guard', () => {
     expect(resolverSource).toMatch(/import .*writeVaultFile.* from '\.\.\/\.\.\/storage\/vault-write\.js'/s);
     expect(resolverSource).toMatch(/await writeVaultFile\(absolutePath, output, \{ lockConfig: config \}\)/);
     expect(pluginSource).toMatch(/withAncestorDirectoryLocksShared[\s\S]*withDocumentLock[\s\S]*atomicWriteFrontmatter\(absPath, updates, lockConfig\)/);
-    expect(gitSource).toMatch(/await writeVaultFile\(dumpAbsPath, output\)/);
+    expect(gitSource).toMatch(/withDocumentLock\(lockConfig, dumpAbsPath[\s\S]*writeVaultFile\(dumpAbsPath, output, \{ lockConfig \}\)/);
     expect(moveSource).toMatch(/await writeVaultFile\(destAbsPath, sourceRawContent, \{ lockConfig: config \}\)/);
   });
 

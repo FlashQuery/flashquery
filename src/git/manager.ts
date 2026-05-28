@@ -7,6 +7,7 @@ import { logger } from '../logging/logger.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { createPgClientIPv4 } from '../utils/pg-client.js';
 import { writeVaultFile } from '../storage/vault-write.js';
+import { withDocumentLock } from '../services/document-lock.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GitManagerImpl
@@ -33,6 +34,7 @@ export class GitManagerImpl {
   private git: SimpleGit;
   private gitAvailable: boolean = false;
   private vaultIsRepo: boolean = false;
+  private lockConfig?: FlashQueryConfig;
 
   constructor(
     vaultPath: string,
@@ -51,6 +53,8 @@ export class GitManagerImpl {
   // ───────────────────────────────────────────────────────────────────────────
 
   async initialize(config: FlashQueryConfig): Promise<void> {
+    this.lockConfig = config;
+
     // Check 1: git binary available
     try {
       await this.git.version();
@@ -117,7 +121,13 @@ export class GitManagerImpl {
         2
       );
 
-      await writeVaultFile(dumpAbsPath, output);
+      const lockConfig = this.lockConfig;
+      if (!lockConfig) {
+        throw new Error('Git: dumpDatabase requires initialize(config) before writing backup');
+      }
+      await withDocumentLock(lockConfig, dumpAbsPath, () =>
+        writeVaultFile(dumpAbsPath, output, { lockConfig })
+      );
       logger.info(`Git: backup written to ${dumpRelPath} (${tablesResult.rows.length} tables)`);
       return dumpRelPath;
     } finally {
