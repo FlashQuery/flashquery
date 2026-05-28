@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.9
 milestone_name: Vault Write Coherency Locking
-status: milestone_complete
-stopped_at: Milestone complete (Phase 163 was final phase)
-last_updated: 2026-05-27T20:39:44.712Z
-last_activity: 2026-05-27 -- Phase 163 execution started
+status: executing
+stopped_at: Phase 160 complete (4/4) — ready for Phase 161
+last_updated: "2026-05-28T01:05:42.360Z"
+last_activity: 2026-05-28 -- Phase 164 planning complete
 progress:
-  total_phases: 9
-  completed_phases: 8
-  total_plans: 38
+  total_phases: 10
+  completed_phases: 9
+  total_plans: 41
   completed_plans: 38
-  percent: 89
+  percent: 90
 ---
 
 # FlashQuery Core — State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-26)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Milestone complete
+**Current focus:** Close gap: document repair and plugin reconciliation lock contract
 
 ## Current Position
 
-Phase: 163
+Phase: 164
 Plan: Not started
-Status: Milestone complete
-Last activity: 2026-05-27
+Status: Ready to execute
+Last activity: 2026-05-28 -- Phase 164 planning complete
 
-Progress: [██████████] 100%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [██████████] 100%
 | 161 | 4 | - | - |
 | 162 | 6 | - | - |
 | 163 | 4 | - | - |
+| 164 | 0 | - | - |
 
 *Updated after each plan completion*
 | Phase 158-tier-2-lock-table-retirement-session-check P02 | 8 min | 2 tasks | 13 files |
@@ -62,6 +63,10 @@ Progress: [██████████] 100%
 | Phase 158 P03 | 8min | 3 tasks | 11 files |
 
 ## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 164 added: Close gap: document repair and plugin reconciliation lock contract
 
 ### Decisions
 
