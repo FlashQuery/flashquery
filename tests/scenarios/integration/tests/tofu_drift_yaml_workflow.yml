@@ -7,6 +7,13 @@ description: >
 coverage: [INT-MCB-12]
 server_modes: [managed]
 
+# NOTE(2026-05-28): This scenario is timing-brittle. It relies on the first
+# call_macro dispatch reaching quirky.stable before QUIRK_EMIT_LIST_CHANGED_MS
+# fires. When the managed server or broker startup is slow, the first assertion
+# can observe the post-drift state and return needs_user_input immediately. In
+# that failure mode, old_schema/new_schema still prove the initial schema was
+# trusted; the issue is the race window, not necessarily broker behavior. Revisit
+# this test when we have a deterministic "emit drift now" fixture control.
 extra_config:
   host_mcp_tools:
     tools: [call_macro]
