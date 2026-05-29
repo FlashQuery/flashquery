@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { __testing as testEnvTesting } from '../helpers/test-env.js';
 
 describe('test advisory-lock database capability detection', () => {
-  it('treats any Supabase pooler endpoint as not session-capable for Tier 2 integration assertions', () => {
+  it('allows the Supabase session pooler on port 5432 to run Tier 2 integration assertions', () => {
     expect(
       testEnvTesting.isLikelyTransactionPoolerUrl(
         'postgresql://postgres.example:secret@aws-1-us-west-2.pooler.supabase.com:5432/postgres'
       )
-    ).toBe(true);
+    ).toBe(false);
+  });
+
+  it('treats the Supabase transaction pooler on port 6543 as not session-capable', () => {
     expect(
       testEnvTesting.isLikelyTransactionPoolerUrl(
         'postgresql://postgres.example:secret@aws-1-us-west-2.pooler.supabase.com:6543/postgres'

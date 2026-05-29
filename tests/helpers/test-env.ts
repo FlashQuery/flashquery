@@ -37,7 +37,7 @@ export const HAS_SUPABASE = !!(TEST_SUPABASE_URL && TEST_SUPABASE_KEY && TEST_DA
 function isLikelyTransactionPoolerUrl(connectionString: string): boolean {
   try {
     const url = new URL(connectionString);
-    return url.hostname.includes('pooler.supabase.com');
+    return url.hostname.includes('pooler.supabase.com') && url.port === '6543';
   } catch {
     return false;
   }

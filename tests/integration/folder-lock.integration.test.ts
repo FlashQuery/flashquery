@@ -26,7 +26,7 @@ type ToolResult = {
   isError?: boolean;
 };
 
-function makeConfig(vaultPath: string, lockTimeoutSeconds = 1): FlashQueryConfig {
+function makeConfig(vaultPath: string, lockTimeoutSeconds = 15): FlashQueryConfig {
   return {
     instance: {
       name: 'folder-lock-integration',

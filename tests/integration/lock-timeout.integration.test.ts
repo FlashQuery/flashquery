@@ -36,11 +36,15 @@ function advisoryKeyForResource(resource: string): string {
   return digest.readBigInt64BE(0).toString();
 }
 
-async function holdAdvisoryLock(key: string, holdMs: number): Promise<Promise<void>> {
+interface AdvisoryLockHolder {
+  done: Promise<void>;
+}
+
+async function holdAdvisoryLock(key: string, holdMs: number): Promise<AdvisoryLockHolder> {
   const client = new pg.Client({ connectionString: TEST_DATABASE_URL });
   await client.connect();
   await client.query('SELECT pg_advisory_lock($1::bigint)', [key]);
-  return new Promise((resolve) => {
+  const done = new Promise<void>((resolve) => {
     setTimeout(() => {
       void client
         .query('SELECT pg_advisory_unlock($1::bigint)', [key])
@@ -48,6 +52,7 @@ async function holdAdvisoryLock(key: string, holdMs: number): Promise<Promise<vo
         .finally(resolve);
     }, holdMs);
   });
+  return { done };
 }
 
 describe.skipIf(!HAS_SESSION_CAPABLE_DATABASE_URL)('REQ-006 lock-timeout integration', () => {
@@ -63,12 +68,12 @@ describe.skipIf(!HAS_SESSION_CAPABLE_DATABASE_URL)('REQ-006 lock-timeout integra
     const entry = await __testing.deriveDocumentLockEntry(config, filePath);
 
     try {
-      const holderDone = await holdAdvisoryLock(advisoryKeyForResource(entry.resource), 12_000);
+      const holder = await holdAdvisoryLock(advisoryKeyForResource(entry.resource), 12_000);
 
       const started = Date.now();
       await expect(withDocumentLock(config, filePath, async () => 'done')).rejects.toBeInstanceOf(LockTimeoutError);
       expect(Date.now() - started).toBeGreaterThanOrEqual(9_500);
-      await holderDone;
+      await holder.done;
     } finally {
       await rm(vault, { recursive: true, force: true });
     }
@@ -82,10 +87,10 @@ describe.skipIf(!HAS_SESSION_CAPABLE_DATABASE_URL)('REQ-006 lock-timeout integra
     const entry = await __testing.deriveDocumentLockEntry(config, filePath);
 
     try {
-      const holderDone = await holdAdvisoryLock(advisoryKeyForResource(entry.resource), 12_000);
+      const holder = await holdAdvisoryLock(advisoryKeyForResource(entry.resource), 12_000);
 
       await expect(withDocumentLock(config, filePath, async () => 'acquired')).resolves.toBe('acquired');
-      await holderDone;
+      await holder.done;
     } finally {
       await rm(vault, { recursive: true, force: true });
     }
