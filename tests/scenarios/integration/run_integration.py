@@ -524,10 +524,16 @@ def _evaluate_assertions(
             result.expect_json_path(str(path))
 
     if "expect_json_equals" in assert_spec:
-        spec = assert_spec["expect_json_equals"] or {}
-        path = str(spec.get("path", ""))
-        expected = spec.get("value")
-        result.expect_json_equals(path, expected)
+        specs = assert_spec["expect_json_equals"] or {}
+        if isinstance(specs, list):
+            for spec in specs:
+                path = str((spec or {}).get("path", ""))
+                expected = (spec or {}).get("value")
+                result.expect_json_equals(path, expected)
+        else:
+            path = str(specs.get("path", ""))
+            expected = specs.get("value")
+            result.expect_json_equals(path, expected)
 
     if "expect_json_contains" in assert_spec:
         spec = assert_spec["expect_json_contains"] or {}

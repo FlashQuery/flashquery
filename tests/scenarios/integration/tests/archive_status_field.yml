@@ -40,9 +40,21 @@ steps:
         path: ""
         equals: 2
       expect_json_equals:
-        path: "[0].status"
-        value: "archived"
-      expect_json_path: ["[0].archived_at", "[1].status", "[1].archived_at"]
+        - path: "[0].status"
+          value: "succeeded"
+        - path: "[0].result_status"
+          value: "archived"
+        - path: "[1].status"
+          value: "succeeded"
+        - path: "[1].result_status"
+          value: "archived"
+      expect_json_path:
+        - "[0].identifier"
+        - "[0].version_token"
+        - "[0].archived_at"
+        - "[1].identifier"
+        - "[1].version_token"
+        - "[1].archived_at"
 
   - label: "Archived document is excluded from search by default"
     assert:
