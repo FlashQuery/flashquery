@@ -17,6 +17,9 @@ dist/
 # Except for reusable skills (tracked for cross-phase usage)
 !.claude/skills
 
+# Cate workspace state (local IDE layout/session files)
+.cate/
+
 # GSD worktrees (temporary isolated copies)
 .worktrees/
 
