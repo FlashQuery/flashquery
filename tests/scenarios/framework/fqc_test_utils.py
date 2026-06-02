@@ -126,6 +126,15 @@ def _find_free_port(port_range: tuple[int, int] = DEFAULT_PORT_RANGE) -> int:
     raise RuntimeError(f"No free port found in range {lo}–{hi}")
 
 
+def _scenario_temp_root(project_dir: Path) -> Path:
+    """Return the canonical root for managed scenario vault temp dirs."""
+    configured = os.environ.get("FQC_SCENARIO_TMPDIR")
+    root = Path(configured) if configured else project_dir / ".tmp" / "scenario-vaults"
+    root = root.resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
 class FQCServer:
     """
     Manages a FlashQuery server subprocess for isolated testing.
@@ -190,7 +199,11 @@ class FQCServer:
             self.vault_path = Path(vault_path).resolve()
             self.vault_path.mkdir(parents=True, exist_ok=True)
         else:
-            self._vault_tmpdir = tempfile.mkdtemp(prefix=f"fqc-vault-{self.instance_id}-")
+            temp_root = _scenario_temp_root(self.project_dir)
+            self._vault_tmpdir = tempfile.mkdtemp(
+                prefix=f"fqc-vault-{self.instance_id}-",
+                dir=str(temp_root),
+            )
             self.vault_path = Path(self._vault_tmpdir).resolve()
 
         self.base_url = f"http://127.0.0.1:{self.port}"
