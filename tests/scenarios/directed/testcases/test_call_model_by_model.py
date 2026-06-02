@@ -15,86 +15,35 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
-from fqc_test_utils import TestRun, FQCServer  # noqa: E402
-from fqc_client import FQCClient, _find_project_dir, _load_env_file  # noqa: E402
+from fqc_test_utils import TestContext, TestRun, test_llm_model_name  # noqa: E402
 
 TEST_NAME = "test_call_model_by_model"
 COVERAGE = ["L-01"]
-
-CONFIGURED_LLM = {
-    "llm": {
-        "providers": [
-            {
-                "name": "openai",
-                "type": "openai-compatible",
-                "endpoint": "https://api.openai.com",
-                "api_key": "${OPENAI_API_KEY}",
-            },
-            {
-                "name": "broken",
-                "type": "openai-compatible",
-                "endpoint": "http://127.0.0.1:1",
-                "api_key": "sk-broken-placeholder",
-            },
-        ],
-        "models": [
-            {
-                "name": "fast",
-                "provider_name": "openai",
-                "model": "gpt-4o-mini",
-                "type": "language",
-                "cost_per_million": {"input": 0.15, "output": 0.6},
-            },
-            {
-                "name": "broken-primary",
-                "provider_name": "broken",
-                "model": "anything",
-                "type": "language",
-                "cost_per_million": {"input": 0, "output": 0},
-                "capabilities": {"tool_calling": True, "usage_on_tool_calls": True},
-            },
-        ],
-        "purposes": [
-            {
-                "name": "general",
-                "description": "General",
-                "models": ["fast"],
-                "defaults": {"temperature": 0.7},
-            },
-            {
-                "name": "with_fallback",
-                "description": "Primary broken, fast fallback",
-                "models": ["broken-primary", "fast"],
-            },
-            {
-                "name": "all_broken",
-                "description": "All models unreachable",
-                "models": ["broken-primary"],
-            },
-        ],
-    }
-}
+REQUIRES_LLM = True
 
 
 def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
-    project_dir = Path(args.fqc_dir) if args.fqc_dir else _find_project_dir()
-    env = _load_env_file(project_dir) if project_dir else {}
-    if "OPENAI_API_KEY" not in os.environ:
-        os.environ["OPENAI_API_KEY"] = env.get("OPENAI_API_KEY") or "sk-test-placeholder"
+    port_range = tuple(args.port_range) if getattr(args, "port_range", None) else None
+    model_name = test_llm_model_name(Path(args.fqc_dir) if args.fqc_dir else None)
     try:
-        with FQCServer(fqc_dir=args.fqc_dir, extra_config=CONFIGURED_LLM) as server:
-            client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
-
+        with TestContext(
+            fqc_dir=args.fqc_dir,
+            url=args.url,
+            secret=args.secret,
+            vault_path=getattr(args, "vault_path", None),
+            managed=args.managed,
+            port_range=port_range,
+            require_llm=True,
+        ) as ctx:
             # L-01: resolver=model with valid name returns non-error result
-            result = client.call_tool("call_model", **{
+            result = ctx.client.call_tool("call_model", **{
                 "resolver": "model",
-                "name": "fast",
+                "name": model_name,
                 "messages": [{"role": "user", "content": "Say hello in one word"}],
             })
             passed_l01 = bool(result and result.ok)
@@ -110,8 +59,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     envelope = json.loads(result.text)
                     meta = envelope.get("metadata", {})
                     envelope_ok = (
-                        meta.get("resolved_model_name") == "fast"
-                        and meta.get("provider_name") == "openai"
+                        meta.get("resolved_model_name") == model_name
+                        and isinstance(meta.get("provider_name"), str)
+                        and len(meta.get("provider_name", "")) > 0
                         and meta.get("fallback_position") is None
                         and isinstance(meta.get("tokens", {}).get("input"), (int, float))
                         and meta.get("tokens", {}).get("input", 0) > 0

@@ -15,67 +15,49 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
-from fqc_test_utils import TestRun, FQCServer  # noqa: E402
-from fqc_client import FQCClient, _find_project_dir, _load_env_file  # noqa: E402
+from fqc_test_utils import TestContext, TestRun, test_llm_purpose_name  # noqa: E402
 
 TEST_NAME = "test_get_llm_usage_recent"
 COVERAGE = ["L-21"]
-
-CONFIGURED_LLM = {
-    "llm": {
-        "providers": [
-            {
-                "name": "openai",
-                "type": "openai-compatible",
-                "endpoint": "https://api.openai.com",
-                "api_key": "${OPENAI_API_KEY}",
-            }
-        ],
-        "models": [
-            {
-                "name": "fast",
-                "provider_name": "openai",
-                "model": "gpt-4o-mini",
-                "type": "language",
-                "cost_per_million": {"input": 0.15, "output": 0.6},
-            }
-        ],
-        "purposes": [
-            {
-                "name": "general",
-                "description": "General",
-                "models": ["fast"],
-                "defaults": {"temperature": 0.7},
-            }
-        ],
-    }
-}
+REQUIRES_LLM = True
 
 
 def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
-    project_dir = Path(args.fqc_dir) if args.fqc_dir else _find_project_dir()
-    env = _load_env_file(project_dir) if project_dir else {}
-    if "OPENAI_API_KEY" not in os.environ:
-        os.environ["OPENAI_API_KEY"] = env.get("OPENAI_API_KEY") or "sk-test-placeholder"
+    port_range = tuple(args.port_range) if getattr(args, "port_range", None) else None
+    purpose_name = test_llm_purpose_name(Path(args.fqc_dir) if args.fqc_dir else None)
     try:
-        with FQCServer(fqc_dir=args.fqc_dir, extra_config=CONFIGURED_LLM) as server:
-            client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
-
+        with TestContext(
+            fqc_dir=args.fqc_dir,
+            url=args.url,
+            secret=args.secret,
+            vault_path=getattr(args, "vault_path", None),
+            managed=args.managed,
+            port_range=port_range,
+            require_llm=True,
+        ) as ctx:
+            seed_results = []
             for i in range(3):
-                client.call_tool("call_model", **{
+                seed_results.append(ctx.client.call_tool("call_model", **{
                     "resolver": "purpose",
-                    "name": "general",
+                    "name": purpose_name,
                     "messages": [{"role": "user", "content": f"Reply with just the digit {i + 1}."}],
-                })
+                }))
+            seed_ok = all(result and result.ok for result in seed_results)
+            run.step(
+                label="setup: seed call_model usage rows",
+                passed=seed_ok,
+                detail="; ".join(str(result)[:160] for result in seed_results),
+            )
+            if not seed_ok:
+                return run
 
             # L-21: recent returns newest-first; limit respected
-            result = client.call_tool("get_llm_usage", **{
+            result = ctx.client.call_tool("get_llm_usage", **{
                 "mode": "recent",
                 "limit": 2,
             })
@@ -92,6 +74,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     shape_ok = (
                         parsed.get("mode") == "recent"
                         and isinstance(entries, list)
+                        and len(entries) > 0
                         and len(entries) <= 2                    # limit honored
                         and monotonic_desc
                         and (len(entries) == 0 or all(

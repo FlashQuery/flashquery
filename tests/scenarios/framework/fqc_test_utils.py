@@ -76,6 +76,20 @@ from fqc_vault import VaultHelper
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _test_env_value(name: str, default: str, project_dir: Path | None = None) -> str:
+    env_dir = project_dir or _find_project_dir()
+    env = _load_env_file(env_dir) if env_dir else {}
+    return os.environ.get(name) or env.get(name, default)
+
+
+def test_llm_model_name(project_dir: Path | None = None) -> str:
+    return _test_env_value("FQC_TEST_LLM_MODEL_ALIAS", "fast", project_dir)
+
+
+def test_llm_purpose_name(project_dir: Path | None = None) -> str:
+    return _test_env_value("FQC_TEST_LLM_PURPOSE", "general", project_dir)
+
+
 def _deep_merge(base: dict, overlay: dict) -> dict:
     """Recursively merge overlay into a copy of base.
 
@@ -309,11 +323,24 @@ class FQCServer:
         return path
 
     def _merge_llm_config(self, base: dict | None, overlay: dict) -> dict:
-        """Merge generated LLM config arrays by appending overlay entries."""
+        """Merge generated LLM config arrays.
+
+        Providers are keyed by name so one local Ollama provider can back both
+        the generated language model and embedding model in the same server.
+        """
         if base is None:
             return overlay
         merged = dict(base)
-        for key in ("providers", "models", "purposes"):
+        providers_by_name = {
+            provider.get("name", "").lower(): provider
+            for provider in (base.get("providers", []) or [])
+        }
+        for provider in overlay.get("providers", []) or []:
+            name = provider.get("name", "").lower()
+            if name not in providers_by_name:
+                providers_by_name[name] = provider
+        merged["providers"] = list(providers_by_name.values())
+        for key in ("models", "purposes"):
             merged[key] = [*(base.get(key, []) or []), *(overlay.get(key, []) or [])]
         return merged
 
@@ -420,42 +447,81 @@ class FQCServer:
     # -- LLM config --------------------------------------------------------
 
     def _resolve_llm_config(self, env: dict[str, str]) -> dict:
-        """Return the llm config block for the generated flashquery.yml.
+        """Return the test-managed llm config block.
 
-        Called when require_llm=True. Reads OPENAI_API_KEY from .env.test and
-        builds a standard provider/model/purpose config suitable for call_model
-        tests. Raises RuntimeError if no key is found.
+        Called when require_llm=True. The config is intentionally driven by
+        .env.test / environment values so directed tests can run fully local
+        against Ollama or use OpenAI-compatible providers when desired.
         """
-        api_key = env.get("OPENAI_API_KEY", "")
-        if not api_key:
-            raise RuntimeError(
-                "FQCServer started with require_llm=True but OPENAI_API_KEY was not "
-                "found in .env.test or .env. Set OPENAI_API_KEY in .env.test and try again."
+        mode = (
+            os.environ.get("FQC_TEST_LLM_MODE")
+            or env.get("FQC_TEST_LLM_MODE", "ollama")
+        ).lower().replace("-", "_")
+        if mode not in {"ollama", "openai"}:
+            raise RuntimeError("FQC_TEST_LLM_MODE must be one of: ollama, openai")
+
+        if mode == "ollama":
+            ollama_url = (
+                self.ollama_url
+                or os.environ.get("OLLAMA_URL")
+                or env.get("OLLAMA_URL", "http://localhost:11434")
             )
-        model_id = env.get("LLM_MODEL", "gpt-4o-mini")
+            model_id = (
+                os.environ.get("OLLAMA_LLM_MODEL")
+                or env.get("OLLAMA_LLM_MODEL")
+                or os.environ.get("LLM_MODEL")
+                or env.get("LLM_MODEL", "llama3")
+            )
+            provider = {
+                "name": "local-ollama",
+                "type": "ollama",
+                "endpoint": ollama_url,
+                "local": True,
+            }
+            provider_name = "local-ollama"
+            cost = {"input": 0.0, "output": 0.0}
+        else:
+            api_key = os.environ.get("OPENAI_API_KEY") or env.get("OPENAI_API_KEY", "")
+            if not api_key:
+                raise RuntimeError(
+                    "FQC_TEST_LLM_MODE=openai requires OPENAI_API_KEY in .env.test or the environment."
+                )
+            model_id = os.environ.get("OPENAI_LLM_MODEL") or env.get("OPENAI_LLM_MODEL", "gpt-4o-mini")
+            provider = {
+                "name": "openai",
+                "type": "openai-compatible",
+                "endpoint": os.environ.get("OPENAI_LLM_ENDPOINT") or env.get("OPENAI_LLM_ENDPOINT", "https://api.openai.com"),
+                "api_key": api_key,
+            }
+            provider_name = "openai"
+            cost = {"input": 0.15, "output": 0.6}
+
+        model_name = test_llm_model_name(self.project_dir)
+        purpose_name = test_llm_purpose_name(self.project_dir)
+
         return {
-            "providers": [
-                {
-                    "name": "openai",
-                    "type": "openai-compatible",
-                    "endpoint": "https://api.openai.com",
-                    "api_key": api_key,
-                }
-            ],
+            "providers": [provider],
             "models": [
                 {
-                    "name": "fast",
-                    "provider_name": "openai",
+                    "name": model_name,
+                    "provider_name": provider_name,
                     "model": model_id,
                     "type": "language",
-                    "cost_per_million": {"input": 0.15, "output": 0.6},
+                    "cost_per_million": cost,
+                    "capabilities": {
+                        "tool_calling": True,
+                        "usage_on_tool_calls": True,
+                        "strict_tools": True,
+                        "parallel_tool_calls": True,
+                        "structured_outputs_with_tools": True,
+                    },
                 }
             ],
             "purposes": [
                 {
-                    "name": "general",
+                    "name": purpose_name,
                     "description": "General purpose",
-                    "models": ["fast"],
+                    "models": [model_name],
                     "defaults": {"temperature": 0.7},
                 }
             ],

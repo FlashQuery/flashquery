@@ -679,11 +679,22 @@ def run_suite(args: argparse.Namespace) -> int:
                         break
                 except Exception:
                     pass
+        needs_llm = args.require_llm
+        if not needs_llm:
+            for tf in test_files:
+                try:
+                    mod = load_test_module(tf)
+                    if getattr(mod, "REQUIRES_LLM", False):
+                        needs_llm = True
+                        break
+                except Exception:
+                    pass
 
         shared_server = FQCServer(
             fqc_dir=args.fqc_dir,
             port_range=port_range,
             require_embedding=needs_embedding,
+            require_llm=needs_llm,
             enable_git=args.enable_git,
             enable_locking=args.enable_locking,
             ollama_url=args.ollama_url,
@@ -758,10 +769,19 @@ def run_suite(args: argparse.Namespace) -> int:
 
         # ── Per-test server lifecycle ─────────────────────────────
         if server_mode == "per-test":
+            per_test_needs_embedding = args.require_embedding
+            per_test_needs_llm = args.require_llm
+            try:
+                per_test_mod = load_test_module(test_file)
+                per_test_needs_embedding = per_test_needs_embedding or getattr(per_test_mod, "REQUIRES_EMBEDDING", False)
+                per_test_needs_llm = per_test_needs_llm or getattr(per_test_mod, "REQUIRES_LLM", False)
+            except Exception:
+                pass
             per_test_server = FQCServer(
                 fqc_dir=args.fqc_dir,
                 port_range=port_range,
-                require_embedding=args.require_embedding,
+                require_embedding=per_test_needs_embedding,
+                require_llm=per_test_needs_llm,
                 enable_git=args.enable_git,
                 enable_locking=args.enable_locking,
                 ollama_url=args.ollama_url,
@@ -1025,11 +1045,18 @@ def main() -> None:
         help="Enable embedding provider in the managed server (for semantic search tests).",
     )
     parser.add_argument(
+        "--require-llm", action="store_true",
+        help=(
+            "Enable the test-managed LLM provider/purpose in the managed server "
+            "(configured by FQC_TEST_LLM_MODE; defaults to local Ollama)."
+        ),
+    )
+    parser.add_argument(
         "--ollama-url", default=None,
         help=(
-            "Override the Ollama endpoint used by managed embedding tests "
+            "Override the Ollama endpoint used by managed embedding/LLM tests "
             "(default: OLLAMA_URL from .env.test, then http://localhost:11434). "
-            "Embedding mode is configured by FQC_TEST_EMBEDDING_MODE."
+            "Modes are configured by FQC_TEST_EMBEDDING_MODE and FQC_TEST_LLM_MODE."
         ),
     )
     parser.add_argument(
