@@ -372,15 +372,15 @@ Per-file document write locking and public-surface concurrent write behaviors.
 | D-WCO-06 | T-S-006: read-triggered frontmatter repair returns the post-repair token accepted by a follow-up no-op write. | test_read_triggered_repair_token | 2026-05-27 | 2026-05-28 |
 | D-WCO-07 | T-S-007: consecutive managed scans of an untouched vault leave `fq_updated` timestamps unchanged. | test_scanner_token_stability | 2026-05-27 | 2026-05-27 |
 | D-WCO-08 | T-S-008: two parallel `call_macro` invocations rely on per-step tool locks and preserve structural document changes. | test_parallel_macros_per_file_lock | 2026-05-26 | 2026-05-26 |
-| D-WCO-09 | REQ-013 AC#5: a write carrying `expected_version` is refused with `version_mismatch` when the file was edited out-of-band on disk (external editor / git) between read and write. | — | 2026-06-03 |  |
-| D-WCO-10 | REQ-011 AC#2: every write-tool success response carries the post-write `version_token`; `remove_document` omits it; `copy_document`/`move_document` return the destination file's token. | — | 2026-06-03 |  |
-| D-WCO-11 | REQ-012 AC#1/#5: `expected_version` (and `if_match` alias) is honored on destructive/structural tools — `archive_document`/`remove_document`/`move_document` check the acted-on file, `copy_document` checks the source. | — | 2026-06-03 |  |
-| D-WCO-12 | REQ-016 AC#1/#2: `version_token` is whole-file, not section-scoped — a section read returns the whole-file token and an unrelated edit elsewhere invalidates a surgical caller's token. | — | 2026-06-03 |  |
-| D-WCO-13 | REQ-015 AC#1/#2/#3: a refused write returns the new `version_token` plus the per-tool `targeted_region`, with `not_found:true` when the racing change removed or renamed the target. | — | 2026-06-03 |  |
-| D-WCO-14 | REQ-018 AC#1/#3/#5/#7: a batch call returns an ordered `succeeded`/`conflicted`/`failed` per-item envelope; conflicted entries carry token + targeted region; reserved-name collisions emit as `result_status`. | — | 2026-06-03 |  |
-| D-WCO-15 | REQ-019: batch tools accept a mixed `Array<string \| {identifier, version_token}>` input — the version check fires only on object elements while bare strings stay unconditional. | — | 2026-06-03 |  |
-| D-WCO-16 | REQ-008 AC#3: two concurrent create-mode `write_document` calls to the same new path produce exactly one success and one structured conflict. | — | 2026-06-03 |  |
-| D-WCO-17 | REQ-025 AC#4: a macro that threads `expected_version` into a later write is refused with the conflict envelope when a concurrent macro modifies the file between the read and the write. | — | 2026-06-03 |  |
+| D-WCO-09 | REQ-013 AC#5: a write carrying `expected_version` is refused with `version_mismatch` when the file was edited out-of-band on disk (external editor / git) between read and write. | test_version_token_external_edit | 2026-06-03 | 2026-06-03 |
+| D-WCO-10 | REQ-011 AC#2: every write-tool success response carries the post-write `version_token`; `remove_document` omits it; `copy_document`/`move_document` return the destination file's token. | test_version_token_write_responses | 2026-06-03 | 2026-06-03 |
+| D-WCO-11 | REQ-012 AC#1/#5: `expected_version` (and `if_match` alias) is honored on destructive/structural tools — `archive_document`/`remove_document`/`move_document` check the acted-on file, `copy_document` checks the source. | test_expected_version_destructive_tools | 2026-06-03 | 2026-06-03 |
+| D-WCO-12 | REQ-016 AC#1/#2: `version_token` is whole-file, not section-scoped — a section read returns the whole-file token and an unrelated edit elsewhere invalidates a surgical caller's token. | test_version_token_whole_file | 2026-06-03 | 2026-06-03 |
+| D-WCO-13 | REQ-015 AC#1/#2/#3: a refused write returns the new `version_token` plus the per-tool `targeted_region`, with `not_found:true` when the racing change removed or renamed the target. | test_conflict_envelope_completeness | 2026-06-03 | 2026-06-03 |
+| D-WCO-14 | REQ-018 AC#1/#3/#5/#7: a batch call returns an ordered `succeeded`/`conflicted`/`failed` per-item envelope; conflicted entries carry token + targeted region; reserved-name collisions emit as `result_status`. | test_batch_item_envelope | 2026-06-03 | 2026-06-03 |
+| D-WCO-15 | REQ-019: batch tools accept a mixed `Array<string \| {identifier, version_token}>` input — the version check fires only on object elements while bare strings stay unconditional. | test_batch_mixed_array_input | 2026-06-03 | 2026-06-03 |
+| D-WCO-16 | REQ-008 AC#3: two concurrent create-mode `write_document` calls to the same new path produce exactly one success and one structured conflict. | test_create_destination_race | 2026-06-03 | 2026-06-03 |
+| D-WCO-17 | REQ-025 AC#4: a macro that threads `expected_version` into a later write is refused with the conflict envelope when a concurrent macro modifies the file between the read and the write. | test_macro_version_token_threading | 2026-06-03 | 2026-06-03 |
 
 ## 3. Document Outline and Structure
 
@@ -1030,6 +1030,7 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 |----------|-------|---------|-----------|
 | Document Lifecycle | 27 | 27 | 0 |
 | Document Content Operations | 20 | 20 | 0 |
+| Vault Write Coherency | 17 | 17 | 0 |
 | Document Outline | 6 | 6 | 0 |
 | Search — Documents | 9 | 9 | 0 |
 | Search — Cross-type | 5 | 5 | 0 |
@@ -1045,7 +1046,7 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | LLM Tools | 112 | 111 | 1 |
 | Macro Language | 26 | 26 | 0 |
 | Host Help Convention Parity | 33 | 33 | 0 |
-| **Total** | **456** | **451** | **5** |
+| **Total** | **473** | **468** | **5** |
 
 ---
 
@@ -1909,6 +1910,33 @@ Covers: D-WCO-07
 
 ### test_parallel_macros_per_file_lock
 Covers: D-WCO-08
+
+### test_version_token_external_edit
+Covers: D-WCO-09
+
+### test_version_token_write_responses
+Covers: D-WCO-10
+
+### test_expected_version_destructive_tools
+Covers: D-WCO-11
+
+### test_version_token_whole_file
+Covers: D-WCO-12
+
+### test_conflict_envelope_completeness
+Covers: D-WCO-13
+
+### test_batch_item_envelope
+Covers: D-WCO-14
+
+### test_batch_mixed_array_input
+Covers: D-WCO-15
+
+### test_create_destination_race
+Covers: D-WCO-16
+
+### test_macro_version_token_threading
+Covers: D-WCO-17
 
 ---
 
