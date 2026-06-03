@@ -27,6 +27,12 @@ const mocks = vi.hoisted(() => {
   const mockMkdir = vi.fn();
   const mockWriteFile = vi.fn();
   const mockWriteVaultFile = vi.fn().mockResolvedValue({ contentHash: 'backup-hash' });
+  const mockWithAncestorDirectoryLocksShared = vi.fn(
+    async (_config: FlashQueryConfig, _filePath: string, fn: () => Promise<unknown>) => fn()
+  );
+  const mockWithDocumentLock = vi.fn(
+    async (_config: FlashQueryConfig, _filePath: string, fn: () => Promise<unknown>) => fn()
+  );
 
   // pg.Client mock — connect/query/end can be overridden per-test
   const mockPgConnect = vi.fn().mockResolvedValue(undefined);
@@ -47,6 +53,8 @@ const mocks = vi.hoisted(() => {
     mockMkdir,
     mockWriteFile,
     mockWriteVaultFile,
+    mockWithAncestorDirectoryLocksShared,
+    mockWithDocumentLock,
     MockPgClient,
     mockPgConnect,
     mockPgQuery,
@@ -108,6 +116,11 @@ vi.mock('../../src/utils/pg-client.js', () => ({
 
 vi.mock('../../src/storage/vault-write.js', () => ({
   writeVaultFile: mocks.mockWriteVaultFile,
+}));
+
+vi.mock('../../src/services/document-lock.js', () => ({
+  withAncestorDirectoryLocksShared: mocks.mockWithAncestorDirectoryLocksShared,
+  withDocumentLock: mocks.mockWithDocumentLock,
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -430,6 +443,55 @@ describe('GitManager', () => {
         expect.stringContaining('"fqc_memory"'),
         expect.objectContaining({ lockConfig: expect.any(Object) })
       );
+    });
+
+    it('wraps .fqc/backup.json writes in shared ancestor directory locks before document lock', async () => {
+      const events: string[] = [];
+      mocks.mockPgQuery
+        .mockResolvedValueOnce({ rows: [{ tablename: 'fqc_memory' }] })
+        .mockResolvedValue({ rows: [] });
+      mocks.mockWithAncestorDirectoryLocksShared.mockImplementationOnce(
+        async (_config, filePath, fn) => {
+          events.push(`ancestor:${path.basename(filePath)}:start`);
+          const result = await fn();
+          events.push(`ancestor:${path.basename(filePath)}:end`);
+          return result;
+        }
+      );
+      mocks.mockWithDocumentLock.mockImplementationOnce(async (_config, filePath, fn) => {
+        events.push(`document:${path.basename(filePath)}:start`);
+        const result = await fn();
+        events.push(`document:${path.basename(filePath)}:end`);
+        return result;
+      });
+      mocks.mockWriteVaultFile.mockImplementationOnce(async (filePath) => {
+        events.push(`write:${path.basename(filePath)}`);
+        return { contentHash: 'backup-hash' };
+      });
+
+      const manager = makeManager();
+      await manager.initialize(testConfig());
+
+      await expect(manager.dumpDatabase()).resolves.toBe('.fqc/backup.json');
+
+      const backupPath = path.join(tempVaultDir, '.fqc/backup.json');
+      expect(mocks.mockWithAncestorDirectoryLocksShared).toHaveBeenCalledWith(
+        expect.any(Object),
+        backupPath,
+        expect.any(Function)
+      );
+      expect(mocks.mockWithDocumentLock).toHaveBeenCalledWith(
+        expect.any(Object),
+        backupPath,
+        expect.any(Function)
+      );
+      expect(events).toEqual([
+        'ancestor:backup.json:start',
+        'document:backup.json:start',
+        'write:backup.json',
+        'document:backup.json:end',
+        'ancestor:backup.json:end',
+      ]);
     });
 
     it('calls pgClient.end() even when query throws', async () => {

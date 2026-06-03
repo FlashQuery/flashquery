@@ -73,6 +73,7 @@ export async function runScanCommand(configPath: string): Promise<void> {
     initLogger(config);
     await initSupabase(config);
     await initVault(config);
+    await assertLockingSessionCapability(config);
     initEmbedding(config, undefined);  // scan path: no llmClient initialized; purpose path is skipped
     let folderMappings: Map<string, FolderMapping> = new Map();
     try {

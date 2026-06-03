@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => {
   const mockDumpDatabase = vi.fn().mockResolvedValue('.fqc/backup.json');
   const mockCommitAllVaultChanges = vi.fn().mockResolvedValue(undefined);
   const mockTagBackup = vi.fn().mockResolvedValue(undefined);
+  const mockAssertLockingSessionCapability = vi.fn().mockResolvedValue(undefined);
 
   // Store isGitReady on the mocks object so it can be accessed from the getter
   // after vi.clearAllMocks() resets mock implementations
@@ -44,6 +45,7 @@ const mocks = vi.hoisted(() => {
     mockDumpDatabase,
     mockCommitAllVaultChanges,
     mockTagBackup,
+    mockAssertLockingSessionCapability,
     MockGitManagerImpl,
     state,
     setIsGitReady: (val: boolean) => { state.isGitReady = val; },
@@ -98,6 +100,10 @@ vi.mock('../../src/services/scanner.js', () => ({
     movedFiles: 0,
     deletedFiles: 0,
   }),
+}));
+
+vi.mock('../../src/services/lock-startup.js', () => ({
+  assertLockingSessionCapability: mocks.mockAssertLockingSessionCapability,
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -236,6 +242,34 @@ describe('runScanCommand', () => {
 
     await runScanCommand('/path/to/config.yaml');
 
+    expect(exitMock).toHaveBeenCalledWith(0);
+    exitMock.mockRestore();
+  });
+
+  it('asserts advisory-lock session capability before scan repair can run', async () => {
+    const { runScanOnce } = await import('../../src/services/scanner.js');
+    const callOrder: string[] = [];
+    mocks.mockAssertLockingSessionCapability.mockImplementationOnce(async () => {
+      callOrder.push('assert-lock-session');
+    });
+    vi.mocked(runScanOnce).mockImplementationOnce(async () => {
+      callOrder.push('scan');
+      return {
+        hashMismatches: 0,
+        statusMismatches: 0,
+        newFiles: 0,
+        movedFiles: 0,
+        deletedFiles: 0,
+      };
+    });
+    const exitMock = vi.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: number) => never);
+
+    await runScanCommand('/path/to/config.yaml');
+
+    expect(mocks.mockAssertLockingSessionCapability).toHaveBeenCalledWith(
+      mocks.mockLoadConfig.mock.results[0]?.value
+    );
+    expect(callOrder).toEqual(['assert-lock-session', 'scan']);
     expect(exitMock).toHaveBeenCalledWith(0);
     exitMock.mockRestore();
   });

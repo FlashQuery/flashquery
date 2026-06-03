@@ -7,7 +7,7 @@ import { logger } from '../logging/logger.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { createPgClientIPv4 } from '../utils/pg-client.js';
 import { writeVaultFile } from '../storage/vault-write.js';
-import { withDocumentLock } from '../services/document-lock.js';
+import { withAncestorDirectoryLocksShared, withDocumentLock } from '../services/document-lock.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GitManagerImpl
@@ -125,8 +125,10 @@ export class GitManagerImpl {
       if (!lockConfig) {
         throw new Error('Git: dumpDatabase requires initialize(config) before writing backup');
       }
-      await withDocumentLock(lockConfig, dumpAbsPath, () =>
-        writeVaultFile(dumpAbsPath, output, { lockConfig })
+      await withAncestorDirectoryLocksShared(lockConfig, dumpAbsPath, () =>
+        withDocumentLock(lockConfig, dumpAbsPath, () =>
+          writeVaultFile(dumpAbsPath, output, { lockConfig })
+        )
       );
       logger.info(`Git: backup written to ${dumpRelPath} (${tablesResult.rows.length} tables)`);
       return dumpRelPath;
