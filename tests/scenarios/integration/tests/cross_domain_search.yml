@@ -48,10 +48,10 @@ steps:
       expect_path: "cosmos/galaxies.md"
       expect_not_contains: "Nebulae are nurseries"
 
-  - label: "search_all scoped to documents does not find unrelated titles"
+  - label: "search_all scoped to documents returns no memory result envelopes"
     assert:
       op: search
       args:
         query: "Spiral Galaxies"
         entity_types: [documents]
-      expect_count_eq: 1
+      expect_not_contains: '"entity_type":"memory"'

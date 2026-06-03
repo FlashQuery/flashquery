@@ -277,24 +277,24 @@ llm:
   # field is the provider's real model ID.
   models:
     - name: embeddings
-      provider_name: openai
-      model: text-embedding-3-small
+      provider_name: local-ollama
+      model: nomic-embed-text
       type: embedding
       # Embedding vector dimensions — must match the model:
       #   text-embedding-3-small: 1536 | text-embedding-3-large: 3072
       #   nomic-embed-text: 768
-      dimensions: 1536
+      dimensions: 768
       cost_per_million:
-        input: 0.02
+        input: 0.00
         output: 0.00
 
     - name: fast
-      provider_name: openai
-      model: gpt-4o-mini
+      provider_name: local-ollama
+      model: granite4
       type: language
       cost_per_million:
-        input: 0.15
-        output: 0.60
+        input: 0.0
+        output: 0.00
       # Optional discovery metadata — surfaced via call_model resolver=list_models.
       # Omit any field to omit it from the discovery response.
       description: "Fast, cheap small model for routine tasks"
