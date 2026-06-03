@@ -82,12 +82,26 @@ def _test_env_value(name: str, default: str, project_dir: Path | None = None) ->
     return os.environ.get(name) or env.get(name, default)
 
 
+def _test_env_int(name: str, default: int, project_dir: Path | None = None) -> int:
+    raw = _test_env_value(name, "", project_dir)
+    if raw == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 def test_llm_model_name(project_dir: Path | None = None) -> str:
     return _test_env_value("FQC_TEST_LLM_MODEL_ALIAS", "fast", project_dir)
 
 
 def test_llm_purpose_name(project_dir: Path | None = None) -> str:
     return _test_env_value("FQC_TEST_LLM_PURPOSE", "general", project_dir)
+
+
+def test_llm_timeout_ms(project_dir: Path | None = None) -> int:
+    return _test_env_int("FQC_TEST_LLM_TIMEOUT_MS", 30_000, project_dir)
 
 
 def _deep_merge(base: dict, overlay: dict) -> dict:
@@ -477,6 +491,7 @@ class FQCServer:
                 "type": "ollama",
                 "endpoint": ollama_url,
                 "local": True,
+                "timeout_ms": _test_env_int("FQC_TEST_LLM_TIMEOUT_MS", 30_000, self.project_dir),
             }
             provider_name = "local-ollama"
             cost = {"input": 0.0, "output": 0.0}
@@ -492,12 +507,14 @@ class FQCServer:
                 "type": "openai-compatible",
                 "endpoint": os.environ.get("OPENAI_LLM_ENDPOINT") or env.get("OPENAI_LLM_ENDPOINT", "https://api.openai.com"),
                 "api_key": api_key,
+                "timeout_ms": _test_env_int("FQC_TEST_LLM_TIMEOUT_MS", 30_000, self.project_dir),
             }
             provider_name = "openai"
             cost = {"input": 0.15, "output": 0.6}
 
         model_name = test_llm_model_name(self.project_dir)
         purpose_name = test_llm_purpose_name(self.project_dir)
+        timeout_ms = test_llm_timeout_ms(self.project_dir)
 
         return {
             "providers": [provider],
@@ -522,7 +539,7 @@ class FQCServer:
                     "name": purpose_name,
                     "description": "General purpose",
                     "models": [model_name],
-                    "defaults": {"temperature": 0.7},
+                    "defaults": {"temperature": 0.7, "timeout_ms": timeout_ms},
                 }
             ],
         }

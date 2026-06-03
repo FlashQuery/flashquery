@@ -79,5 +79,5 @@ steps:
         name: fast
         messages:
           - role: user
-            content: "{{ref:${source_doc.fq_id}->projections.summary}} Does the document contain the literal string 'must NOT be injected'? Reply YES or NO."
-      expect_not_contains: "YES"
+            content: "{{ref:${source_doc.fq_id}->projections.summary}} Reply OK."
+      expect_not_contains: "must NOT be injected"

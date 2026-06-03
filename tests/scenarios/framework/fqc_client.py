@@ -102,6 +102,22 @@ def _load_env_file(directory: Path) -> dict[str, str]:
     return env
 
 
+def _test_env_int(name: str, default: int, fqc_dir: str | Path | None = None) -> int:
+    """Read an integer test setting from process env or the project .env.test."""
+    raw = os.environ.get(name)
+    if raw is None:
+        dir_hint = fqc_dir or os.environ.get("FQC_DIR")
+        project_dir = Path(dir_hint) if dir_hint else _find_project_dir()
+        if project_dir:
+            raw = _load_env_file(project_dir).get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 def _expand_vars(value: str, env: dict[str, str]) -> str:
     """Replace ${VAR} placeholders using *env* dict, then os.environ as fallback."""
     def _replace(m: re.Match) -> str:
@@ -544,6 +560,7 @@ class FQCClient:
         self.session_id: str | None = None
         self._request_id = 0
         self._http = requests.Session()
+        self._timeout_seconds = _test_env_int("FQC_TEST_HTTP_TIMEOUT_SECONDS", 30, fqc_dir)
 
         if not self.auth_secret:
             print(
@@ -605,7 +622,7 @@ class FQCClient:
         """
         url = f"{self.base_url}/mcp"
         hdrs = self._headers()
-        resp = self._http.post(url, headers=hdrs, json=payload, timeout=30)
+        resp = self._http.post(url, headers=hdrs, json=payload, timeout=self._timeout_seconds)
 
         if not resp.ok:
             # Build a diagnostic message that actually helps someone debug
@@ -652,7 +669,7 @@ class FQCClient:
         """POST JSON-RPC and return every parsed response/notification message."""
         url = f"{self.base_url}/mcp"
         hdrs = self._headers()
-        resp = self._http.post(url, headers=hdrs, json=payload, timeout=30)
+        resp = self._http.post(url, headers=hdrs, json=payload, timeout=self._timeout_seconds)
         if not resp.ok:
             raise requests.HTTPError(f"HTTP {resp.status_code} {resp.reason}: {resp.text[:500]}", response=resp)
         sid = resp.headers.get("mcp-session-id")

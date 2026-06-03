@@ -30,7 +30,7 @@ export interface FlashQueryConfig {
   templates?: { defaultAccess: 'permissive' | 'restrictive' };
   macro: { defaultTimeoutMs: number };
   llm?: {
-    providers: Array<{ name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; apiKey?: string; local?: boolean }>;
+    providers: Array<{ name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; apiKey?: string; local?: boolean; timeoutMs?: number }>;
     models: Array<{
       name: string;
       providerName: string;

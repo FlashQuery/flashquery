@@ -106,6 +106,7 @@ const ProviderSchema = z
     type: z.enum(['openai-compatible', 'ollama']),
     endpoint: z.string().url('endpoint must be a valid URL'),
     api_key: z.string().optional(),
+    timeout_ms: z.number().int().positive().optional(),
     // DISC-01 / Verification Correction 3: optional flag surfaced in list_models discovery.
     // Auto-derived from `type: ollama` in the response layer when not explicitly declared.
     // NOTE: this is a *provider-level* field (not model-level). As of 2026-05-03 it is read

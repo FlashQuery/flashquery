@@ -78,6 +78,12 @@ supports `ollama_openai` (default), `ollama`, and `openai`;
 or `OPENAI_API_KEY` plus `OPENAI_EMBEDDING_MODEL` configure the OpenAI provider.
 The `--ollama-url` flag overrides `OLLAMA_URL` for managed runs.
 
+Managed tests with `deps: [llm]` generate their language-model provider from
+`.env.test` / environment settings as well. `FQC_TEST_LLM_TIMEOUT_MS` controls
+the generated `call_model` purpose timeout, and `FQC_TEST_HTTP_TIMEOUT_SECONDS`
+controls the Python MCP client timeout. Increase both when running local Ollama
+models on slower hardware.
+
 ### Useful flags
 
 ```bash

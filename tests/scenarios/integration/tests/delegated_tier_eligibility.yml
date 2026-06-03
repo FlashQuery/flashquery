@@ -11,28 +11,14 @@ server_modes: [managed]
 
 extra_config:
   llm:
-    models:
-      - name: fast
-        provider_name: openai
-        model: gpt-4o-mini
-        type: language
-        cost_per_million:
-          input: 0.15
-          output: 0.6
-        capabilities:
-          tool_calling: true
-          usage_on_tool_calls: true
-          strict_tools: true
-          parallel_tool_calls: true
-          structured_outputs_with_tools: true
     purposes:
       - name: delegated_tier_yaml
         description: Delegated tier eligibility YAML fixture
-        models: [fast]
+        models: ["${test.llm_model}"]
         tools: [tier:read-write]
         defaults:
           max_iterations: 3
-          timeout_ms: 30000
+          timeout_ms: "${test.llm_timeout_ms}"
           max_tokens: 128
 
 steps:

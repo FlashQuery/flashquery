@@ -68,6 +68,7 @@ steps:
       args:
         resolver: model
         name: fast
+        return_messages: true
         template_params:
           bundle:
             _items:
@@ -91,6 +92,7 @@ steps:
       args:
         resolver: model
         name: fast
+        return_messages: true
         template_params:
           bundle:
             _items:
@@ -114,6 +116,7 @@ steps:
       args:
         resolver: model
         name: fast
+        return_messages: true
         template_params:
           bundle:
             _items:
@@ -137,6 +140,7 @@ steps:
       args:
         resolver: model
         name: fast
+        return_messages: true
         template_params:
           bundle:
             _items:
@@ -160,6 +164,7 @@ steps:
       args:
         resolver: model
         name: fast
+        return_messages: true
         template_params:
           bundle:
             _items:
