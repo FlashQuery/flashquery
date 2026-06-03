@@ -94,7 +94,9 @@ All three are stored in places the user owns: the vault directory on local disk,
 - Each MCP session has its own server instance; there is no shared per-session state.
 - The Supabase client handles connection pooling.
 - Embedding API calls are fire-and-forget on the write path — they return an ID immediately and compute the embedding asynchronously, so tool calls don't block on the embedding provider.
-- Vault file writes are synchronous per tool call to guarantee on-disk consistency before the response is returned.
+- Vault file writes are synchronous per tool call and use durable atomic replacement: FlashQuery writes a temporary file, fsyncs it, renames it into place, and fsyncs the parent directory before returning success.
+- Document mutations acquire per-document locks and shared ancestor-directory locks when `locking.enabled` is true. Multi-path operations such as move, trash removal, and guarded copy acquire their relevant file locks together in a stable order. Contention returns a retryable lock-timeout conflict to the MCP caller.
+- Document reads return a `version_token` fingerprint that write tools can accept as `expected_version`/`if_match` for opt-in lost-update protection. Version mismatches return a conflict with the current token instead of overwriting newer vault bytes.
 - Concurrent writes from multiple FlashQuery instances pointed at the same database can be coordinated via the `locking` section in `flashquery.yml` (enabled by default). See the Known Limitations section below for the current boundaries on multi-instance operation.
 
 ---
@@ -257,7 +259,7 @@ FlashQuery does not follow symbolic links in the vault. Symlinks are skipped dur
 
 ### Multiple instances on the same vault
 
-Running two FlashQuery instances against the same vault simultaneously can still race at the filesystem level. Database-backed advisory locks coordinate shared document writes, plugin reconciliation, and plugin unregister cleanup when `locking.enabled` is true, but they do not make the vault itself a fully multi-writer filesystem. If `locking.enabled` is false, only same-process Tier 1 locks remain; separate FlashQuery processes can race on the same document or plugin coordination key. Recommendation: one primary writer per vault; use additional instances only when you understand the lock boundaries.
+Running two FlashQuery instances against the same vault simultaneously can still race with external filesystem writers and with any FlashQuery process that has locking disabled. Database-backed advisory locks coordinate FlashQuery document writes, ancestor-directory operations, plugin reconciliation, and plugin unregister cleanup when `locking.enabled` is true, but they do not make the vault itself a fully multi-writer filesystem for arbitrary editors. If `locking.enabled` is false, only same-process Tier 1 locks remain; separate FlashQuery processes can race on the same document or plugin coordination key. Recommendation: one primary writer per vault; use additional instances only when they share the same database locking configuration and you understand the lock boundaries.
 
 ### Plugin table consistency after external edits
 

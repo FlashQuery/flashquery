@@ -29,6 +29,10 @@ Expected JSON error payloads generally look like:
 
 Batch tools preserve input order and usually return per-item errors inside the successful outer MCP response.
 
+Document mutation tools serialize FlashQuery-managed writes with per-document locks and shared ancestor-directory locks when `locking.enabled` is true. Tools that touch two paths, such as move, copy with a source precondition, or trash removal, acquire the relevant file locks together in a stable order. Lock contention returns an expected conflict envelope with `details.reason: "lock_timeout"`; callers should retry after the competing write finishes. Vault writes use durable atomic replacement, so a successful response means the file write completed on disk before the response was returned.
+
+Many document read and mutation responses include a `version_token`, which is the whole-file SHA-256 fingerprint of the current vault file. Pass that token as `expected_version` or `if_match` on supported mutation tools to opt into lost-update protection. If the file changed before the mutation lock was acquired, the tool returns `error: "conflict"` with the current `version_token` and targeted region details instead of overwriting newer content.
+
 ## Documents
 
 ### `write_document`
@@ -41,7 +45,7 @@ Batch tools preserve input order and usually return per-item errors inside the s
 
 **Behavior**
 
-`write_document` has explicit `create` and `update` modes. Create mode writes a new vault Markdown file, inserts a `fqc_documents` row, sets FlashQuery-managed frontmatter, and starts a fire-and-forget embedding update. Update mode resolves one existing document by `fq_id`, path, or filename; merges custom frontmatter; replaces the full tag list when `tags` is provided; preserves or sets FlashQuery-managed fields; updates the database row; and starts a background re-embed. When locking is enabled, it acquires the `documents` write lock. FQ-managed frontmatter fields are rejected if passed directly through `frontmatter`. A `null` custom frontmatter value removes that custom field during update.
+`write_document` has explicit `create` and `update` modes. Create mode writes a new vault Markdown file, inserts a `fqc_documents` row, sets FlashQuery-managed frontmatter, and starts a fire-and-forget embedding update. Update mode resolves one existing document by `fq_id`, path, or filename; merges custom frontmatter; replaces the full tag list when `tags` is provided; preserves or sets FlashQuery-managed fields; updates the database row; and starts a background re-embed. When locking is enabled, create and update acquire a per-document lock plus shared locks on ancestor directories; update re-resolves the identifier under the lock before writing. FQ-managed frontmatter fields are rejected if passed directly through `frontmatter`. A `null` custom frontmatter value removes that custom field during update.
 
 **Inputs**
 
@@ -54,12 +58,14 @@ Batch tools preserve input order and usually return per-item errors inside the s
 | `content` | `string` | no | `""` on create; existing body on update | Markdown body. |
 | `frontmatter` | `object` | no | `{}` | Custom frontmatter. FlashQuery-managed fields are rejected. `null` removes a custom field on update. |
 | `tags` | `string[]` | no | `[]` on create; existing tags on update | Replacement tag list, validated and deduplicated. |
+| `expected_version` | `string` | no | none | Optional whole-file `version_token` precondition for update mode. |
+| `if_match` | `string` | no | none | Alias for `expected_version`. |
 
 Create mode requires `path` and `title`. Update mode requires `identifier` and at least one of `content`, `title`, `frontmatter`, or `tags`.
 
 **Output**
 
-Success returns a document write JSON payload with `mode`, `identifier`, `title`, `path`, `fq_id`, `modified`, and `size.chars`. Create can include warnings such as `plugin_readonly_folder`. Expected errors include `invalid_input`, `conflict`, `not_found`, and `ambiguous_identifier`. Runtime errors set `isError: true`.
+Success returns a document write JSON payload with `mode`, `identifier`, `title`, `path`, `fq_id`, `modified`, `size.chars`, and `version_token`. Create can include warnings such as `plugin_readonly_folder`. Expected errors include `invalid_input`, `conflict`, `not_found`, and `ambiguous_identifier`. Lock timeouts and version mismatches are `conflict` errors; version mismatches include the current `version_token`. Runtime errors set `isError: true`.
 
 **Examples**
 
@@ -82,7 +88,8 @@ mcp__flashquery__write_document({
   "path": "Projects/Alpha/Plan.md",
   "fq_id": "550e8400-e29b-41d4-a716-446655440000",
   "modified": "2026-05-17T12:00:00.000Z",
-  "size": { "chars": 23 }
+  "size": { "chars": 23 },
+  "version_token": "7f83b1657ff1fc53b92dc18148a1d65dfa135f6b"
 }
 ```
 
@@ -156,17 +163,20 @@ Use `search` to discover documents, `list_vault` to browse paths, and `call_mode
 
 **Behavior**
 
-Archives one or more documents by setting status to `archived` and preserving the file, `fq_id`, and history. Re-archiving is idempotent. Batch input returns ordered per-item results and errors. The tool acquires the `documents` lock when configured.
+Archives one or more documents by setting status to `archived` and preserving the file, `fq_id`, and history. Re-archiving is idempotent. Batch input returns ordered per-item results and errors. Each document write is protected by a per-document lock plus shared ancestor-directory locks when locking is enabled.
 
 **Inputs**
 
 | Field | Type | Required | Default | Description |
 |---|---:|---:|---:|---|
 | `identifiers` | `string \| string[]` | yes | none | One or more document identifiers: path, `fq_id`, or filename. |
+| `expected_version` | `string` | no | none | Optional whole-file `version_token` precondition. For batch input, object-form identifiers can carry per-item `version_token` values. |
+| `if_match` | `string` | no | none | Alias for `expected_version`. |
+| `version_tokens` | never | no | none | Unsupported; use object-form identifiers with per-item `version_token`. |
 
 **Output**
 
-Single success returns a document identification payload with `status: "archived"` and `archived_at`. Batch success returns an ordered array. Expected per-item errors include `not_found` and `ambiguous_identifier`.
+Single success returns a document identification payload with `status: "archived"`, `archived_at`, and `version_token`. Batch success returns an ordered array. Expected per-item errors include `not_found`, `ambiguous_identifier`, lock conflicts, and version mismatch conflicts.
 
 **Examples**
 
@@ -186,7 +196,8 @@ mcp__flashquery__archive_document({
     "modified": "2026-05-17T12:00:00.000Z",
     "size": { "chars": 42 },
     "status": "archived",
-    "archived_at": "2026-05-17T12:00:00.000Z"
+    "archived_at": "2026-05-17T12:00:00.000Z",
+    "version_token": "7f83b1657ff1fc53b92dc18148a1d65dfa135f6b"
   },
   {
     "error": "not_found",
@@ -210,17 +221,20 @@ Use `remove_document` when the document should leave its current vault path. Use
 
 **Behavior**
 
-For each document, `remove_document` first writes archived lifecycle state, updates the database row, then either moves the file into the configured trash folder or physically deletes it when trash is disabled. When trash is enabled, the original path is recorded in frontmatter and trash basename collisions follow configured collision handling. Batch responses preserve input order and return per-document errors. Bulk removal over five items adds a warning. On removal failure after archive writes, it attempts rollback. The tool acquires the `documents` lock when configured.
+For each document, `remove_document` first writes archived lifecycle state, updates the database row, then either moves the file into the configured trash folder or physically deletes it when trash is disabled. When trash is enabled, the original path is recorded in frontmatter and trash basename collisions follow configured collision handling. Batch responses preserve input order and return per-document errors. Bulk removal over five items adds a warning. On removal failure after archive writes, it attempts rollback. The source path, and the trash destination when present, are locked together with shared ancestor-directory locks when locking is enabled.
 
 **Inputs**
 
 | Field | Type | Required | Default | Description |
 |---|---:|---:|---:|---|
 | `identifiers` | `string \| string[]` | yes | none | One or more document identifiers: path, `fq_id`, or filename. |
+| `expected_version` | `string` | no | none | Optional source file `version_token` precondition. For batch input, object-form identifiers can carry per-item `version_token` values. |
+| `if_match` | `string` | no | none | Alias for `expected_version`. |
+| `version_tokens` | never | no | none | Unsupported; use object-form identifiers with per-item `version_token`. |
 
 **Output**
 
-Single success returns document archive fields plus `moved_to`, which is a trash path when trash is enabled or `null` when hard-deleted. Batch success returns `{ "results": [...] }` and may include `warnings`.
+Single success returns document archive fields plus `moved_to`, which is a trash path when trash is enabled or `null` when hard-deleted. The removal result intentionally omits `version_token` because the source path no longer contains the active file after success. Batch success returns `{ "results": [...] }` and may include `warnings`. Lock timeouts and version mismatches are expected conflicts.
 
 **Examples**
 
@@ -258,7 +272,7 @@ Use `archive_document` for archive-only behavior and `manage_directory` for empt
 
 **Behavior**
 
-Copies one source document to one destination. It preserves source title, tags, and custom frontmatter, but assigns a new `fq_id`, timestamps, active status, and database row. If `destination` is omitted, it writes to the vault root using a sanitized title filename. It rejects destination conflicts, starts a fire-and-forget embedding update, and acquires the `documents` lock when configured.
+Copies one source document to one destination. It preserves source title, tags, and custom frontmatter, but assigns a new `fq_id`, timestamps, active status, and database row. If `destination` is omitted, it writes to the vault root using a sanitized title filename. It rejects destination conflicts, starts a fire-and-forget embedding update, and locks the destination path with shared ancestor-directory locks when configured. If `expected_version` is supplied, the source and destination paths are locked together and the source is re-read under lock before writing the copy.
 
 **Inputs**
 
@@ -266,10 +280,12 @@ Copies one source document to one destination. It preserves source title, tags, 
 |---|---:|---:|---:|---|
 | `identifier` | `string` | yes | none | Source document identifier: path, `fq_id`, or filename. Array input is rejected. |
 | `destination` | `string` | no | sanitized title at vault root | Vault-relative destination path. |
+| `expected_version` | `string` | no | none | Optional source file `version_token` precondition. |
+| `if_match` | `string` | no | none | Alias for `expected_version`. |
 
 **Output**
 
-Success returns document identification for the new copy. Expected errors include `invalid_input`, `conflict`, `not_found`, and `ambiguous_identifier`.
+Success returns document identification for the new copy, including `version_token`. Expected errors include `invalid_input`, `conflict`, `not_found`, and `ambiguous_identifier`.
 
 **Examples**
 
@@ -287,7 +303,8 @@ mcp__flashquery__copy_document({
   "path": "People/Ada.md",
   "fq_id": "550e8400-e29b-41d4-a716-446655440000",
   "modified": "2026-05-17T12:00:00.000Z",
-  "size": { "chars": 250 }
+  "size": { "chars": 250 },
+  "version_token": "7f83b1657ff1fc53b92dc18148a1d65dfa135f6b"
 }
 ```
 
@@ -305,7 +322,7 @@ Use `move_document` to preserve identity at a new path, and `write_document` to 
 
 **Behavior**
 
-Moves one document to a destination path, preserving `fq_id`, history, and plugin associations. Intermediate directories are created. If the destination extension is omitted, the source extension is used. Existing links in other files are not updated. Plugin-owned documents can return `warnings: ["plugin_ownership_path_expectation"]`. The tool updates the database path and acquires the `documents` lock when configured.
+Moves one document to a destination path, preserving `fq_id`, history, and plugin associations. Intermediate directories are created. If the destination extension is omitted, the source extension is used. Existing links in other files are not updated. Plugin-owned documents can return `warnings: ["plugin_ownership_path_expectation"]`. The tool locks source and destination paths together, wraps those locks in shared ancestor-directory locks, and updates the database path when configured locking is enabled.
 
 **Inputs**
 
@@ -313,10 +330,12 @@ Moves one document to a destination path, preserving `fq_id`, history, and plugi
 |---|---:|---:|---:|---|
 | `identifier` | `string` | yes | none | Source document path, `fq_id`, or filename. |
 | `destination` | `string` | yes | none | Vault-relative destination path, filename required; extension optional. |
+| `expected_version` | `string` | no | none | Optional source file `version_token` precondition. |
+| `if_match` | `string` | no | none | Alias for `expected_version`. |
 
 **Output**
 
-Success returns document identification for the moved document, plus optional warnings. Expected errors include `not_found`, `ambiguous_identifier`, `invalid_input`, and `conflict`.
+Success returns document identification for the moved document, plus optional warnings and `version_token`. Expected errors include `not_found`, `ambiguous_identifier`, `invalid_input`, and `conflict`.
 
 **Examples**
 
@@ -334,7 +353,8 @@ mcp__flashquery__move_document({
   "path": "Archive/Draft.md",
   "fq_id": "550e8400-e29b-41d4-a716-446655440000",
   "modified": "2026-05-17T12:00:00.000Z",
-  "size": { "chars": 120 }
+  "size": { "chars": 120 },
+  "version_token": "7f83b1657ff1fc53b92dc18148a1d65dfa135f6b"
 }
 ```
 
@@ -352,7 +372,7 @@ Use `copy_document` for a fresh identity and `insert_doc_link` or manual edits t
 
 **Behavior**
 
-Resolves one document, reads its Markdown body, applies heading-aware insertion, writes the file, updates the content hash in `fqc_documents`, and starts a background embedding update. Heading modes support `contains` or `exact` matching, optional heading level, occurrence disambiguation, and nested-section behavior. `top` and `bottom` reject heading-specific options. The tool acquires the `documents` lock when configured.
+Resolves one document, reads its Markdown body, applies heading-aware insertion, writes the file, updates the content hash in `fqc_documents`, and starts a background embedding update. Heading modes support `contains` or `exact` matching, optional heading level, occurrence disambiguation, and nested-section behavior. `top` and `bottom` reject heading-specific options. The tool acquires a per-document lock with shared ancestor-directory locks when configured.
 
 **Inputs**
 
@@ -366,10 +386,12 @@ Resolves one document, reads its Markdown body, applies heading-aware insertion,
 | `include_nested` | `boolean` | no | `true` | For `end_of_section`, whether child sections are included before insertion point. |
 | `heading_match` | `"contains" \| "exact"` | no | `"contains"` | Heading matching mode. |
 | `heading_level` | `number` | no | none | Optional Markdown heading level filter, 1-6. |
+| `expected_version` | `string` | no | none | Optional whole-file `version_token` precondition. |
+| `if_match` | `string` | no | none | Alias for `expected_version`. |
 
 **Output**
 
-Success returns document identification plus `inserted_at` for heading-aware modes. Expected errors include `invalid_input`, `not_found`, `ambiguous_identifier`, and lock `conflict`.
+Success returns document identification plus `inserted_at` for heading-aware modes and `version_token`. Expected errors include `invalid_input`, `not_found`, `ambiguous_identifier`, and `conflict` for lock timeouts or version mismatches.
 
 **Examples**
 
@@ -415,7 +437,7 @@ Use `replace_doc_section` for replacement/deletion and `write_document` for whol
 
 **Behavior**
 
-Resolves one document, finds a heading by text, optional match mode, optional level, and optional occurrence, then replaces the section body while preserving the heading line. Passing empty `content` deletes the heading and section. With `include_nested: true`, nested headings are part of the replacement range; with `false`, child headings are preserved. The tool writes the file, updates document tracking, and acquires the `documents` lock when configured.
+Resolves one document, finds a heading by text, optional match mode, optional level, and optional occurrence, then replaces the section body while preserving the heading line. Passing empty `content` deletes the heading and section. With `include_nested: true`, nested headings are part of the replacement range; with `false`, child headings are preserved. The tool writes the file, updates document tracking, and acquires a per-document lock with shared ancestor-directory locks when configured.
 
 **Inputs**
 
@@ -428,10 +450,12 @@ Resolves one document, finds a heading by text, optional match mode, optional le
 | `heading_match` | `"contains" \| "exact"` | no | `"contains"` | Heading matching mode. |
 | `heading_level` | `number` | no | none | Optional Markdown heading level filter, 1-6. |
 | `occurrence` | `number` | no | none | 1-indexed occurrence when multiple headings match. |
+| `expected_version` | `string` | no | none | Optional whole-file `version_token` precondition. |
+| `if_match` | `string` | no | none | Alias for `expected_version`. |
 
 **Output**
 
-Success returns document identification plus `extracted_section` mutation metadata, top-level `heading_match`, and optional top-level `heading_level`. Expected errors include `not_found`, `ambiguous_identifier`, `invalid_input`, and lock `conflict`.
+Success returns document identification plus `extracted_section` mutation metadata, top-level `heading_match`, optional top-level `heading_level`, and `version_token`. Expected errors include `not_found`, `ambiguous_identifier`, `invalid_input`, and `conflict` for lock timeouts or version mismatches.
 
 **Examples**
 
@@ -478,7 +502,7 @@ Use `insert_in_doc` to insert without replacing and `get_document` with `section
 
 **Behavior**
 
-`apply_tags` accepts the current `targets` array or transitional convenience inputs for document identifiers or one memory ID. It normalizes tags, applies idempotent additions and no-op removals, validates final tag sets, and returns ordered per-target results. Document targets update frontmatter and `fqc_documents`; memory targets update `fqc_memory`. If memory is disabled by config, memory targets return per-item `unsupported`.
+`apply_tags` accepts the current `targets` array or transitional convenience inputs for document identifiers or one memory ID. It normalizes tags, applies idempotent additions and no-op removals, validates final tag sets, and returns ordered per-target results. Document targets update frontmatter and `fqc_documents` under the same per-document/ancestor-directory lock pattern as other document writes; memory targets update `fqc_memory`. If memory is disabled by config, memory targets return per-item `unsupported`.
 
 **Inputs**
 
@@ -489,10 +513,13 @@ Use `insert_in_doc` to insert without replacing and `get_document` with `section
 | `memory_id` | `string` | no | none | Convenience input for one memory target. Use instead of `targets`. |
 | `add_tags` | `string[]` | conditional | none | Tags to add. At least one of `add_tags` or `remove_tags` is required. |
 | `remove_tags` | `string[]` | conditional | none | Tags to remove. Missing tags are silent no-ops. |
+| `expected_version` | `string` | no | none | Optional document `version_token` precondition for document targets. |
+| `if_match` | `string` | no | none | Alias for `expected_version`. |
+| `version_tokens` | never | no | none | Unsupported; use object-form document targets with per-item `version_token`. |
 
 **Output**
 
-Success returns an ordered array. Document items contain document identification, `tags`, and `entity_type: "document"`. Memory items contain memory identification, `tags`, and `entity_type: "memory"`. Per-target expected errors are embedded in the array.
+Success returns an ordered array. Document items contain document identification, `tags`, `entity_type: "document"`, and `version_token`. Memory items contain memory identification, `tags`, and `entity_type: "memory"`. Per-target expected errors are embedded in the array.
 
 **Examples**
 
@@ -514,7 +541,8 @@ mcp__flashquery__apply_tags({
     "modified": "2026-05-17T12:00:00.000Z",
     "size": { "chars": 120 },
     "tags": ["planning"],
-    "entity_type": "document"
+    "entity_type": "document",
+    "version_token": "7f83b1657ff1fc53b92dc18148a1d65dfa135f6b"
   }
 ]
 ```
