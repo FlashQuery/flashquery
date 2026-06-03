@@ -130,7 +130,7 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
     try {
       const config = withTemplateEnv(() => loadConfig(tmpFile));
       // After parse: camelCase field is providerName
-      expect(config.llm?.models[0].providerName).toBe('openai');
+      expect(config.llm?.models[0].providerName).toBe('local-ollama');
       // Raw extracted block must contain provider_name: and NOT have a bare "provider:" line
       expect(llmBlock).toMatch(/provider_name:/);
       expect(llmBlock).not.toMatch(/^\s*-?\s*provider:\s/m);
@@ -170,7 +170,7 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
     }
   });
 
-  it('[TMPL-01] flashquery.example.yml has exactly 2 default models: embeddings (text-embedding-3-small, embedding) and fast (gpt-4o-mini, language)', () => {
+  it('[TMPL-01] flashquery.example.yml has exactly 2 default local models: embeddings (nomic-embed-text, embedding) and fast (granite4, language)', () => {
     const examplePath = resolve(process.cwd(), 'flashquery.example.yml');
     const rawYaml = readFileSync(examplePath, 'utf-8');
     const llmBlock = extractCommentedLlmBlock(rawYaml);
@@ -183,17 +183,19 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
       // First model: embeddings
       const embedModel = config.llm?.models.find(m => m.name === 'embeddings');
       expect(embedModel).toBeDefined();
-      expect(embedModel?.model).toBe('text-embedding-3-small');
+      expect(embedModel?.providerName).toBe('local-ollama');
+      expect(embedModel?.model).toBe('nomic-embed-text');
       expect(embedModel?.type).toBe('embedding');
-      expect(embedModel?.costPerMillion.input).toBe(0.02);
+      expect(embedModel?.costPerMillion.input).toBe(0.00);
       expect(embedModel?.costPerMillion.output).toBe(0.00);
       // Second model: fast
       const fastModel = config.llm?.models.find(m => m.name === 'fast');
       expect(fastModel).toBeDefined();
-      expect(fastModel?.model).toBe('gpt-4o-mini');
+      expect(fastModel?.providerName).toBe('local-ollama');
+      expect(fastModel?.model).toBe('granite4');
       expect(fastModel?.type).toBe('language');
-      expect(fastModel?.costPerMillion.input).toBe(0.15);
-      expect(fastModel?.costPerMillion.output).toBe(0.60);
+      expect(fastModel?.costPerMillion.input).toBe(0.00);
+      expect(fastModel?.costPerMillion.output).toBe(0.00);
     } finally {
       unlinkSync(tmpFile);
     }

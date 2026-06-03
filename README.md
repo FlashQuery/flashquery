@@ -40,7 +40,7 @@ You need:
   - **Supabase Cloud** — free project at [supabase.com](https://supabase.com), nothing to install
   - **Bundled Docker stack** — Docker Desktop (or Engine + Compose) is all you need;  FlashQuery's setup can provision Supabase for you automatically
   - **Existing self-hosted Supabase** — if you already run one
-- An **OpenAI API key** for the default semantic search and LLM configuration. FlashQuery can also use OpenRouter-compatible endpoints or local Ollama models, but those are configured by editing the `llm:` providers, models, and purposes in `flashquery.yml` after setup.
+- **An embedding/LLM provider** for semantic search and language features. Semantic search can use any configured embedding model from any supported provider; the example config defaults to local Ollama, and OpenAI/OpenRouter-compatible providers can be configured by editing the `llm:` providers, models, and purposes in `flashquery.yml`.
 
 > **Node.js 18:** Will install and start FlashQuery but `npm install` shows an `EBADENGINE` warning and `supabase-js` logs a runtime deprecation notice. Node 20 LTS is required for supported operation.
 
@@ -248,7 +248,8 @@ SUPABASE_SERVICE_ROLE_KEY=...
 DATABASE_URL=postgresql://postgres:...@db.xxx.supabase.co:5432/postgres
 INSTANCE_NAME=My FlashQuery
 VAULT_PATH=./vault
-OPENAI_API_KEY=sk-...      # default key for semantic search and LLM features
+OLLAMA_URL=http://localhost:11434  # example local provider endpoint
+# OPENAI_API_KEY=sk-...            # only needed if your llm.providers use it
 LOG_LEVEL=info
 ```
 

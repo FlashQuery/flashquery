@@ -434,10 +434,11 @@ prompt_required VAULT_PATH "Vault path (absolute or relative)" "${VAULT_PATH:-./
 # ─── Step 4: LLM provider key ────────────────────────────────────────────────
 echo ""
 echo "--- LLM Provider ---"
-echo "flashquery.yml ships with OpenAI as the default provider for semantic"
-echo "search and call_model. OpenRouter-compatible endpoints and Ollama are"
-echo "also supported by editing the llm: section in flashquery.yml after setup."
-echo "Leave blank if you plan to configure a non-OpenAI provider later."
+echo "flashquery.yml can route semantic search through any configured embedding"
+echo "model from any supported provider. The example config uses local Ollama;"
+echo "OpenAI and OpenRouter-compatible endpoints are configured in the llm:"
+echo "section when you want them."
+echo "Leave blank unless your llm.providers entries use OPENAI_API_KEY."
 prompt_with_default OPENAI_API_KEY "OpenAI API key" "${OPENAI_API_KEY:-}"
 
 # ─── Step 5: Logging ─────────────────────────────────────────────────────────
@@ -493,7 +494,7 @@ fi
 # doesn't exist yet (user may have filled in values we shouldn't overwrite).
 ENV_TEST_WRITTEN=""
 if [ "$SUPABASE_CHOICE" = "3" ] || [ ! -f ".env.test" ]; then
-  # OPENAI_API_KEY in .env.test mirrors the default LLM/embedding provider key.
+  # OPENAI_API_KEY in .env.test mirrors the optional OpenAI provider key.
   TEST_OPENAI_API_KEY="${OPENAI_API_KEY:-}"
   TEST_OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434}"
 

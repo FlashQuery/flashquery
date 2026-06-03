@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-06-03
+
+This release rebuilds FlashQuery's vault write coherency layer so concurrent AI workflows can mutate vault files with durable writes, advisory locks, version-token conflict detection, and predictable batch outcomes. It also tightens startup safety around Postgres session semantics, making misconfigured transaction-pooler deployments fail fast instead of risking advisory-lock corruption.
+
+### Added
+- Add per-file vault write locking with in-process serialization plus session-scoped Postgres advisory locks for cross-process coordination.
+- Add shared ancestor-directory locks for file writes and exclusive directory locks for structural folder operations.
+- Add destination-path locking for create, copy, move, archive, remove, and trash flows, including deterministic multi-lock ordering.
+- Add durable atomic vault writes with unique temp files, fsync/rename/directory-fsync behavior, surfaced write failures, and stale temp cleanup.
+- Add `version_token` responses and optional `expected_version` / `if_match` preconditions for supported document mutation tools.
+- Add structured version-mismatch conflict envelopes with current tokens and targeted conflict details.
+- Add ordered best-effort batch result contracts for document archive/remove and mixed bare-string/object-with-token inputs.
+- Add configurable `locking.lock_timeout_seconds` for bounded write-lock acquisition.
+- Add durable pending embedding tracking and retry/doctor visibility for deferred background embedding failures.
+- Add MCP request lifecycle tracking and graceful shutdown draining for active MCP requests.
+- Add local-Ollama defaults in `flashquery.example.yml` while keeping OpenAI as a documented provider option.
+
+### Changed
+- **BREAKING:** Require `DATABASE_URL` to point at direct Postgres or a session-capable/session-mode pooler when locking is enabled; transaction-mode pooler URLs now fail startup.
+- Change document, compound, scanner repair, read-triggered repair, plugin reconciliation, backup, and directory write paths to use the same lock-aware durable write contract.
+- Change `get_document` repair behavior so post-repair `version_token`, database hash, and disk bytes stay aligned.
+- Change `archive_document`, `remove_document`, `insert_doc_link`, and `apply_tags` batch behavior to return ordered per-item success/conflict/failure results.
+- Change `flashquery scan` to run the advisory-lock session capability gate before scanner repair can write.
+- Change legacy `locking.ttl_seconds` config handling to a deprecation warning; advisory locks no longer use TTLs.
+- Change docs and examples to document session-capable database URLs, lock boundaries, version-token preconditions, and batch semantics.
+
+### Removed
+- **BREAKING:** Remove the obsolete `flashquery unlock` CLI flow; crashed advisory locks are released by the database session.
+- Remove runtime dependence on the legacy `fqc_write_locks` table; startup drops the table if present.
+- Remove `.planning` artifacts from Git tracking; planning state remains local-only.
+
+### Fixed
+- Fix lost-update races in document and compound mutation paths such as `apply_tags`, `insert_doc_link`, and macro-dispatched document writes.
+- Fix backup `.fqc/backup.json` writes so they hold shared ancestor-directory locks before the document lock and durable write.
+- Fix copy and move destination races so concurrent writers produce one success and one structured conflict instead of racing into the same path.
+- Fix EXDEV move fallback so destination bytes are durably committed before source removal.
+- Fix plugin coordination and unregister contention to fail closed instead of leaving partial plugin state.
+- Fix scanner and read-triggered repair paths so unchanged vault scans do not destabilize document version tokens.
+- Fix managed scenario temp-root handling and local LLM/Ollama scenario stability.
+- Fix release-gate tests for the current local-Ollama example config and macro progress behavior under full-suite load.
+
+### Security
+- Harden cross-process vault writes by failing closed when advisory-lock session semantics cannot be proven.
+- Harden concurrent file and directory mutation boundaries with deterministic lock ordering and bounded lock timeouts.
+
 ## [3.2.0] - 2026-05-24
 
 This release introduces FlashQuery's MCP broker and searchable tool-discovery layer, allowing host sessions, delegated model purposes, and macros to safely discover and call external MCP server tools through FlashQuery. It also tightens native help, template discovery, and release verification so broader tool surfaces remain easier to inspect and safer to operate.
@@ -412,7 +457,8 @@ This release introduces native filesystem navigation to the vault. The new `crea
 
 ---
 
-[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v3.2.0...HEAD
+[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/FlashQuery/flashquery/compare/v3.2.0...v4.0.0
 [3.2.0]: https://github.com/FlashQuery/flashquery/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/FlashQuery/flashquery/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/FlashQuery/flashquery/compare/v2.0.0...v3.0.0

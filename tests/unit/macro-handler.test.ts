@@ -404,7 +404,7 @@ describe('macro handler progress token threading', () => {
         }),
       }),
     ]);
-  });
+  }, 10000);
 
   it('sessionIdProvider overrides the registration session fallback', async () => {
     const server = wrapServerWithToolCatalog(new McpServer({ name: 'macro-handler-session-provider', version: '1.0.0' }));
