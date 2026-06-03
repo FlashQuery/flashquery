@@ -27,14 +27,14 @@ LLM_OPTIONAL_VARIANTS = {
     "llm": {
         "providers": [{
             "name": "openai", "type": "openai-compatible",
-            "endpoint": "https://api.openai.com",
+            "endpoint": "${OLLAMA_URL}",
         }],
         "models": [
             # All optional fields declared
             {
                 "name": "with-tools",
                 "provider_name": "openai",
-                "model": "gpt-4o-mini",
+                "model": "${OLLAMA_LLM_MODEL}",
                 "type": "language",
                 "cost_per_million": {"input": 0.15, "output": 0.6},
                 "description": "Has tools and vision",
@@ -45,7 +45,7 @@ LLM_OPTIONAL_VARIANTS = {
             {
                 "name": "empty-caps",
                 "provider_name": "openai",
-                "model": "gpt-4o-mini",
+                "model": "${OLLAMA_LLM_MODEL}",
                 "type": "language",
                 "cost_per_million": {"input": 0.15, "output": 0.6},
                 "capabilities": [],
@@ -54,7 +54,7 @@ LLM_OPTIONAL_VARIANTS = {
             {
                 "name": "bare",
                 "provider_name": "openai",
-                "model": "gpt-4o-mini",
+                "model": "${OLLAMA_LLM_MODEL}",
                 "type": "language",
                 "cost_per_million": {"input": 0.15, "output": 0.6},
             },
@@ -62,7 +62,7 @@ LLM_OPTIONAL_VARIANTS = {
             {
                 "name": "custom-caps",
                 "provider_name": "openai",
-                "model": "gpt-4o-mini",
+                "model": "${OLLAMA_LLM_MODEL}",
                 "type": "language",
                 "cost_per_million": {"input": 0.15, "output": 0.6},
                 "capabilities": ["custom_feature_x", "experimental_y"],

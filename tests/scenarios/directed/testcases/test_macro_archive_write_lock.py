@@ -8,11 +8,11 @@ from __future__ import annotations
 COVERAGE = ["ML-24"]
 
 import argparse
+import hashlib
 import json
 import os
 import sys
 import time
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
@@ -22,7 +22,6 @@ from fqc_test_utils import TestContext, TestRun  # noqa: E402
 
 
 TEST_NAME = "test_macro_archive_write_lock"
-_LOCK_RESOURCE = "documents"
 
 
 def _payload(result) -> dict:
@@ -32,46 +31,35 @@ def _payload(result) -> dict:
         return {"raw": result.text}
 
 
-def _inject_lock_pg(database_url: str, instance_id: str, resource_type: str) -> tuple[bool, str]:
+def _advisory_key_for_file(file_path: str) -> int:
+    digest = hashlib.sha256(f"file:{file_path}".encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], byteorder="big", signed=True)
+
+
+def _hold_advisory_lock_pg(database_url: str, advisory_key: int) -> tuple[bool, str, object | None]:
     try:
         import psycopg2  # type: ignore[import]
     except ImportError:
-        return False, "psycopg2 not installed — run: pip install psycopg2-binary"
+        return False, "psycopg2 not installed -- run: pip install psycopg2-binary", None
 
     try:
         conn = psycopg2.connect(database_url)
         cur = conn.cursor()
-        now = datetime.now(timezone.utc)
-        expires_at = now + timedelta(seconds=120)
-        cur.execute(
-            """INSERT INTO fqc_write_locks
-                    (instance_id, resource_type, locked_at, expires_at)
-               VALUES (%s, %s, %s, %s)""",
-            (instance_id, resource_type, now, expires_at),
-        )
+        cur.execute("SELECT pg_advisory_lock(%s)", (advisory_key,))
         conn.commit()
-        conn.close()
-        return True, ""
+        return True, "", conn
     except Exception as exc:
-        return False, str(exc)
+        return False, str(exc), None
 
 
-def _release_lock_pg(database_url: str, instance_id: str, resource_type: str) -> tuple[bool, str]:
+def _release_advisory_lock_pg(conn: object, advisory_key: int) -> tuple[bool, str]:
     try:
-        import psycopg2  # type: ignore[import]
-    except ImportError:
-        return False, "psycopg2 not installed"
-
-    try:
-        conn = psycopg2.connect(database_url)
-        cur = conn.cursor()
-        cur.execute(
-            "DELETE FROM fqc_write_locks WHERE instance_id = %s AND resource_type = %s",
-            (instance_id, resource_type),
-        )
+        cur = conn.cursor()  # type: ignore[attr-defined]
+        cur.execute("SELECT pg_advisory_unlock(%s)", (advisory_key,))
+        released = cur.fetchone()[0]
         conn.commit()
         conn.close()
-        return True, ""
+        return bool(released), "" if released else "pg_advisory_unlock returned false"
     except Exception as exc:
         return False, str(exc)
 
@@ -97,6 +85,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         port_range=port_range,
         enable_locking=True,
         extra_config={
+            "locking": {"lock_timeout_seconds": 1},
             "host_mcp_tools": {
                 "tools": ["call_macro", "write_document", "archive_document", "get_document"],
             },
@@ -125,16 +114,25 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not create.ok or not isinstance(created_fq_id, str):
             return run
 
-        instance_id = ctx.server.instance_id if ctx.server else ""
+        if not ctx.server:
+            run.step(
+                label="resolve managed server for advisory lock contention",
+                passed=False,
+                detail="Managed server context is required for advisory lock key derivation.",
+            )
+            return run
+
+        locked_abs_path = str((ctx.server.vault_path / path).resolve())
+        advisory_key = _advisory_key_for_file(locked_abs_path)
         started = time.monotonic()
-        injected, inj_err = _inject_lock_pg(database_url, instance_id, _LOCK_RESOURCE)
+        injected, inj_err, lock_conn = _hold_advisory_lock_pg(database_url, advisory_key)
         run.step(
-            label=f"inject held document lock for instance_id={instance_id!r}",
+            label=f"hold document advisory lock for {path}",
             passed=injected,
-            detail="" if injected else f"DB insert failed: {inj_err}",
+            detail="" if injected else f"DB advisory lock failed: {inj_err}",
             timing_ms=int((time.monotonic() - started) * 1000),
         )
-        if not injected:
+        if not injected or not lock_conn:
             return run
 
         try:
@@ -149,18 +147,18 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 passed=(
                     locked.ok
                     and locked_result.get("error") == "conflict"
-                    and locked_result.get("details", {}).get("reason") == "lock_contention"
+                    and locked_result.get("details", {}).get("reason") == "lock_timeout"
                 ),
                 detail=json.dumps(locked_payload, sort_keys=True)[:1500],
                 timing_ms=locked.timing_ms,
                 tool_result=locked,
             )
         finally:
-            released, rel_err = _release_lock_pg(database_url, instance_id, _LOCK_RESOURCE)
+            released, rel_err = _release_advisory_lock_pg(lock_conn, advisory_key)
             run.step(
-                label="release injected document lock",
+                label="release held document advisory lock",
                 passed=released,
-                detail="" if released else f"DB delete failed: {rel_err}",
+                detail="" if released else f"DB advisory unlock failed: {rel_err}",
             )
             if not released:
                 return run

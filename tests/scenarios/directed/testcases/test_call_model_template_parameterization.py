@@ -98,7 +98,10 @@ def _configured_llm(endpoint: str) -> dict:
 
 def _json(result) -> dict:
     try:
-        return json.loads(result.text or "{}")
+        text = result.text or "{}"
+        if "\n\nFor full documentation" in text:
+            text = text.split("\n\nFor full documentation", 1)[0]
+        return json.loads(text)
     except json.JSONDecodeError:
         return {}
 

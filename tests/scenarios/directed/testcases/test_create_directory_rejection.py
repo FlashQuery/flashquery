@@ -313,7 +313,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("manage_directory", action="create", paths=[123])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        has_validation_error = any(kw in result.text.lower() for kw in ["invalid", "type", "expected", "array", "must be", "string"])
+        has_validation_error = any(kw in result.text.lower() for kw in ["invalid", "type", "expected", "array", "must be", "string", "failed validation"])
         passed_f47 = not result.ok and has_validation_error
 
         run.step(

@@ -31,16 +31,20 @@ CONFIGURED_LLM = {
     "llm": {
         "providers": [{
             "name": "openai", "type": "openai-compatible",
-            "endpoint": "https://api.openai.com", "api_key": "${OPENAI_API_KEY}",
+            "endpoint": "${OLLAMA_URL}", "api_key": "${OPENAI_API_KEY}",
         }],
         "models": [{
             "name": "fast", "provider_name": "openai",
-            "model": "gpt-4o-mini", "type": "language",
+            "model": "${OLLAMA_LLM_MODEL}", "type": "language",
             "cost_per_million": {"input": 0.15, "output": 0.6},
         }],
         "purposes": [],
     }
 }
+
+
+def _load_json_result(text: str) -> dict:
+    return json.loads(text.split("\n\nFor full documentation", 1)[0]) if text else {}
 
 
 def run_test(args: argparse.Namespace) -> TestRun:
@@ -128,7 +132,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 messages=[{"role": "user",
                            "content": f"{{{{ref:{src54_path}->missing.path}}}} reply"}],
             )
-            resp = json.loads(r.text) if r.text else {}
+            resp = _load_json_result(r.text)
             failed = resp.get("failed_references", [])
             entry54 = failed[0] if failed else {}
             reason54 = (entry54.get("reason") if entry54 else "") or ""
@@ -154,7 +158,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 messages=[{"role": "user",
                            "content": f"{{{{ref:{src55_path}->ptr}}}} reply"}],
             )
-            resp = json.loads(r.text) if r.text else {}
+            resp = _load_json_result(r.text)
             failed = resp.get("failed_references", [])
             entry55 = failed[0] if failed else {}
             reason55 = (entry55.get("reason") if entry55 else "") or ""
@@ -182,7 +186,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 messages=[{"role": "user",
                            "content": f"{{{{ref:{src56_path}->ptr}}}} reply"}],
             )
-            resp = json.loads(r.text) if r.text else {}
+            resp = _load_json_result(r.text)
             failed = resp.get("failed_references", [])
             entry56 = failed[0] if failed else {}
             reason56 = (entry56.get("reason") if entry56 else "") or ""
@@ -210,7 +214,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 messages=[{"role": "user",
                            "content": f"{{{{ref:{doc57_path}->ptr#Sec}}}} reply"}],
             )
-            resp = json.loads(r.text) if r.text else {}
+            resp = _load_json_result(r.text)
             failed = resp.get("failed_references", [])
             entry57a = failed[0] if failed else {}
             reason57a = (entry57a.get("reason") if entry57a else "") or ""
@@ -234,7 +238,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 messages=[{"role": "user",
                            "content": f"{{{{ref:{doc57_path}#Sec->ptr}}}} reply"}],
             )
-            resp = json.loads(r.text) if r.text else {}
+            resp = _load_json_result(r.text)
             failed = resp.get("failed_references", [])
             entry57b = failed[0] if failed else {}
             reason57b = (entry57b.get("reason") if entry57b else "") or ""
@@ -258,7 +262,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 messages=[{"role": "user",
                            "content": f"{{{{ref:{doc58_path}#Target}}}} Reply OK."}],
             )
-            resp = json.loads(r.text) if r.ok else {}
+            resp = _load_json_result(r.text) if r.ok else {}
             metadata = resp.get("metadata", {}) if isinstance(resp, dict) else {}
             injected = metadata.get("injected_references", [])
             entry = injected[0] if injected else {}
@@ -281,7 +285,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 "call_model", resolver="model", name="fast",
                 messages=[{"role": "user", "content": f"{placeholder_61} reply"}],
             )
-            resp = json.loads(r.text) if r.ok else {}
+            resp = _load_json_result(r.text) if r.ok else {}
             metadata = resp.get("metadata", {}) if isinstance(resp, dict) else {}
             checks = {
                 "ok": r.ok,
@@ -299,7 +303,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 messages=[{"role": "user",
                            "content": f"{{{{ref:{src62_path}->ptr}}}} reply"}],
             )
-            resp = json.loads(r.text) if r.text else {}
+            resp = _load_json_result(r.text)
             failed = resp.get("failed_references", [])
             entry62 = failed[0] if failed else {}
             reason62 = (entry62.get("reason") if entry62 else "") or ""

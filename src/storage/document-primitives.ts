@@ -38,22 +38,16 @@ export async function listMarkdownFiles(
   const extsLower = extensions.map((e) => e.toLowerCase());
   const entries = await readdir(searchRoot, { recursive: true, withFileTypes: true });
   return entries
-    .filter((e) => {
-      if (e.name.startsWith('.')) return false;
-
-      const entryPath =
-        (e as { parentPath?: string }).parentPath ?? (e as { path?: string }).path ?? '';
-      if (entryPath && entryPath.split(/[\\/]/).some((component) => component.startsWith('.'))) {
-        return false;
-      }
-
-      return e.isFile() && extsLower.includes(extname(e.name).toLowerCase());
-    })
     .map((e) => {
       const dir =
         (e as { parentPath?: string }).parentPath ?? (e as { path?: string }).path ?? searchRoot;
-      return relative(vaultRoot, join(dir, e.name));
-    });
+      return { entry: e, relativePath: relative(vaultRoot, join(dir, e.name)) };
+    })
+    .filter(({ entry, relativePath }) => {
+      if (!entry.isFile() || !extsLower.includes(extname(entry.name).toLowerCase())) return false;
+      return !relativePath.split(/[\\/]/).some((component) => component.startsWith('.'));
+    })
+    .map(({ relativePath }) => relativePath);
 }
 
 export async function parseDocMeta(vaultRoot: string, relativePath: string): Promise<DocMeta | null> {

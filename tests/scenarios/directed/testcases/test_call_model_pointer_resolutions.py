@@ -15,15 +15,16 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
+import threading
 import uuid as _uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 from fqc_test_utils import TestRun, FQCServer  # noqa: E402
-from fqc_client import FQCClient, _find_project_dir, _load_env_file  # noqa: E402
+from fqc_client import FQCClient  # noqa: E402
 
 TEST_NAME = "test_call_model_pointer_resolutions"
 
@@ -42,39 +43,87 @@ def _extract_fq_id(text: str) -> str | None:
 
 COVERAGE = ["L-49", "L-50", "L-51", "L-52", "L-53"]
 
-CONFIGURED_LLM = {
-    "llm": {
-        "providers": [
-            {
-                "name": "openai",
-                "type": "openai-compatible",
-                "endpoint": "https://api.openai.com",
-                "api_key": "${OPENAI_API_KEY}",
-            },
-        ],
-        "models": [
-            {
+
+class _MockOpenAIHandler(BaseHTTPRequestHandler):
+    def do_POST(self) -> None:  # noqa: N802
+        body = json.loads(self._read_request_body().decode("utf-8"))
+        joined = "\n".join(str(message.get("content", "")) for message in body.get("messages", []))
+        payload = json.dumps({
+            "id": "chatcmpl-pointer-resolutions",
+            "object": "chat.completion",
+            "model": body.get("model", "mock-model"),
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": joined}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, _format: str, *_args: object) -> None:
+        return
+
+    def _read_request_body(self) -> bytes:
+        if self.headers.get("transfer-encoding", "").lower() == "chunked":
+            chunks: list[bytes] = []
+            while True:
+                size_line = self.rfile.readline().strip()
+                if not size_line:
+                    continue
+                size = int(size_line.split(b";", 1)[0], 16)
+                if size == 0:
+                    self.rfile.readline()
+                    break
+                chunks.append(self.rfile.read(size))
+                self.rfile.readline()
+            return b"".join(chunks)
+        return self.rfile.read(int(self.headers.get("content-length", "0")))
+
+
+class _MockOpenAIServer:
+    def __enter__(self) -> "_MockOpenAIServer":
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), _MockOpenAIHandler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.server.shutdown()
+        self.thread.join(timeout=5)
+        self.server.server_close()
+
+    @property
+    def endpoint(self) -> str:
+        host, port = self.server.server_address
+        return f"http://{host}:{port}"
+
+
+def _configured_llm(endpoint: str) -> dict:
+    return {
+        "llm": {
+            "providers": [{"name": "mock-openai", "type": "openai-compatible", "endpoint": endpoint, "api_key": "sk-test"}],
+            "models": [{
                 "name": "fast",
-                "provider_name": "openai",
-                "model": "gpt-4o-mini",
+                "provider_name": "mock-openai",
+                "model": "mock-model",
                 "type": "language",
+                "capabilities": {"tool_calling": True, "usage_on_tool_calls": True},
                 "cost_per_million": {"input": 0.15, "output": 0.6},
-            },
-        ],
-        "purposes": [],
+            }],
+            "purposes": [],
+        }
     }
-}
 
 
 def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
-    project_dir = Path(args.fqc_dir) if args.fqc_dir else _find_project_dir()
-    env_vars = _load_env_file(project_dir) if project_dir else {}
-    if "OPENAI_API_KEY" not in os.environ:
-        os.environ["OPENAI_API_KEY"] = env_vars.get("OPENAI_API_KEY") or "sk-test-placeholder"
 
     try:
-        with FQCServer(fqc_dir=args.fqc_dir, extra_config=CONFIGURED_LLM) as server:
+        with _MockOpenAIServer() as mock_provider, FQCServer(
+            fqc_dir=args.fqc_dir,
+            extra_config=_configured_llm(mock_provider.endpoint),
+        ) as server:
             client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
             run_id = _uuid.uuid4().hex[:8]
             base = f"_test/{TEST_NAME}_{run_id}"

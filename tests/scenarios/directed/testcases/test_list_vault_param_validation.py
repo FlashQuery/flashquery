@@ -41,6 +41,14 @@ from fqc_test_utils import TestContext, TestRun, expectation_detail
 TEST_NAME = "test_list_vault_param_validation"
 
 
+def _has_validation_error(text: str) -> bool:
+    lowered = text.lower()
+    return any(
+        kw in lowered
+        for kw in ["invalid", "expected", "must be", "enum", "failed validation"]
+    )
+
+
 def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
     port_range = tuple(args.port_range) if args.port_range else None
@@ -59,9 +67,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path="/", extensions="md")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        has_validation_error = any(
-            kw in result.text.lower() for kw in ["invalid", "expected", "must be", "enum"]
-        )
+        has_validation_error = _has_validation_error(result.text)
         passed_f92 = not result.ok and has_validation_error
 
         run.step(
@@ -78,9 +84,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path="/", limit=0)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        has_validation_error = any(
-            kw in result.text.lower() for kw in ["invalid", "expected", "must be", "enum"]
-        )
+        has_validation_error = _has_validation_error(result.text)
         passed_f93 = not result.ok and has_validation_error
 
         run.step(
@@ -97,9 +101,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path="/", limit=-5)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        has_validation_error = any(
-            kw in result.text.lower() for kw in ["invalid", "expected", "must be", "enum"]
-        )
+        has_validation_error = _has_validation_error(result.text)
         passed_f94 = not result.ok and has_validation_error
 
         run.step(
@@ -116,9 +118,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path="/", date_field="modified")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        has_validation_error = any(
-            kw in result.text.lower() for kw in ["invalid", "expected", "must be", "enum"]
-        )
+        has_validation_error = _has_validation_error(result.text)
         passed_f95 = not result.ok and has_validation_error
 
         run.step(

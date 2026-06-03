@@ -31,16 +31,20 @@ CONFIGURED_LLM = {
     "llm": {
         "providers": [{
             "name": "openai", "type": "openai-compatible",
-            "endpoint": "https://api.openai.com", "api_key": "${OPENAI_API_KEY}",
+            "endpoint": "${OLLAMA_URL}", "api_key": "${OPENAI_API_KEY}",
         }],
         "models": [{
             "name": "fast", "provider_name": "openai",
-            "model": "gpt-4o-mini", "type": "language",
+            "model": "${OLLAMA_LLM_MODEL}", "type": "language",
             "cost_per_million": {"input": 0.15, "output": 0.6},
         }],
         "purposes": [],
     }
 }
+
+
+def _load_json_result(text: str) -> dict:
+    return json.loads(text.split("\n\nFor full documentation", 1)[0]) if text else {}
 
 
 def run_test(args: argparse.Namespace) -> TestRun:
@@ -78,7 +82,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 "call_model", resolver="model", name="fast",
                 messages=[{"role": "user", "content": f"{{{{ref:{ghost_ref}}}}} reply"}],
             )
-            resp = json.loads(r.text) if r.text else {}
+            resp = _load_json_result(r.text)
             failed = resp.get("failed_references", [])
             checks = {
                 "isError true": (not r.ok),
@@ -102,7 +106,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                      "content": f"valid: {{{{ref:{valid_path}}}}} bad: {{{{ref:{ghost_ref}}}}}"},
                 ],
             )
-            resp = json.loads(r.text) if r.text else {}
+            resp = _load_json_result(r.text)
             failed = resp.get("failed_references", [])
             checks = {
                 "isError true": (not r.ok),
@@ -139,7 +143,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                      "content": f"a: {{{{ref:{ghost_ref_a}}}}} b: {{{{ref:{ghost_ref_b}}}}}"},
                 ],
             )
-            resp = json.loads(r.text) if r.text else {}
+            resp = _load_json_result(r.text)
             failed = resp.get("failed_references", [])
             checks = {
                 "isError true": (not r.ok),
@@ -176,7 +180,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 messages=[{"role": "user",
                            "content": f"{{{{ref:{src_path}->missing.pointer}}}} reply"}],
             )
-            resp = json.loads(r.text) if r.text else {}
+            resp = _load_json_result(r.text)
             failed = resp.get("failed_references", [])
             reason_text = (failed[0].get("reason") if failed else "") or ""
             checks = {

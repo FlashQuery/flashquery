@@ -37,25 +37,23 @@ TEST_NAME = "test_call_model_zero_cost"
 COVERAGE = ["L-41", "L-65"]
 REQUIRES_MANAGED = True
 
-# Single model "local-zero" with both cost rates set to 0. Provider points at the real OpenAI
-# endpoint (so call_model will succeed against gpt-4o-mini), but the cost-tracking math runs
-# in FlashQuery — tokens × 0 / 1e6 == 0, exercising the zero-cost path without needing
-# Ollama running locally.
+# Single model "local-zero" with both cost rates set to 0. Provider points at
+# the configured local Ollama server, but the cost-tracking math runs in
+# FlashQuery: tokens * 0 / 1e6 == 0.
 CONFIGURED_LLM = {
     "llm": {
         "providers": [
             {
                 "name": "openai",
-                "type": "openai-compatible",
-                "endpoint": "https://api.openai.com",
-                "api_key": "${OPENAI_API_KEY}",
+                "type": "ollama",
+                "endpoint": "${OLLAMA_URL}",
             },
         ],
         "models": [
             {
                 "name": "local-zero",
                 "provider_name": "openai",
-                "model": "gpt-4o-mini",
+                "model": "${OLLAMA_LLM_MODEL}",
                 "type": "language",
                 "cost_per_million": {"input": 0, "output": 0},
             },

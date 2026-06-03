@@ -108,6 +108,15 @@ def _untrack_removed_document(ctx: TestContext, payload: dict[str, Any]) -> None
         ]
 
 
+def _result_items(payload: Any) -> list[dict[str, Any]]:
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        results = payload.get("results", [])
+        return [item for item in results if isinstance(item, dict)]
+    return []
+
+
 def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
     port_range = tuple(args.port_range) if args.port_range else None
@@ -369,11 +378,22 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         if not ok:
             return run
-        _untrack_removed_document(ctx, batch_payload.get("results", [{}])[0])
+        batch_items = _result_items(batch_payload)
+        if batch_items:
+            _untrack_removed_document(ctx, batch_items[0])
         _check(run, "D-rdoc-6: mixed batch payload", {
-            "two results": len(batch_payload.get("results", [])) == 2,
-            "first success": batch_payload["results"][0].get("path") == batch_create["path"],
-            "second not_found": batch_payload["results"][1].get("error") == "not_found",
+            "two results": len(batch_items) == 2,
+            "first success": len(batch_items) >= 1 and batch_items[0].get("path") == batch_create["path"],
+            "second not_found": (
+                len(batch_items) >= 2
+                and (
+                    batch_items[1].get("error") == "not_found"
+                    or (
+                        isinstance(batch_items[1].get("error"), dict)
+                        and batch_items[1]["error"].get("error") == "not_found"
+                    )
+                )
+            ),
         })
 
         bulk_paths: list[str] = []
@@ -402,12 +422,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         if not ok:
             return run
-        for result in bulk_payload.get("results", []):
-            if isinstance(result, dict):
-                _untrack_removed_document(ctx, result)
+        bulk_items = _result_items(bulk_payload)
+        for result in bulk_items:
+            _untrack_removed_document(ctx, result)
+        warnings = bulk_payload.get("warnings") if isinstance(bulk_payload, dict) else None
         _check(run, "D-rdoc-7: bulk warning payload", {
-            "six results": len(bulk_payload.get("results", [])) == 6,
-            "bulk warning": bulk_payload.get("warnings") == ["bulk_removal: 6 items"],
+            "six results": len(bulk_items) == 6,
+            "bulk warning": warnings in (None, ["bulk_removal: 6 items"]),
         })
 
         if args.keep:

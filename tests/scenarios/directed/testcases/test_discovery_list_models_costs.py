@@ -34,14 +34,14 @@ CONFIGURED_LLM = {
     "llm": {
         "providers": [{
             "name": "openai", "type": "openai-compatible",
-            "endpoint": "https://api.openai.com",
+            "endpoint": "${OLLAMA_URL}",
         }],
         "models": [
             # L-63 — non-trivial decimals
             {
                 "name": "precise",
                 "provider_name": "openai",
-                "model": "gpt-4o-mini",
+                "model": "${OLLAMA_LLM_MODEL}",
                 "type": "language",
                 "cost_per_million": {"input": 0.594321, "output": 1.234567},
             },
@@ -49,7 +49,7 @@ CONFIGURED_LLM = {
             {
                 "name": "fast",
                 "provider_name": "openai",
-                "model": "gpt-4o-mini",
+                "model": "${OLLAMA_LLM_MODEL}",
                 "type": "language",
                 "cost_per_million": {"input": 0.59, "output": 0.79},
             },
@@ -57,7 +57,7 @@ CONFIGURED_LLM = {
             {
                 "name": "mid",
                 "provider_name": "openai",
-                "model": "gpt-4o-mini",
+                "model": "${OLLAMA_LLM_MODEL}",
                 "type": "language",
                 "cost_per_million": {"input": 3.0, "output": 15.0},
             },

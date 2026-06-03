@@ -141,6 +141,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 fq_params={"topic": {"type": "string", "required": True}, "source": {"type": "document", "required": True}},
             )
             client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
+            client.call_tool("maintain_vault", action="sync", background=False)
             result = client.call_tool("call_model", resolver="purpose", name="template_agent", messages=[{"role": "user", "content": "ATL-DS-10 template loop"}], return_messages=True)
             envelope = json.loads(result.text or "{}") if result.ok else {}
             calls_log = envelope.get("metadata", {}).get("tools", {}).get("calls_log", [])

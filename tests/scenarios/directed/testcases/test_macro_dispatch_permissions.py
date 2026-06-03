@@ -81,6 +81,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 "fq_params": {"topic": {"type": "string", "required": True}},
             },
         )
+        ctx.client.call_tool("maintain_vault", action="sync", background=False)
 
         log_mark = ctx.server.log_position if ctx.server else 0
         template = ctx.client.call_tool(

@@ -27,7 +27,7 @@ EMPTY_MODELS_LLM = {
     "llm": {
         "providers": [{
             "name": "openai", "type": "openai-compatible",
-            "endpoint": "https://api.openai.com",
+            "endpoint": "${OLLAMA_URL}",
         }],
         "models": [],
         "purposes": [],
@@ -38,11 +38,11 @@ EMPTY_PURPOSES_LLM = {
     "llm": {
         "providers": [{
             "name": "openai", "type": "openai-compatible",
-            "endpoint": "https://api.openai.com",
+            "endpoint": "${OLLAMA_URL}",
         }],
         "models": [{
             "name": "fast", "provider_name": "openai",
-            "model": "gpt-4o-mini", "type": "language",
+            "model": "${OLLAMA_LLM_MODEL}", "type": "language",
             "cost_per_million": {"input": 0.15, "output": 0.6},
         }],
         "purposes": [],
@@ -54,14 +54,14 @@ POPULATED_LLM = {
     "llm": {
         "providers": [{
             "name": "openai", "type": "openai-compatible",
-            "endpoint": "https://api.openai.com",
+            "endpoint": "${OLLAMA_URL}",
         }, {
             "name": "fixture", "type": "openai-compatible",
             "endpoint": "http://127.0.0.1:1",
         }],
         "models": [{
             "name": "fast", "provider_name": "openai",
-            "model": "gpt-4o-mini", "type": "language",
+            "model": "${OLLAMA_LLM_MODEL}", "type": "language",
             "cost_per_million": {"input": 0.15, "output": 0.6},
             "capabilities": {
                 "tool_calling": True,
@@ -335,6 +335,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 fq_desc="Invalid namespace fixture",
             )
             client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
+            scan = client.call_tool("maintain_vault", action="sync", background=False)
+            if not scan.ok:
+                run.step(label="Setup: scan template fixtures", passed=False,
+                         detail=scan.error or scan.text[:500], tool_result=scan)
+                return run
             ok, detail = _check_no_args_list(client)
             run.step(label="L-39h: no-args list_models returns populated list",
                      passed=ok, detail=detail)

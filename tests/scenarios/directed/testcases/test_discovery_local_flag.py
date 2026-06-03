@@ -59,8 +59,7 @@ CONFIGURED_LLM = {
             {
                 "name": "custom-edge",
                 "type": "openai-compatible",
-                "endpoint": "https://api.openai.com",
-                "api_key": "${OPENAI_API_KEY}",
+                "endpoint": "${OLLAMA_URL}",
                 "local": True,
             },
             # L-66b: ollama, no local key (auto-derive)
@@ -73,30 +72,27 @@ CONFIGURED_LLM = {
             {
                 "name": "openai-paid",
                 "type": "openai-compatible",
-                "endpoint": "https://api.openai.com",
-                "api_key": "${OPENAI_API_KEY}",
+                "endpoint": "${OLLAMA_URL}",
             },
             # L-66d-A: openai-compatible, local=true (regression guard mirror of paid-B)
             {
                 "name": "paid-A",
                 "type": "openai-compatible",
-                "endpoint": "https://api.openai.com",
-                "api_key": "${OPENAI_API_KEY}",
+                "endpoint": "${OLLAMA_URL}",
                 "local": True,
             },
             # L-66d-B: openai-compatible, NO local
             {
                 "name": "paid-B",
                 "type": "openai-compatible",
-                "endpoint": "https://api.openai.com",
-                "api_key": "${OPENAI_API_KEY}",
+                "endpoint": "${OLLAMA_URL}",
             },
         ],
         "models": [
             {
                 "name": "edge-model",
                 "provider_name": "custom-edge",
-                "model": "gpt-4o-mini",
+                "model": "${OLLAMA_LLM_MODEL}",
                 "type": "language",
                 "cost_per_million": {"input": 0.15, "output": 0.6},
             },
@@ -110,21 +106,21 @@ CONFIGURED_LLM = {
             {
                 "name": "openai-model",
                 "provider_name": "openai-paid",
-                "model": "gpt-4o-mini",
+                "model": "${OLLAMA_LLM_MODEL}",
                 "type": "language",
                 "cost_per_million": {"input": 0.15, "output": 0.6},
             },
             {
                 "name": "paid-A-model",
                 "provider_name": "paid-A",
-                "model": "gpt-4o-mini",
+                "model": "${OLLAMA_LLM_MODEL}",
                 "type": "language",
                 "cost_per_million": {"input": 0.15, "output": 0.6},
             },
             {
                 "name": "paid-B-model",
                 "provider_name": "paid-B",
-                "model": "gpt-4o-mini",
+                "model": "${OLLAMA_LLM_MODEL}",
                 "type": "language",
                 "cost_per_million": {"input": 0.15, "output": 0.6},
             },

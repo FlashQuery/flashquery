@@ -87,7 +87,7 @@ Note: Test Plan §4.10.5 originally reserved `M-03` through `M-20`; the live mat
 | ML-21 | MACRO-SRC-06 / T-S-004: `call_macro` resolves `source_ref: "path::name"` and executes the selected named `fqm` block rather than other blocks in the same macro-library document. | test_macro_source_ref_named_block | 2026-05-15 | 2026-05-15 |
 | ML-22 | MACRO-SRC-02 / MACRO-SRC-06 / T-S-005: `call_macro` returns stable `invalid_input` reasons for the source_ref named-block lookup and format error matrix. | test_macro_source_ref_error_matrix | 2026-05-15 | 2026-05-15 |
 | ML-23 | MACRO-SRC-04 / T-S-019: `call_macro` treats archived macro-library documents referenced by `source_ref` as `not_found` and does not execute their blocks. | test_macro_archived_source_ref | 2026-05-15 | 2026-05-15 |
-| ML-24 | MACRO-INT-02 / MACRO-INT-03 / T-S-020: macro-dispatched `archive_document` calls serialize through the existing document write-lock layer. | test_macro_archive_write_lock | 2026-05-15 | 2026-05-15 |
+| ML-24 | MACRO-INT-02 / MACRO-INT-03 / T-S-020: macro-dispatched `archive_document` calls serialize through the existing advisory document write-lock layer. | test_macro_archive_write_lock | 2026-06-02 | 2026-06-02 |
 | ML-25 | MACRO-SRC-01 / MACRO-RESP-01 / T-S-003: inline `call_macro` creates a document, applies tags, and returns the document ID/path through the canonical success envelope. | test_macro_inline_create_doc | 2026-05-15 | 2026-05-15 |
 | ML-26 | MACRO-SRC-07 / MACRO-SRC-08 / MACRO-BI-04 / T-S-006: public `call_macro` returns the full four-array `input_var` missing-input envelope and applies optional defaults. | test_macro_input_var_contract | 2026-05-15 | 2026-05-15 |
 | ML-27 | MACRO-RESP-02 / T-S-008: `dry_run: true` returns `MacroDryRunResult` with tool references and does not create the target vault file. | test_macro_dry_run_no_side_effects | 2026-05-15 | 2026-05-15 |
@@ -379,12 +379,12 @@ Verifying structural introspection of documents.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| O-01 | Get outline of single document returns heading hierarchy (SUPERSEDED: get_doc_outline removed in Phase 107; heading extraction covered by D-29, O-07) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
-| O-02 | Get outline respects max_depth parameter (SUPERSEDED: max_depth now covered by O-07 in consolidated get_document) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
-| O-03 | Get outline shows linked files (resolved) (SUPERSEDED: link resolution not exposed in Phase 107 consolidated get_document) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
-| O-04 | Get outline shows unresolved links marked as such (SUPERSEDED: same as O-03) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
-| O-05 | Get outline with exclude_headings returns frontmatter only (SUPERSEDED: standalone frontmatter include covered by D-28) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
-| O-06 | Batch outline (array of identifiers) returns DB metadata (SUPERSEDED: batch mode removed; single-doc envelope with all three includes covered by D-30) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-29 |
+| O-01 | Get outline of single document returns heading hierarchy (SUPERSEDED: get_doc_outline removed in Phase 107; heading extraction covered by D-29, O-07) | SUPERSEDED | 2026-05-01 | 2026-04-16 |
+| O-02 | Get outline respects max_depth parameter (SUPERSEDED: max_depth now covered by O-07 in consolidated get_document) | SUPERSEDED | 2026-05-01 | 2026-04-16 |
+| O-03 | Get outline shows linked files (resolved) (SUPERSEDED: link resolution not exposed in Phase 107 consolidated get_document) | SUPERSEDED | 2026-05-01 | 2026-04-16 |
+| O-04 | Get outline shows unresolved links marked as such (SUPERSEDED: same as O-03) | SUPERSEDED | 2026-05-01 | 2026-04-16 |
+| O-05 | Get outline with exclude_headings returns frontmatter only (SUPERSEDED: standalone frontmatter include covered by D-28) | SUPERSEDED | 2026-05-01 | 2026-04-16 |
+| O-06 | Batch outline (array of identifiers) returns DB metadata (SUPERSEDED: batch mode removed; single-doc envelope with all three includes covered by D-30) | SUPERSEDED | 2026-05-01 | 2026-04-29 |
 | O-07 | get_document headings include level, text, and chars fields; max_depth filters by heading level (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
 | O-11 | get_document include=['headings'] with max_depth=1 boundary — only H1 headings; H2/H3 excluded (Phase 1 Gap 6) (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
 | O-08 | get_document headings includes all occurrences of duplicate heading names with distinct chars values (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
@@ -692,7 +692,7 @@ Behaviors that span multiple tools and represent system-level guarantees.
 | X-01 | Identifier resolution: fqc_id (UUID) (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-05-07 |
 | X-02 | Identifier resolution: vault-relative path (VALIDATED) | test_document_identifier_resolution | 2026-04-14 | 2026-05-07 |
 | X-03 | Identifier resolution: filename only (VALIDATED) | test_document_identifier_resolution | 2026-04-14 | 2026-05-07 |
-| X-04 | Write lock contention returns error with guidance (VALIDATED) | test_write_lock_contention | 2026-04-14 | 2026-05-07 |
+| X-04 | Advisory document write-lock timeout returns error with retry guidance (VALIDATED) | test_write_lock_contention | 2026-06-02 | 2026-06-02 |
 | X-05 | Batch identifiers (array input where supported) (VALIDATED) | test_cross_cutting_edge_cases | 2026-04-14 | 2026-05-07 |
 | X-06 | Frontmatter round-trip: create → read → verify all fields (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-05-07 |
 | X-07 | Tags survive full CRUD cycle (create → update → verify) (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-05-07 |
@@ -1143,7 +1143,7 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 
 ---
 
-### test_document_outline ✓ RESOLVED 2026-04-29
+### Retired outline coverage ✓ RESOLVED 2026-04-29
 
 **Behaviors affected**
 - O-06: Batch outline (array of identifiers) returns DB metadata
@@ -1507,9 +1507,6 @@ Covers: C-06, C-07, C-08, C-09
 
 ### test_content_frontmatter_ops
 Covers: C-10, C-11, C-12, C-13, C-14
-
-### test_document_outline
-Covers: O-01, O-02, O-03, O-04, O-05, O-06
 
 ### test_plugin_registration
 Covers: P-11, P-12, P-13, P-14, P-15

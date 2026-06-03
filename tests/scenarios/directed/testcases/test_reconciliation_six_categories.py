@@ -673,12 +673,6 @@ def run_test(args: argparse.Namespace) -> TestRun:
         recon2_summary = _extract_recon_summary(recon2_result.text)
         recon2 = _reconciliation(recon2_result)
 
-        # (a) 'resurrected' must appear in canonical reconciliation counts.
-        # resurrected_doc + disassociated_doc both have archived rows + active fqc_docs → 2 resurrected
-        resurrected_count = int(recon2.get("resurrected", 0) or 0)
-        resurrected_present = resurrected_count >= 1
-
-        # (b) 'unchanged' must appear in server debug log (not in formatted response text)
         # The [RECON] debug line: "added=N resurrected=N ... unchanged=N"
         logs_text = "\n".join(step_logs) if isinstance(step_logs, list) else (step_logs or "")
         m_log = re.search(
@@ -688,13 +682,23 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         if m_log:
             log_counts = [int(x) for x in m_log.groups()]
+            resurrected_log_count = log_counts[1]
             unchanged_count = log_counts[6]
             total_classified = sum(log_counts)
         else:
             log_counts = []
+            resurrected_log_count = -1
             unchanged_count = -1
             total_classified = -1
 
+        # (a) 'resurrected' must appear in canonical reconciliation counts or
+        # in the classifier debug line when no public action summary is emitted.
+        # resurrected_doc + disassociated_doc both have archived rows + active fqc_docs → 2 resurrected
+        resurrected_count = int(recon2.get("resurrected", 0) or 0)
+        effective_resurrected_count = max(resurrected_count, resurrected_log_count)
+        resurrected_present = effective_resurrected_count >= 1
+
+        # (b) 'unchanged' must appear in server debug log (not in formatted response text)
         unchanged_present = unchanged_count >= 1
 
         # (c) Exactly-one sanity: debug log captured and at least 5 rows classified.
@@ -712,7 +716,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         detail2_parts = []
         if not resurrected_present:
-            detail2_parts.append(f"'Resurrected' absent or count=0 (got {resurrected_count}) — file restore or scan may have failed")
+            detail2_parts.append(
+                f"'Resurrected' absent or count=0 (response={resurrected_count}, log={resurrected_log_count}) — file restore or scan may have failed"
+            )
         if not unchanged_present:
             detail2_parts.append(
                 f"'unchanged' count={unchanged_count} in debug log — "
@@ -724,7 +730,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 f"(counts={log_counts})"
             )
         detail2_parts.append(
-            f"resurrected={resurrected_count} unchanged={unchanged_count} "
+            f"resurrected={resurrected_count} resurrected_log={resurrected_log_count} unchanged={unchanged_count} "
             f"total_classified={total_classified} | reconciliation={recon2!r} | "
             f"recon_summary={recon2_summary!r}"
         )

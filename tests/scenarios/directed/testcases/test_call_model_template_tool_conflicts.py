@@ -101,6 +101,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             _write_doc(server.vault_path, "Templates/Research Skill.md", "First")
             _write_doc(server.vault_path, "Other/Research-Skill.md", "Second")
             client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
+            client.call_tool("maintain_vault", action="sync", background=False)
 
             discovery = client.call_tool("call_model", resolver="list_purposes")
             payload = json.loads(discovery.text or "{}") if discovery.ok else {}

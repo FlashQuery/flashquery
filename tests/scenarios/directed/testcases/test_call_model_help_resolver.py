@@ -26,13 +26,13 @@ HELP_LLM_CONFIG = {
     "llm": {
         "providers": [{
             "name": "openai",
-            "type": "openai-compatible",
-            "endpoint": "https://api.openai.com",
+            "type": "ollama",
+            "endpoint": "${OLLAMA_URL}",
         }],
         "models": [{
             "name": "fast",
             "provider_name": "openai",
-            "model": "gpt-4o-mini",
+            "model": "${OLLAMA_LLM_MODEL}",
             "type": "language",
             "cost_per_million": {"input": 0.15, "output": 0.6},
             "capabilities": {"tool_calling": True, "usage_on_tool_calls": True},
@@ -193,7 +193,8 @@ def _check_help_error_enumeration(client: FQCClient) -> tuple[bool, str]:
         messages=[{"role": "user", "content": f"Please read {{{{ref:{ghost_ref}}}}}."}],
     )
     try:
-        error_body = json.loads(error_result.text) if error_result.text else {}
+        error_text = error_result.text.split("\n\nFor full documentation", 1)[0] if error_result.text else ""
+        error_body = json.loads(error_text) if error_text else {}
     except Exception as exc:
         return False, f"error JSON parse error: {exc}; text={error_result.text[:500]}"
 

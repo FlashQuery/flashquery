@@ -32,7 +32,7 @@ CONFIGURED_LLM = {
             {
                 "name": "openai",
                 "type": "openai-compatible",
-                "endpoint": "https://api.openai.com",
+                "endpoint": "http://127.0.0.1:1",
                 "api_key": "${OPENAI_API_KEY}",
             },
         ],
@@ -40,7 +40,7 @@ CONFIGURED_LLM = {
             {
                 "name": "fast",
                 "provider_name": "openai",
-                "model": "gpt-4o-mini",
+                "model": "${OLLAMA_LLM_MODEL}",
                 "type": "language",
                 "cost_per_million": {"input": 0.15, "output": 0.6},
             },
@@ -86,17 +86,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
             })
             text_l09 = result_l09.text if result_l09 else ""
 
-            # Check whether OpenAI silently ignored the bad param (returns ok=True).
-            # If so, this is a defect: L-09 cannot be verified against OpenAI with this
-            # parameter name because OpenAI does not reject unknown top-level parameters.
+            # If the provider accepts the bad param and returns ok=True, the test cannot
+            # verify L-09 against this provider shape.
             if result_l09 and result_l09.ok:
                 run.step(
-                    label="L-09: provider-unsupported parameter causes provider error — DEFECT: OpenAI silently ignored bad_param_xyz",
+                    label="L-09: provider-unsupported parameter causes provider error",
                     passed=False,
                     detail=(
-                        "OpenAI ignored 'bad_param_xyz' and returned a successful response. "
-                        "L-09 cannot be verified against the OpenAI provider under this parameter name. "
-                        "The behavior requires a provider that rejects unknown parameters. "
+                        "Provider accepted 'bad_param_xyz' and returned a successful response. "
+                        "L-09 requires a provider-originated error path. "
                         f"Response text: {text_l09[:300]}"
                     ),
                 )

@@ -280,7 +280,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
             and isinstance(batch_payload[0], dict)
             and batch_payload[0].get("fq_id") == created_fqc_id
             and isinstance(batch_payload[1], dict)
-            and batch_payload[1].get("error") == "not_found"
+            and batch_payload[1].get("status") == "failed"
+            and isinstance(batch_payload[1].get("error"), dict)
+            and batch_payload[1]["error"].get("error") == "not_found"
             and batch_payload[1].get("identifier") == f"_test/missing_archive_{run.run_id}.md"
         )
         run.step(

@@ -74,4 +74,21 @@ describe('document primitives', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('lists markdown files when the vault itself is under a hidden parent directory', async () => {
+    const hiddenParent = await mkdtemp(join(tmpdir(), '.fq-doc-primitives-'));
+    const root = join(hiddenParent, 'vault');
+    try {
+      await mkdir(join(root, 'Project', '.obsidian'), { recursive: true });
+      await writeFile(join(root, 'Project', 'visible.md'), 'visible');
+      await writeFile(join(root, 'Project', '.hidden.md'), 'hidden');
+      await writeFile(join(root, 'Project', '.obsidian', 'cache.md'), 'cache');
+
+      await expect(listMarkdownFiles(root, ['.md'])).resolves.toEqual([
+        'Project/visible.md',
+      ]);
+    } finally {
+      await rm(hiddenParent, { recursive: true, force: true });
+    }
+  });
 });

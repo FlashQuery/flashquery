@@ -24,11 +24,11 @@ CONFIGURED_LLM = {
     "llm": {
         "providers": [{
             "name": "openai", "type": "openai-compatible",
-            "endpoint": "https://api.openai.com",
+            "endpoint": "${OLLAMA_URL}",
         }],
         "models": [{
             "name": "fast", "provider_name": "openai",
-            "model": "gpt-4o-mini", "type": "language",
+            "model": "${OLLAMA_LLM_MODEL}", "type": "language",
             "cost_per_million": {"input": 0.15, "output": 0.6},
         }],
         "purposes": [{"name": "general", "description": "General", "models": ["fast"]}],
