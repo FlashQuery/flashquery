@@ -6,6 +6,8 @@ import { NullMcpBroker } from '../../src/services/mcp-broker.js';
 import { runMacroSource } from '../../src/mcp/tools/macro.js';
 import { dispatchRegistry, parseProgram, parseToolPayload } from './macro-test-helpers.js';
 
+const FIXTURE_PATH = new URL('../fixtures/flashquery.test.yml', import.meta.url).pathname;
+
 describe('macro runtime budgets', () => {
   it('T-U-211 timeout_ms halts at the next safe point after in-flight work completes', async () => {
     const result = await evaluateProgram(parseProgram('slow_op 120 "late"\necho "never"'), {
@@ -135,9 +137,10 @@ describe('macro runtime budgets', () => {
   });
 
   it('uses config.macro.defaultTimeoutMs when budget.timeout_ms is omitted', async () => {
-    const config = loadConfig('flashquery.yml');
+    const config = loadConfig(FIXTURE_PATH);
+    config.macro.defaultTimeoutMs = 1;
     const result = await runMacroSource({
-      source: 'exit "ok"',
+      source: 'slow_op 20 "late"\nexit "never"',
       config,
       catalog: [],
       broker: new NullMcpBroker(),
@@ -145,6 +148,6 @@ describe('macro runtime budgets', () => {
       taskRegistry: new MacroTaskRegistry(),
       budget: {},
     });
-    expect(parseToolPayload(result.result)).toMatchObject({ result: 'ok' });
+    expect(parseToolPayload(result.result)).toMatchObject({ error: 'timeout', details: { timeout_ms: 1 } });
   });
 });
