@@ -397,6 +397,29 @@ function snakeToCamel(obj: unknown): unknown {
   return obj;
 }
 
+function camelizeBrokerServers(
+  servers: RawBrokerConfig['mcp_servers'],
+): FlashQueryConfig['mcpServers'] {
+  const camelized = snakeToCamel(servers) as FlashQueryConfig['mcpServers'];
+  const out: FlashQueryConfig['mcpServers'] = {};
+
+  for (const [serverId, serverConfig] of Object.entries(servers)) {
+    const camelServerConfig = camelized[toCamelCase(serverId)];
+    const rawToolOverrides = serverConfig.tool_overrides ?? {};
+    out[serverId] = {
+      ...camelServerConfig,
+      toolOverrides: Object.fromEntries(
+        Object.entries(rawToolOverrides).map(([toolName, override]) => [
+          toolName,
+          snakeToCamel(override) as FlashQueryConfig['mcpServers'][string]['toolOverrides'][string],
+        ]),
+      ),
+    };
+  }
+
+  return out;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Error formatting
 // ─────────────────────────────────────────────────────────────────────────────
@@ -855,6 +878,7 @@ export function loadConfig(configPath: string): FlashQueryConfig {
 
   // 8. Convert snake_case to camelCase
   const camel = snakeToCamel(result.data) as Record<string, unknown>;
+  camel['mcpServers'] = camelizeBrokerServers(result.data.mcp_servers);
 
   // 8a. Restore purpose defaults verbatim — these are LLM provider params (temperature,
   // max_tokens, etc.) whose key naming is governed by the LLM provider, not by FlashQuery's

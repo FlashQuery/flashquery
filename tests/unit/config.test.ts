@@ -259,6 +259,50 @@ llm:
     }
   });
 
+  it('preserves broker server IDs and tool override names as config data, not camelCase fields', () => {
+    const tmpFile = join(tmpdir(), `fqc-test-broker-id-preservation-${Date.now()}.yaml`);
+    writeFileSync(tmpFile, `
+instance:
+  id: "broker-id-preservation-test"
+  vault:
+    path: "./vault"
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "key"
+  database_url: "postgresql://localhost/db"
+embedding:
+  provider: "none"
+  model: ""
+mcp_servers:
+  brave_search:
+    transport: stdio
+    command: "npx"
+    args: ["-y", "@brave/brave-search-mcp-server", "--transport", "stdio"]
+    env:
+      BRAVE_API_KEY: "\${BRAVE_API_KEY}"
+    tool_overrides:
+      brave_web_search:
+        cost_per_call: 0.005
+        description_override: "Search the public web for current information."
+host:
+  mcp_servers: [brave_search]
+  tool_search: enabled
+`);
+    try {
+      const config = loadConfig(tmpFile);
+
+      expect(Object.keys(config.mcpServers)).toEqual(['brave_search']);
+      expect(config.mcpServers.brave_search?.toolOverrides).toHaveProperty('brave_web_search');
+      expect(config.mcpServers.brave_search?.toolOverrides.brave_web_search).toEqual({
+        costPerCall: 0.005,
+        descriptionOverride: 'Search the public web for current information.',
+      });
+      expect(config.host.mcpServers).toEqual(['brave_search']);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
   it('REQ-005 REQ-009 defaults omitted host to no broker visibility and disabled host search', () => {
     const tmpFile = join(tmpdir(), `fqc-test-broker-omitted-host-${Date.now()}.yaml`);
     writeFileSync(tmpFile, `
