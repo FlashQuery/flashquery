@@ -33,24 +33,7 @@ jobs:
         run: npm test
 
       - name: Validate package contents
-        run: |
-          node -e "
-            const { execSync } = require('child_process');
-            const output = execSync('npm pack --dry-run --json').toString();
-            const packs = JSON.parse(output);
-            const pack = packs[0];
-            const badFiles = pack.files.filter(f =>
-              f.path.includes('src/') ||
-              f.path.includes('tests/') ||
-              f.path.includes('.env') ||
-              f.path.includes('node_modules/')
-            );
-            if (badFiles.length > 0) {
-              console.error('Unwanted files in package:', badFiles.map(f => f.path));
-              process.exit(1);
-            }
-            console.log('Package validation passed — no src/, tests/, .env, or node_modules/');
-          "
+        run: npm run preflight:pack
 
       - name: Validate docker-compose files
         run: |
