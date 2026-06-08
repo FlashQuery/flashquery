@@ -1,6 +1,6 @@
 ---
 name: flashquery-macro-author
-description: Author and verify a FlashQuery macro from a natural-language description of intent. Use this skill when the user asks to "write me a macro that ...", "author a macro", "generate a FlashQuery macro", "create a rundoc macro for ...", "I need a macro that ...", "verify this macro against my intent", "check this macro against the spec", "review my macro", or any phrase indicating they want a macro program produced from English (or want one they have checked against a stated intent). Two workflows — generate (description → macro source) and verify (description + macro source → conformance report). Generate optionally auto-invokes verify with a bounded auto-correction loop. Verify can also be invoked standalone. This skill produces JUST the macro source. Wrapping into a test pilot YAML belongs to `flashquery-macro-testgen`; executing a macro against the engine belongs to the host (`fq.call_macro`) or `flashquery-macro-run`.
+description: Use when the user wants a FlashQuery macro authored from a natural-language description, or an existing macro checked against stated intent — e.g. "write me a macro that ...", "author/generate a macro", "create a rundoc macro", "I need a macro that ...", "verify/review this macro", "does this macro do what I asked?". Also invoked by flashquery-macro-testgen to synthesize macro source. Produces macro source only — not test YAML or execution.
 ---
 
 # FlashQuery Macro Author (`flashquery-macro-author`)
@@ -21,7 +21,7 @@ The two workflows (generate, verify) share one specification reference (`macro-s
 
 ## What this skill does NOT do
 
-- It does **not** run the macro. Execution is a separate concern (host MCP `fq.call_macro` in production; `flashquery-macro-run` for the test suite).
+- It does **not** EXECUTE the macro (no side effects on any document). Real execution is a separate concern (host MCP `fq.call_macro` in production; `flashquery-macro-run` for the test suite). The optional engine **dry-run** stage (below) calls `call_macro({ dry_run: true })`, which validates without executing — that is validation, not a run.
 - It does **not** capture golden snapshots or produce test YAMLs. That's `flashquery-macro-testgen`.
 - It does **not** modify the macro language specification. If the description requires a construct that doesn't exist, the skill refuses with a clear "the macro language does not support X" message rather than inventing syntax.
 
@@ -36,30 +36,34 @@ The two workflows (generate, verify) share one specification reference (`macro-s
 - `auto_correct` (optional, bool, default **true**) — when `verify: true`, controls whether verify intervenes. When `true`, verify applies mechanical fixes in-place and the auto-correction loop fires on algorithmic misses. When `false` (**calibration mode**), verify runs but does NOT intervene: the macro is returned AS GENERATED, mechanical fixes are reported as `would_have_been_fixed` (not applied), and no retries fire. Calibration mode is for skill development — see "Three flow modes" below.
 - `max_retries` (optional, int, default **2**) — maximum number of regeneration attempts after a verify miss. Ignored when `auto_correct: false`.
 - `context` (optional, object) — additional context the caller can supply: `tool_surface` (server.tool names the caller expects to be available), `frontmatter_shape` (fields the macro can read via `_self.frontmatter.*`), `input_vars` (names + types of `input_var` keys), `success_contract` (an explicit success criterion overriding the implicit one extracted from the description). All optional; the skill infers what it can from the description alone if absent.
+- `engine_validate` (optional, enum `"auto" | "on" | "off"`, default **"auto"**) — controls the engine dry-run stage (see "Engine dry-run validation" below). `"auto"` runs the dry-run when a live `fq` MCP surface is available to the orchestrator and skips it (with a warning) when not; `"on"` requires it; `"off"` disables it (pure static flow — used by `flashquery-macro-testgen` and other headless callers). Ignored in zero-shot mode.
+- `user_preview` (optional, bool, default **false**) — when true (or when the user's request asks to see/approve the macro), the skill presents the final macro for human confirmation AFTER the rewrite loop converges and BEFORE returning it as final (see "Optional: user preview before finalizing" below).
 
 #### Three flow modes
 
 | Mode | `verify` | `auto_correct` | Behavior | When to use |
 |---|---|---|---|---|
-| **Zero-shot** | `false` | n/a | Generate only. Fastest. No verification overhead. | Performance-sensitive one-shot generation when the user accepts uninspected output. |
-| **Validated** | `true` | `true` (default) | Generate → verify → apply mechanical fixes → loop on algorithmic misses up to `max_retries` → return final result. | **Default for end-user authoring.** Best UX. The user receives a vetted macro. |
-| **Calibration** | `true` | `false` | Generate → verify → return RAW macro + complete diagnostic report. No fixes applied, no retries. | Skill development. We want to see exactly what the generation step produced so we can identify recurring gaps and improve `macro-spec.md` or the prompt. |
+| **Zero-shot** | `false` | n/a | Generate only. Fastest. No verification overhead. No dry-run. | Performance-sensitive one-shot generation when the user accepts uninspected output. |
+| **Validated** | `true` | `true` (default) | Generate → verify (static) → engine dry-run (if available) → apply mechanical fixes → loop on algorithmic misses AND engine failures up to `max_retries` → return final result. | **Default for end-user authoring.** Best UX. The user receives a macro vetted by both the static pass and the real engine. |
+| **Calibration** | `true` | `false` | Generate → verify → engine dry-run (if available, report only) → return RAW macro + complete diagnostic report. No fixes applied, no retries. | Skill development. We want to see exactly what the generation step produced — including whether the raw output parses in the real engine — to identify recurring gaps. |
 
 Why calibration mode matters: if verify silently auto-fixes the same kind of issue every run (e.g., always casing `True` → `true`), we never see that the gen prompt keeps making that mistake. Calibration mode surfaces the misses-that-would-have-been-fixed so we can update the spec to prevent them at generation time.
 
 **Process:**
 
-1. Read `macro-spec.md` (this folder) to ground the generation in current production semantics.
+1. Read `macro-spec.md` (this folder) to ground the generation in current production semantics. Consult §12 for native `fq.*` tool names and argument shapes; never invent a native tool name or argument key that is not listed in §12 or explicitly supplied by the caller's `context.tool_surface`.
 2. Parse the description for: (a) the load-bearing behavior, (b) the implicit success contract, (c) tools/frontmatter/inputs referenced.
 2.5. **Pre-generation feasibility check** (see "Pre-generation feasibility check" section below). Run two narrow checks against the description BEFORE generating any macro source — spec-feasibility and surface availability. If either flags a concern, return a structured pre-check response (with reasoning + a suggested restatement) WITHOUT generating. If both clean, proceed to step 3. Behavioral descriptions where a translation pattern exists DO NOT trigger the check — the skill picks the pattern and proceeds.
-3. Synthesize macro source using idiomatic post-REQ-112 patterns (lowercase booleans, flat if-scope, missing-field-null guards, leading-underscore introspection with VarRef when appropriate). Do not produce constructs the spec doesn't support.
+3. Synthesize macro source using idiomatic post-REQ-112 patterns (lowercase booleans, flat if-scope, missing-field-null guards, leading-underscore introspection with VarRef when appropriate). For native `fq.*` calls, use only §12 tool names and argument keys unless `context.tool_surface` explicitly adds more. Do not produce constructs the spec doesn't support.
 4. If `verify === true`:
-   - **Validated mode** (`auto_correct: true`): invoke the verify workflow with `(description, macro_source, apply_fixes: true)`.
-     - If verify returns `pass: true` (possibly after applying mechanical fixes): return.
-     - If verify returns `pass: false` and `retries_left > 0`: feed the verify report's `algorithmic_misses` and `suggested_change` fields back into the generation prompt; regenerate; loop.
+   - **Validated mode** (`auto_correct: true`): invoke the verify workflow with `(description, macro_source, apply_fixes: true)`, then run the **engine dry-run stage** (step 4.5) when active.
+     - If static verify passes AND the engine dry-run passes (or is skipped): converged — proceed to step 4.6.
+     - If static verify returns `pass: false` OR the engine dry-run reports a blocking failure, and `retries_left > 0`: feed BOTH the verify report's `algorithmic_misses`/`suggested_change` AND the engine failure (error code, message, offending token) back into the generation prompt; regenerate; loop.
      - If `retries_left === 0` and still failing: escalate (see Escalation below).
-   - **Calibration mode** (`auto_correct: false`): invoke the verify workflow with `(description, macro_source, apply_fixes: false)`. Return the result without re-generation regardless of pass/fail status.
-5. Return the generation result.
+   - **Calibration mode** (`auto_correct: false`): invoke the verify workflow with `(description, macro_source, apply_fixes: false)`, run the engine dry-run stage (step 4.5) when active for diagnostics ONLY, and return the result without re-generation regardless of pass/fail status. The `dry_run_report` is included so the maintainer can see whether the RAW generation parses in the real engine.
+4.5. **Engine dry-run stage** (see "Engine dry-run validation" below). When `engine_validate` is active and a live `fq` MCP surface is available, call `fq.call_macro({ source: <macro>, input_vars: <sample inputs>, dry_run: true })`. Interpret the report per that section. In validated mode an engine failure is a blocking miss that drives the loop; in calibration mode it is report-only.
+4.6. **Optional user preview** (see "Optional: user preview before finalizing" below). If `user_preview` is set (or the user asked to review/approve the macro), present the converged macro + a one-line dry-run summary and wait for confirmation before treating it as final.
+5. Return the generation result (including `dry_run_report` when the dry-run ran).
 
 **Output shape — validated mode (success path):**
 
@@ -69,11 +73,20 @@ Why calibration mode matters: if verify silently auto-fixes the same kind of iss
   "pre_check": { "feasible": true },
   "macro": "<macro source string, post-fix>",
   "verify_report": { ... },
+  "dry_run_report": {
+    "ran": true,
+    "parsed_ok": true,
+    "tool_references": ["fq.replace_doc_section", "fq.write_document"],
+    "server_references": ["fq"],
+    "input_var_contract": { "required": [], "optional": [] }
+  },
   "attempts": 1,
   "fixed_issues": [],
   "warnings": []
 }
 ```
+
+`dry_run_report` is `{ "ran": false, "reason": "no live fq surface" | "engine_validate: off" }` when the dry-run did not run, and carries the engine's error envelope under `error` when a dry-run failure drove a regeneration.
 
 When the pre-check fires (description names an unsupported construct or missing surface), the response is different — see "Pre-generation feasibility check" below for the full shape with `concerns`, `reasoning`, and `suggested_restatement`. In that case `macro` is `null` and `attempts` is `0` (no generation was performed).
 
@@ -94,12 +107,17 @@ The `attempts` field counts generations including the original (so 1 = first-try
   "warnings": [
     { "kind": "...", "suggestion": "...", "notes": "..." }
   ],
+  "dry_run_report": {
+    "ran": true,
+    "parsed_ok": false,
+    "error": { "error": "parse_error", "message": "...", "details": { "token": "...", "line": 4 } }
+  },
   "skill_improvement_signal": "<one-line: which kind of misses recurred? where in macro-spec.md to update?>",
   "attempts": 1
 }
 ```
 
-`skill_improvement_signal` is the load-bearing field for calibration. After 1+ calibration runs reveal the same pattern of misses, the signal tells the maintainer exactly which section of `macro-spec.md` (or which exemplar pattern) needs strengthening. Over time the signal trends from substantive ("gen keeps using integer sentinels instead of bools") to empty (gen is producing clean idiomatic output) — that's the skill converging.
+In calibration the `dry_run_report` is report-only — a `parsed_ok: false` here is a strong skill-improvement signal (the RAW generation does not parse in the real engine), but it does NOT trigger regeneration. `skill_improvement_signal` is the load-bearing field for calibration. After 1+ calibration runs reveal the same pattern of misses, the signal tells the maintainer exactly which section of `macro-spec.md` (or which exemplar pattern) needs strengthening. Over time the signal trends from substantive ("gen keeps using integer sentinels instead of bools") to empty (gen is producing clean idiomatic output) — that's the skill converging.
 
 **Output shape — zero-shot mode:**
 
@@ -109,6 +127,21 @@ The `attempts` field counts generations including the original (so 1 = first-try
   "macro": "<macro source string, no verification performed>"
 }
 ```
+
+#### Output contract — where the macro lives (no guesswork for the consumer)
+
+The generated macro source is ALWAYS returned as one discrete, complete string in a single known field — never interleaved with prose. By mode:
+
+| Mode / outcome | Field carrying the macro source |
+|---|---|
+| validated / zero-shot | `macro` |
+| calibration | `macro_as_generated` |
+| escalation (retries exhausted) | `last_attempt_macro` |
+| pre-check blocked generation | `macro: null` (no source produced) |
+
+That string is the **verbatim, ready-to-run macro source** — the consumer passes it directly as `fq.call_macro`'s `source` argument with no trimming, re-indentation, or surrounding text. It is the ONLY field that carries executable macro source; nothing else in the output is the macro.
+
+For unambiguous extraction by eye or by a downstream agent, ALSO render the same source once in a fenced code block tagged `fqm` immediately before the JSON result object. The fence makes the start/end boundaries visually unmistakable; the JSON field remains canonical. The two MUST be byte-identical — if they ever diverge, trust the JSON field. (When the skill is driven programmatically, the JSON field alone is sufficient and unambiguous; the fence is the human/agent convenience.)
 
 ### Workflow 2 — verify
 
@@ -125,7 +158,7 @@ The `attempts` field counts generations including the original (so 1 = first-try
 2. **Syntactic / mechanical check.** Walk the macro against the grammar described in `macro-spec.md`. For each issue found:
    - If a deterministic mechanical fix exists (exactly one valid correction — see "Fix authority" below): apply it (when `apply_fixes`), record under `fixed_issues`.
    - If the issue is ambiguous or non-mechanical: record under `algorithmic_misses` or `warnings` per the severity rule.
-3. **Behavioral intent check.** Walk the macro's structure against the description's stated behavior. Does the control flow drive through the behavior the description names? Do the tools / fields / inputs referenced match what the description implies? Each mismatch lands in `algorithmic_misses`.
+3. **Behavioral intent check.** Walk the macro's structure against the description's stated behavior. Does the control flow drive through the behavior the description names? Do the tools / fields / inputs referenced match what the description implies? Each mismatch lands in `algorithmic_misses`. Native `fq.*` calls must match §12 tool names and argument keys unless the caller's `context.tool_surface` explicitly adds more; unknown native tools or native argument keys are `algorithmic_misses` with `kind: "unregistered_tool_reference"`.
 4. **Success-contract check.** Does the macro's output (exit value, side effects) reflect the success criterion stated or implied in the description?
 5. Return the verify report.
 
@@ -319,23 +352,68 @@ attempts = 1
 macro = generate(description, context)
 
 while True:
-  report = verify(description, macro, context, apply_fixes=true)
+  report = verify(description, macro, context, apply_fixes=true)          # static, LLM-judged
+  dry    = engine_active ? dry_run(macro, sample_input_vars) : skipped    # deterministic, engine-judged
 
-  if report.pass:
-    return { macro: report.macro, verify_report: report, attempts, ... }
+  blocking = report.algorithmic_misses + engine_failures(dry)            # engine_failures(skipped) == []; absent-input invalid_input is NOT a failure
+  if blocking is empty:
+    if user_preview: macro = present_for_confirmation(macro, report, dry) # may loop on user feedback
+    return { macro: report.macro, verify_report: report, dry_run_report: dry, attempts, ... }
 
   if retries_left == 0:
-    return escalation(description, attempt_history)
+    return escalation(description, attempt_history)   # history includes dry_run reports
 
   attempts += 1
-  macro = regenerate(description, context, prior_attempt=macro, verify_findings=report.algorithmic_misses)
+  macro = regenerate(description, context, prior_attempt=macro,
+                     verify_findings=report.algorithmic_misses,
+                     engine_findings=engine_failures(dry))   # error code + message + offending token
 ```
 
 **Retry budget**: 2 by default. Worst case is 3 generations: original + correction 1 + correction 2.
 
-**What the regenerate prompt gets**: the original description, the prior macro attempt, AND the `algorithmic_misses` list with `suggested_change` fields. The LLM uses the verify feedback to target the specific misses.
+**What the regenerate prompt gets**: the original description, the prior macro attempt, the static `algorithmic_misses` with `suggested_change` fields, AND any engine dry-run failure (the engine's error code, message, and offending token/line). Engine feedback is high-signal because it's the real parser/preflight/permission pre-scan talking — target it precisely (e.g. a `parse_error` near a token means that exact construct is wrong).
 
-**What does NOT trigger regeneration**: mechanical fixes (verify already corrected those in-place), warnings (informational only). Only `algorithmic_misses` causes the loop.
+**What does NOT trigger regeneration**: mechanical fixes (verify already corrected those in-place), warnings (informational only), and a dry-run `invalid_input` that only reflects ABSENT sample input_vars rather than a macro defect (see "Engine dry-run validation"). Static `algorithmic_misses` and genuine engine failures (parse / preflight / permission) drive the loop.
+
+## Engine dry-run validation
+
+The static verify workflow is LLM judgment against `macro-spec.md`. The engine dry-run stage adds a **deterministic, engine-backed check** by calling the real `call_macro` in dry-run mode — it validates without executing any statement or dispatching any tool (zero side effects on the target document).
+
+**Invocation:** `fq.call_macro({ source: <macro>, input_vars: <sample inputs>, dry_run: true })`. The macro source is whatever the current attempt produced; `source_ref` is not used (the skill works with inline source).
+
+**Precondition / availability.** This stage needs a live `fq` MCP surface exposed to the orchestrator running the skill. The skill prompt cannot call the tool itself — the orchestrator does, on the skill's behalf, and feeds the report back. Behavior by `engine_validate`:
+- `"auto"` (default): run it if the `fq` surface is present; otherwise skip and add a `warning` (`{ kind: "framework_limitation", suggestion: "engine dry-run skipped — no live fq surface" }`). The static flow still applies.
+- `"on"`: run it; if no `fq` surface is available, surface a warning that engine validation could not be performed (do not silently pass).
+- `"off"`: never run it. This is the mode `flashquery-macro-testgen` and other headless callers use — there the macro framework harness is the validator, not dry-run.
+
+**What it deterministically checks** (from the dry-run report):
+1. **Parse** — `parsed_ok`. A `parse_error` is the highest-value catch: the LLM static pass can misjudge grammar (e.g. a pipeline used as a comparison operand, a reserved keyword as a bare object key), but the real parser cannot.
+2. **Preflight** — structural rules (e.g. `exit` arity, input-var contract collection).
+3. **Input-var contract** — required `input_var` keys present in the supplied sample inputs.
+4. **Permission pre-scan (REQ-028)** — every `<server>.<tool>(...)` dispatch reference is registered/permitted; unknown servers/tools are rejected with `unknown_server` / `unknown_tool`.
+
+It also returns `tool_references` / `server_references` (the exact set the macro would touch) and the resolved `input_var_contract` — fold these into `verify_report` as engine-confirmed facts.
+
+**How failures map into the loop (validated mode):** a dry-run error becomes a blocking miss with `kind` one of `engine_parse_error | engine_preflight_error | engine_permission_error`, carrying the engine's `message` and offending `token`/`line` as the `suggested_change` seed. It consumes a retry exactly like an `algorithmic_miss` and is fed to `regenerate`. It is **higher authority** than a static miss — when the static pass and the engine disagree, the engine wins.
+
+**Sample input_vars.** Supply `context.input_vars` when present. If the macro declares required `input_var` keys but no sample values are available, synthesize type-appropriate placeholders so parse/preflight/permission validation can still run, and treat a resulting `invalid_input` (missing-input) as **non-blocking** — it reflects absent test data, not a macro defect. Parse/preflight/permission errors remain blocking.
+
+**Limits (be honest about them):**
+- **Static-only.** It does NOT execute statements, so runtime failures are not caught: field access through `null`, unknown-variable reads, a `replace_doc_section` heading that doesn't exist, a tool returning `isError`, type mismatches. A clean dry-run proves "this parses and is permitted to call these tools," not "this will succeed." Behavioral verify still matters.
+- **`_exists()` is not pre-scanned** (the §11.1 limitation). A server referenced ONLY via `target._exists()` passes dry-run and fails at runtime. Dispatch refs are covered; introspection probes are not.
+
+## Optional: user preview before finalizing
+
+When `user_preview` is set, or when the user's request asks to see/approve the macro before it is used ("show me the macro first", "let me review it before you save it", "I want to confirm what it'll do"), present the macro to the user AFTER the rewrite loop converges and BEFORE returning it as final:
+
+1. Display the final macro source (fenced) and a one-line validation summary. When the dry-run ran: `parsed_ok: true · touches: fq.replace_doc_section, fq.write_document · requires inputs: none`. When the dry-run was skipped (`dry_run_report.ran === false`): say so explicitly — e.g. `engine dry-run: not run (no live fq surface) — validated by static review only` — do not imply engine confirmation that didn't happen.
+2. State plainly what the macro WILL do to the target (the document/section writes, tag changes, moves) so the user can judge intent — and note that nothing has been performed yet (the dry-run, if it ran, executed nothing).
+3. Wait for the user:
+   - **Approve** → return the macro as final.
+   - **Request changes** → treat the user's feedback as a refinement of the `description` and re-enter the generate loop (this is a fresh authoring pass, not a dry-run retry).
+   - **Reject** → return without a finalized macro; offer the last attempt as a starting point.
+
+This is the human gate: the dry-run (when it ran) proves the macro parses and is side-effect-free; the preview lets the user confirm it's what they actually want before anything is written or executed. Default off — only engages on `user_preview` or an explicit user request.
 
 ## Escalation (when max_retries exhausted)
 
@@ -346,12 +424,12 @@ After `max_retries + 1` failed generations, return an escalation report instead 
   "escalated": true,
   "attempts": 3,
   "history": [
-    { "attempt": 1, "macro": "...", "verify_report": { ... } },
-    { "attempt": 2, "macro": "...", "verify_report": { ... } },
-    { "attempt": 3, "macro": "...", "verify_report": { ... } }
+    { "attempt": 1, "macro": "...", "verify_report": { ... }, "dry_run_report": { ... } },
+    { "attempt": 2, "macro": "...", "verify_report": { ... }, "dry_run_report": { ... } },
+    { "attempt": 3, "macro": "...", "verify_report": { ... }, "dry_run_report": { ... } }
   ],
   "convergent_misses": [
-    "<pattern that recurred across attempts>"
+    "<pattern that recurred across attempts — static misses AND/OR repeated engine errors (e.g. the same parse_error token every attempt)>"
   ],
   "ambiguity_assessment": "<the original description was ambiguous about X. Consider clarifying Y.>",
   "suggested_clarification": "<draft of a refined description the user could try>",

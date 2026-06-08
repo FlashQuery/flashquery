@@ -7,8 +7,8 @@ fq.manage_directory({ action: "create", paths: ["Q3-2026"] })
 drafts = fq.search({ query: "tag:#draft" })
 
 for d in $drafts do
-  fq.move_document({ identifier: $d.fq_id, destination_path: "Q3-2026/" })
-  fq.apply_tags({ targets: [{ entity_type: "document", identifier: $d.fq_id }], tags: ["#archived"] })
+  fq.move_document({ identifier: $d.fq_id, destination: "Q3-2026/" })
+  fq.apply_tags({ targets: [{ entity_type: "document", identifier: $d.fq_id }], add_tags: ["#archived"] })
 # (missing 'done' here)
 `;
 

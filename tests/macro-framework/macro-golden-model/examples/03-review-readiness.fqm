@@ -24,15 +24,13 @@ for d in $drafts do
   })
 
   # Note: `$verdict.ready` here is a JSON boolean returned by the model via
-  # `response_format` and carried in over MCP transport. Per REQ-008 ac1,
-  # transport-supplied booleans are first-class input values even though
-  # macro-source boolean *literals* (`true`/`false`) remain deferred per
-  # §3.3 item 1. The `if` evaluates the value via truthiness (REQ-021).
+  # `response_format` and carried in over MCP transport. Macro-source boolean
+  # literals (`true`/`false`) are also first-class lowercase literals.
   if $verdict.ready then
-    fq.move_document({ identifier: $d.fq_id, destination_path: "Review/" })
+    fq.move_document({ identifier: $d.fq_id, destination: "Review/" })
     echo "$d.fq_id moved to Review/ ($verdict.reason)"
   else
-    fq.apply_tags({ targets: [{ entity_type: "document", identifier: $d.fq_id }], tags: ["#needs-work"] })
+    fq.apply_tags({ targets: [{ entity_type: "document", identifier: $d.fq_id }], add_tags: ["#needs-work"] })
     echo "$d.fq_id kept in drafts ($verdict.reason)"
   fi
 done

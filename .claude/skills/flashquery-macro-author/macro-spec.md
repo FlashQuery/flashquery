@@ -27,8 +27,8 @@ A macro is a sequence of statements. Each statement is one of:
 - **While-loop.** `while <condition> do <statements> done` — iterates while the condition is truthy. Condition re-evaluated each iteration.
 - **If-then-else.** `if <condition> then <statements> [ else <statements> ] fi` — branch on condition truthiness. The `<condition>` accepts any value-producing expression: primaries (`$var`, literals), field access, comparisons (`$x == 5`), boolean combinators (`$a && $b`), `_exists()` introspection (§5.2), and pipelines / builtin calls (`input_var "flag" --default false`, `count $list`). The truthiness of the resulting value gates the branch. Same shape for `while <condition> do ... done`. **Note:** the §1.2 grammar boundary on pipelines-in-comparison-operands STILL applies — `if mod $n 2 == 0 then` doesn't parse because the pipeline is on the LHS of `==`; pre-compute first.
 - **Continue / Break.** `continue` skips to the next iteration of the enclosing loop. `break` exits the enclosing loop. Parse-time error if used outside a loop body.
-- **Exit.** `exit <expression>` — halts the macro immediately, returning the expression's value. Statements after `exit` do not run.
-- **Fail.** `fail "<message>"` — halts the macro with a `macro_aborted` error envelope carrying the message.
+- **Exit builtin.** `exit <expression>` — halts the macro immediately, returning the expression's value. Statements after `exit` do not run. It is parsed as a builtin name, not a separate statement keyword.
+- **Fail builtin.** `fail "<message>"` — halts the macro with a `macro_aborted` error envelope carrying the message. It is parsed as a builtin name, not a separate statement keyword.
 
 ### 1.2 Expressions
 
@@ -56,7 +56,7 @@ A macro is a sequence of statements. Each statement is one of:
   ```
 
   Pipelines DO compose freely in object-literal value positions (REQ-011 ac4: "Values are any expression" — `rhsExpr` accepts pipelines directly), in assignment RHS (`x = count $list`), and as `if`/`while` conditions when the pipeline result is itself truthy. The restriction is specifically on comparison-operator operands.
-- **Boolean combinators.** `&&`, `||`, `!`. `&&` and `||` short-circuit.
+- **Boolean combinators.** `&&`, `||`, `!`. `&&` and `||` short-circuit and return strict booleans (`1 && 2` yields `true`, not `2`; `0 || "fallback"` yields `true`, not `"fallback"`).
 - **Range.** `1..5` — iterates [1, 2, 3, 4]. **End-exclusive.** `range N` builtin produces [0, 1, ..., N-1].
 - **Tool call (expression position).** `<server>.<tool>({ <args> })` — same as statement form; the return value is the expression's value.
 - **Introspection call.** `<server>._exists()` or `$server_name._exists()` — engine-resolved probe. See §5 below.
@@ -286,11 +286,11 @@ When a macro is loaded via `source_ref` (from a vault document), the engine bind
 - `_self.tags` — list of tag strings.
 - `_self.fq_id` — immutable identifier.
 
-**Snapshot semantics.** `_self` is captured ONCE at macro start. It does NOT auto-refresh. A macro that needs latest persisted state mid-run must call `fq.get_document(_self.path)`.
+**Snapshot semantics.** `_self` is captured ONCE at macro start. It does NOT auto-refresh. A macro that needs latest persisted state mid-run must call `fq.get_document({ identifiers: $_self.path })`. (`_self` is a variable binding — always read it with the `$` sigil, e.g. `$_self.path`, per the §1.2 variable-read grammar.)
 
 **Inline source case.** When a macro is invoked via `fq.call_macro` with inline source (no `source_ref`), `_self` is undefined. Accessing `_self.*` raises a runtime error: `"_self is only available when the macro was loaded via source_ref."`
 
-**Read-only.** Assigning to `_self.*` is a PARSE-TIME error. To mutate the document, call `fq.write_document(mode: "update", identifier: _self.path, frontmatter: {...})`.
+**Read-only.** Assigning to `_self.*` is a PARSE-TIME error. To mutate the document, call `fq.write_document({ mode: "update", identifier: $_self.path, frontmatter: {...} })`.
 
 ---
 
@@ -398,6 +398,27 @@ exit { sum: $total }
 exit { path: $_self.path, marker: $_self.frontmatter.marker, completed: $completed }
 ```
 
+### 9.8 Surgical edits (bash verbs) vs. section / whole-document edits (`fq.*`)
+
+**Granularity rule — pick the right tool for the precision you need.** Bash-style shell verbs (`sed`, `grep`, `head`, `tail`, ...) are the **surgical, line-level** mechanism — use them for "change these specific lines/values." The native `fq.*` document tools operate at **section or whole-document** granularity (`replace_doc_section` = one heading section; `insert_in_doc` = insert at an anchor; `write_document` = whole body/frontmatter). For precision INTO a document, reach for the shell verbs; for section/whole-doc moves, use `fq.*`.
+
+**Mechanism — `sed` transforms text, it does not mutate the file.** FlashQuery's `sed` returns the transformed text; it does NOT edit in place (`sed -i` is forbidden, §10). A bare `sed "file" "s/a/b/"` statement computes a result and discards it — nothing changes. The surgical pattern is **read → `sed`-transform → write the result back**: `sed` does the precise edit; `get_document` / `write_document` are just the read and persist endpoints.
+
+**Surgical body line/section edit (the canonical pattern):**
+```
+doc = fq.get_document({ identifiers: "Notes/config.md", include: ["body"] })   # body only — no frontmatter
+new_body = echo $doc.body | sed "s/timeout: 30/timeout: 60/" | sed "s/retries: 2/retries: 5/"
+fq.write_document({ mode: "update", identifier: "Notes/config.md", content: $new_body })
+```
+Reading via `get_document` `include: ["body"]` yields the body WITHOUT frontmatter, so writing `content` back is clean. `echo $var | sed ...` pipes the value through the transform — chain one `sed` per substitution (`grep` the same way to filter lines). The body field of the read result is `$doc.body`.
+
+**Frontmatter / config values are NOT body text.** Set them directly — `write_document` update MERGES frontmatter (named fields overwritten, others preserved, `null` deletes a field):
+```
+fq.write_document({ mode: "update", identifier: "Specs/limits.md", frontmatter: { default_limit: 250 } })
+```
+
+**Whole-file `cat` variant.** `cat "file"` reads the RAW on-disk file (frontmatter + body). Use `cat | sed | write_document content` only for frontmatter-LESS files; otherwise the frontmatter text folds into the body. Prefer the `get_document` body-only form above.
+
 ---
 
 ## 10. Things the macro language does NOT have
@@ -426,17 +447,17 @@ When this skill is invoked by `flashquery-macro-testgen`, the produced macro is 
 - The framework can populate a **vault fixture** via the YAML's `vault: { "/path": "content" }` map. Shell verbs (`cat`, `ls`, `grep`, etc.) resolve paths against this vault root. Path-jail enforcement is real.
 - The framework can populate **`input_vars`** via the YAML's `input_vars: { key: value }` map. The macro's `input_var "key"` builtin reads from this.
 - The framework can populate **`_self` binding** via the YAML's `self_binding: { path, frontmatter, title, tags, fq_id }`. The macro's `_self.*` reads from this.
-- Native `fq` dispatch is **stubbed** in the in-process framework. The framework does not have real Supabase wiring. Calls to `fq.write_document`, `fq.get_document`, `fq.search_tools` etc. that need to actually persist or query should go through the directed/integration scenario layer, not the macro framework. If the test needs to exercise a brokered-shape `fq.search_tools` envelope, simulate it via a `JSONTextTool` archetype.
+- Native `fq` dispatch is **stubbed** in the in-process framework. The framework does not have real Supabase wiring. Calls to `fq.write_document`, `fq.get_document`, `fq.search_tools` etc. that need to actually persist or query should go through the directed/integration scenario layer, not the macro framework. Macros that exercise `fq.*` document mutation (`write_document`, `insert_in_doc`, `replace_doc_section`, `apply_tags`, `move_document`, `manage_directory`, etc.) are directed/integration-testable only, not golden-harness-testable. If the test needs to exercise a brokered-shape `fq.search_tools` envelope or document-mutation return envelope for branch logic, simulate it via a `JSONTextTool` or `StructuredContentTool` archetype.
 
 When generating for the framework, the macro should ONLY use behaviors the framework can wire. If the description requires native `fq` dispatch that needs real Supabase, that's an algorithmic miss — the skill should flag it as such rather than generate an unrunnable macro.
 
 ### 11.1 Static pre-scan walks every tool reference (REQ-028)
 
-**Critical rule for test-pilot generation.** Production's permission pre-scan walks the macro AST statically before any code runs. It enumerates every `<server>.<tool>(...)` reference, INCLUDING references inside if-branches and loop bodies that may never execute at runtime. Every referenced server MUST be present in the test's `tools:` registry, or pre-scan rejects the macro with `unknown_server` before evaluation starts.
+**Critical rule for test-pilot generation.** Production's permission pre-scan walks the macro AST statically before any code runs. It enumerates every `<server>.<tool>(...)` dispatch reference, INCLUDING references inside if-branches and loop bodies that may never execute at runtime. Every referenced dispatch server MUST be present in the test's `tools:` registry, or pre-scan rejects the macro with `unknown_server` before evaluation starts.
 
 **Implication.** When generating a macro that references multiple servers (e.g., a primary + backup failover pattern), the test pilot's `tools:` block MUST register ALL referenced servers — even ones the runtime path won't reach.
 
-**Verification check (test-pilot mode).** Before passing a generated macro to the test wrapper, the verify workflow MUST extract every `<server>.<method>(...)` reference from the macro source and compare against the `tool_surface` the caller declared (or the `tools:` block being built). Missing servers → algorithmic miss with `kind: "unregistered_tool_reference"` and `suggested_change: "register <server> in the tools: block, or restructure the macro to not reference it"`. This applies even for `_exists()` introspection calls (they still resolve through the same pre-scan).
+**Verification check (test-pilot mode).** Before passing a generated macro to the test wrapper, the verify workflow MUST extract every `<server>.<tool>(...)` dispatch reference from the macro source and compare against the `tool_surface` the caller declared (or the `tools:` block being built). Missing dispatch servers → algorithmic miss with `kind: "unregistered_tool_reference"` and `suggested_change: "register <server> in the tools: block, or restructure the macro to not reference it"`. Introspection calls (`<server>._exists()` and `$server_name._exists()`) are NOT part of the static permission pre-scan; they are runtime-resolved probes. Verify may still warn about an `_exists()` probe that cannot be exercised in a given test surface, but it must not classify that as a pre-scan miss.
 
 ### 11.2 FakeBroker conflates "registered" with "reachable"
 
@@ -447,3 +468,165 @@ When generating for the framework, the macro should ONLY use behaviors the frame
 **Generation guidance.** When the description asks for "fall back if primary isn't reachable" semantics in a test-pilot context, generate the macro normally but flag this in the verify report as a `framework_limitation` warning. Suggest covering the backup path via a directed/integration scenario where real broker behavior can be staged, or document the limitation in the pilot's `description:` field.
 
 **Future affordance.** A proposed `UnreachableTool` archetype (or an `is_connected: false` flag on existing archetypes) would close this gap. Until that ships, treat the failover-backup branch as test-pilot-untestable.
+
+---
+
+## 12. Native `fq.*` tool surface
+
+Use this catalog for production/native FlashQuery calls. The macro-author generate and verify workflows must not invent native `fq.*` tool names or argument keys outside this list unless the caller explicitly supplies an additional `context.tool_surface`. Native `fq` is stubbed in the macro framework; these calls run in production / directed / integration contexts.
+
+### 12.1 Read
+
+```
+doc = fq.get_document({
+  identifiers: "Notes/project.md",          # string or [list]; UUID, vault path, or filename
+  include: ["body", "frontmatter", "headings"],
+  sections: ["Overview", "Risks"],          # optional; requires "body" in include
+  occurrence: 1,                            # optional; which heading match
+  include_nested: true,                     # optional; default true
+  follow_ref: "supersedes"                  # optional; frontmatter dot-path resolved as identifier
+})
+
+hits = fq.search({
+  query: "planning",                        # optional; empty query needs tags/path_filter/list_all
+  mode: "mixed",                            # "filesystem" | "semantic" | "mixed"
+  entity_types: ["documents", "memories"],
+  tags: ["#draft"],
+  tag_match: "any",                         # "any" | "all"
+  limit: 10
+})
+
+tools = fq.search_tools({ query: "edit a section of a document" })
+```
+
+### 12.2 Whole-document write
+
+```
+fq.write_document({
+  mode: "update",                           # "create" | "update"
+  identifier: "Notes/project.md",           # update mode; create may use path
+  path: "Notes/new-project.md",             # create mode
+  title: "Project Plan",                    # optional
+  content: "...full body...",               # optional
+  frontmatter: { status: "review" },        # optional; FQ-managed fields rejected
+  tags: ["planning"]                        # optional; REPLACES full tag list
+})
+```
+
+Use `apply_tags` for additive/removal tag edits. `write_document.tags` is replacement semantics.
+
+### 12.3 Section-targeted edits
+
+```
+fq.insert_in_doc({
+  identifier: "Notes/project.md",
+  position: "after_heading",                # top|bottom|end|after_heading|before_heading|end_of_section
+  heading: "Risks",                         # required for *_heading / end_of_section
+  content: "- New risk: vendor lock-in",
+  occurrence: 1,                            # optional; 1-indexed
+  include_nested: true,                     # optional; end_of_section only
+  heading_match: "contains",                # "contains" | "exact"
+  heading_level: 2                          # optional 1-6
+})
+
+fq.replace_doc_section({
+  identifier: "Notes/project.md",
+  heading: "Overview",
+  content: "Rewritten overview body.",      # "" deletes the heading + section
+  include_nested: true,
+  heading_match: "exact",
+  heading_level: 2,
+  occurrence: 1
+})
+```
+
+### 12.4 Tags / lifecycle / structure
+
+```
+fq.apply_tags({
+  targets: [{ entity_type: "document", identifier: "Notes/project.md" }],
+  add_tags: ["#reviewed"],
+  remove_tags: ["#draft"]
+})
+
+fq.move_document({ identifier: "Notes/project.md", destination: "Archive/project.md" })
+fq.copy_document({ identifier: "Notes/project.md", destination: "Notes/project-copy.md" })
+fq.archive_document({ identifiers: ["Notes/project.md"] })
+fq.remove_document({ identifiers: ["Notes/scratch.md"] })
+
+fq.manage_directory({
+  action: "rename",                         # create | remove | rename | move
+  paths: ["Notes/Ideas"],
+  destinations: ["Archive/Ideas"]           # for rename/move; positionally aligned
+})
+```
+
+`apply_tags` requires at least one of `add_tags` or `remove_tags`. It does not accept a generic `tags` key.
+
+### 12.5 Memory
+
+```
+fq.write_memory({
+  mode: "create",                           # "create" | "update"
+  content: "User prefers terse summaries.",
+  memory_id: "...",                         # required when mode is "update"
+  tags: ["preference"],                     # replacement list in update mode
+  plugin_scope: "global",                   # create only; default "global"
+  include: ["content", "tags_full"]
+})
+
+mem = fq.get_memory({ memory_ids: "<uuid>", include: ["content", "tags_full"] })
+fq.archive_memory({ memory_ids: ["<uuid>"] })
+```
+
+### 12.6 Records
+
+```
+fq.write_record({
+  mode: "create",                           # "create" | "update"  (no "upsert")
+  plugin_id: "crm",
+  plugin_instance: "work",                  # optional; omit for single-instance plugins
+  table: "contacts",
+  id: "<uuid>",                             # required when mode is "update"
+  data: { name: "Ada" },                    # schema-validated fields
+  include: ["data", "schema_metadata"]      # optional payload sections
+})
+
+rec  = fq.get_record({ plugin_id: "crm", table: "contacts", id: "<uuid>", include: ["data"] })
+fq.archive_record({ targets: [{ plugin_id: "crm", table: "contacts", id: "<uuid>" }] })
+recs = fq.search_records({
+  plugin_id: "crm", table: "contacts",      # all optional
+  filters: { status: "active" },            # field-equality filters (AND)
+  query: "Ada",                             # text/semantic query (table-dependent)
+  tag: "vip", taggable_tables_only: false,
+  include: ["data"], limit: 10
+})
+```
+
+**Return shape.** Record writes/reads return a record-identification block `{ id, plugin_id, table, created_at, updated_at }`. After a `create`, read the new record's UUID via `.id` (e.g. `new_id = $created.id`) — `create` does not take an `id` input but returns one.
+
+### 12.7 Model and macro orchestration
+
+```
+reply = fq.call_model({
+  resolver: "purpose",                      # model|purpose|list_models|list_purposes|search|help
+  name: "draft-reviewer",
+  messages: [{ role: "user", content: "Review this draft." }],
+  parameters: {
+    response_format: { type: "json_schema", schema: { ready: "boolean" } }
+  }
+})
+```
+
+`fq.call_macro` is host-controlled and not callable from inside macros.
+
+### 12.8 Invariants and legacy surfaces
+
+- **No recursion (INV-08).** `fq.call_macro(...)` exists as a tool but **must not be generated inside a macro body** — a macro cannot invoke `call_macro`. Macro composition is a host concern, not an in-macro one.
+- **Avoid legacy / removed surfaces.** Do not generate these in new macros:
+  - `insert_doc_link` — transitional, gated on `call_macro` parity (will be removed); prefer the section/link patterns above.
+  - `create_document`, `update_document`, `save_memory`, `search_documents`, `create_directory` — **removed**; use the canonical replacements (`write_document`, `write_memory`, `search`, `manage_directory`) per the `tool-metadata.ts` legacy map.
+
+### 12.9 Dry-run validation (engine-backed pre-check)
+
+`call_macro` accepts a `dry_run: true` flag: `fq.call_macro({ source, input_vars, dry_run: true })`. The engine then **parses, preflights, validates the input-var contract, and runs the static permission pre-scan (REQ-028) WITHOUT executing any statement or dispatching any tool** — zero side effects. It returns `{ parsed_ok, input_var_contract, tool_references, server_references }`, or a `parse_error` / preflight / `unknown_server` / `unknown_tool` / `invalid_input` envelope on failure. This is the deterministic counterpart to the skill's static verify — use it to confirm a generated macro parses and is permitted to call exactly the tools it references before any live run. It does NOT catch runtime errors (null-chain field access, unknown-variable reads, a missing heading, a tool returning `isError`), and — like the pre-scan it shares — it does NOT cover `_exists()` introspection references (§11.1).

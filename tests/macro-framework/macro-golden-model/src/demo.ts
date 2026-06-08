@@ -13,8 +13,8 @@ fq.manage_directory({ action: "create", paths: ["Q3-2026"] })
 drafts = fq.search({ query: "tag:#draft" })
 
 for d in $drafts do
-  fq.move_document({ identifier: $d.fq_id, destination_path: "Q3-2026/" })
-  fq.apply_tags({ targets: [{ entity_type: "document", identifier: $d.fq_id }], tags: ["#archived"] })
+  fq.move_document({ identifier: $d.fq_id, destination: "Q3-2026/" })
+  fq.apply_tags({ targets: [{ entity_type: "document", identifier: $d.fq_id }], add_tags: ["#archived"] })
 done
 
 total = count $drafts
@@ -34,10 +34,10 @@ for d in $drafts do
     parameters: { response_format: { type: "json_schema", schema: { "ready": "boolean", "reason": "string" } } }
   })
   if $verdict.ready then
-    fq.move_document({ identifier: $d.fq_id, destination_path: "Review/" })
+    fq.move_document({ identifier: $d.fq_id, destination: "Review/" })
     echo "moved to Review/: $verdict.reason"
   else
-    fq.apply_tags({ targets: [{ entity_type: "document", identifier: $d.fq_id }], tags: ["#needs-work"] })
+    fq.apply_tags({ targets: [{ entity_type: "document", identifier: $d.fq_id }], add_tags: ["#needs-work"] })
     echo "kept in drafts:" $verdict.reason
   fi
 done

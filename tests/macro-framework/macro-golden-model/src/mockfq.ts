@@ -38,10 +38,10 @@ export const HELP_PAGES: Record<string, string> = {
   "fq.search": "fq.search: Free-text search over the vault. Args: { query, entity_types?, tags? }. Returns a list of matching document summaries.",
   "fq.get_document": "fq.get_document: Read a single document by identifier or path. Args: { identifiers, include? }. Returns the document or { error: 'not_found' }.",
   "fq.write_document": "fq.write_document: Creates or updates a document. Args: { mode: 'create'|'update', path?, identifier?, title?, content?, frontmatter?, tags? }. Returns metadata for the written doc.",
-  "fq.move_document": "fq.move_document: Move a document. Args: { identifier, destination_path }.",
-  "fq.apply_tags": "fq.apply_tags: Apply tags to one or more documents. Args: { targets, tags }.",
+  "fq.move_document": "fq.move_document: Move a document. Args: { identifier, destination }.",
+  "fq.apply_tags": "fq.apply_tags: Add and/or remove tags on one or more documents. Args: { targets, add_tags?, remove_tags? }.",
   "fq.archive_document": "fq.archive_document: Soft-archive documents by identifier. Args: { identifiers }.",
-  "fq.manage_directory": "fq.manage_directory: Create or remove vault directories. Args: { action: 'create'|'remove', paths }.",
+  "fq.manage_directory": "fq.manage_directory: Create, remove, rename, or move vault directories. Args: { action: 'create'|'remove'|'rename'|'move', paths, destinations? }.",
   "fq.insert_in_doc": "fq.insert_in_doc: Insert content at a position in a document. Args: { identifier, position, content, heading? }.",
   "fq.call_model": "fq.call_model: Invoke an LLM. Args: { resolver: 'model'|'purpose'|..., name?, messages?, parameters? }.",
   "fq.search_tools": "fq.search_tools: BM25 search across known tools (FQ-native + brokered). Args: { query, limit?, server_filter? }. Returns SearchResult[].",
@@ -128,20 +128,21 @@ export const fqServer: ServerEntry = {
       return ok;
     },
 
-    // fq.move_document({ identifier, destination_path })
+    // fq.move_document({ identifier, destination })
     move_document: (arg, ctx) => {
       ctx.log(`[fq] move_document(${stringifyValue(arg)})`);
+      const destination = arg.destination;
       return {
-        identifier: arg.destination_path,
+        identifier: destination,
         title: "(moved)",
-        path: arg.destination_path,
+        path: destination,
         fq_id: arg.identifier,
         modified: new Date().toISOString(),
         size: { chars: 0 },
       };
     },
 
-    // fq.apply_tags({ targets, tags })
+    // fq.apply_tags({ targets, add_tags?, remove_tags? })
     apply_tags: (arg, ctx) => {
       ctx.log(`[fq] apply_tags(${stringifyValue(arg)})`);
       const targets = Array.isArray(arg.targets) ? arg.targets : [];
@@ -151,7 +152,8 @@ export const fqServer: ServerEntry = {
           identifier: o.identifier,
           fq_id: o.identifier,
           modified: new Date().toISOString(),
-          tags_applied: arg.tags,
+          add_tags: Array.isArray(arg.add_tags) ? arg.add_tags : [],
+          remove_tags: Array.isArray(arg.remove_tags) ? arg.remove_tags : [],
         };
       });
     },
@@ -168,21 +170,23 @@ export const fqServer: ServerEntry = {
       }));
     },
 
-    // fq.manage_directory({ action, paths })
+    // fq.manage_directory({ action, paths, destinations? })
     manage_directory: (arg, ctx) => {
       const action = String(arg.action ?? "");
       const paths = Array.isArray(arg.paths) ? arg.paths : [];
+      const destinations = Array.isArray(arg.destinations) ? arg.destinations : [];
       ctx.log(`[fq] manage_directory(${stringifyValue(arg)})`);
-      if (action !== "create" && action !== "remove") {
+      if (!["create", "remove", "rename", "move"].includes(action)) {
         return {
           error: "invalid_input",
-          message: `action must be "create" or "remove"`,
+          message: `action must be "create", "remove", "rename", or "move"`,
           identifier: stringifyValue(arg.paths),
         };
       }
-      return paths.map((p) => ({
+      return paths.map((p, idx) => ({
         path: p,
         action,
+        destination: destinations[idx] ?? null,
         completed_at: new Date().toISOString(),
       }));
     },
@@ -363,10 +367,10 @@ export const fqServer: ServerEntry = {
         { server: "fq", tool: "search", description: "Free-text search over vault documents.", arg_summary: "query: string, entity_types?: string[], tags?: string[]" },
         { server: "fq", tool: "get_document", description: "Read a single document by identifier or path.", arg_summary: "identifiers: string, include?: string[]" },
         { server: "fq", tool: "write_document", description: "Create or update a document. Modes: create, update.", arg_summary: "mode: string, identifier?: string, path?: string, title?: string, content?: string, frontmatter?: object, tags?: string[]" },
-        { server: "fq", tool: "move_document", description: "Move a document to a new path.", arg_summary: "identifier: string, destination_path: string" },
-        { server: "fq", tool: "apply_tags", description: "Apply tags to documents.", arg_summary: "targets: object[], tags: string[]" },
+        { server: "fq", tool: "move_document", description: "Move a document to a new path.", arg_summary: "identifier: string, destination: string" },
+        { server: "fq", tool: "apply_tags", description: "Add and remove tags on documents.", arg_summary: "targets: object[], add_tags?: string[], remove_tags?: string[]" },
         { server: "fq", tool: "archive_document", description: "Soft-archive documents.", arg_summary: "identifiers: string | string[]" },
-        { server: "fq", tool: "manage_directory", description: "Create or remove vault directories.", arg_summary: "action: string, paths: string[]" },
+        { server: "fq", tool: "manage_directory", description: "Create, remove, rename, or move vault directories.", arg_summary: "action: string, paths: string[], destinations?: string[]" },
         { server: "fq", tool: "insert_in_doc", description: "Insert content at a position inside a document.", arg_summary: "identifier: string, position: string, content: string, heading?: string" },
         { server: "fq", tool: "call_model", description: "Invoke an LLM via resolver: model | purpose | list_models | list_purposes | search | help.", arg_summary: "resolver: string, name?: string, messages?: object[], parameters?: object" },
         { server: "fq", tool: "search_tools", description: "BM25 search across known tools.", arg_summary: "query: string, limit?: number, server_filter?: string" },

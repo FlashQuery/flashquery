@@ -33,8 +33,8 @@ FlashQuery-integrated build.
   - **Tool-call layer** for FlashQuery and brokered MCP tools: `namespace.tool({...JSON...})`.
     The JSON object inside the parens matches the tool's input schema verbatim.
   - List literals `[a, b, c]`, object literals `{ key: value, ... }`, and the
-    `null` literal as first-class value expressions. Booleans (`true`/`false`)
-    are deferred — `if` branches on truthiness of values; defaults use `null`.
+    `null` and lowercase boolean (`true`/`false`) literals as first-class
+    value expressions.
 - **Async tree-walking evaluator** with a sandboxed environment — only registered
   operators, mock tools, and registered MCP servers are accessible.
 - **Namespaced tool dispatch** via a registry-keyed map (`{ fq: { tools: ... }, brave_search: { tools: ... }, web_fetch: { tools: ... } }`).
@@ -139,11 +139,10 @@ hits_per_topic = input_var "hits_per_topic" --default 2
 reviewer       = input_var "reviewer"       --default null   # null literal supported
 ```
 
-The default-literal grammar accepts strings, numbers, `null`, list
-literals (`[1, 2, 3]`), and object literals (`{ key: "value" }`). Boolean
-defaults (`true`/`false`) are deferred per §5 of the research doc —
-attempts to use one fail at parse time. Branch on `null` inside the macro
-body if you need optional-with-no-default behavior.
+The default-literal grammar accepts strings, numbers, booleans (`true`/`false`),
+`null`, list literals (`[1, 2, 3]`), and object literals (`{ key: "value" }`).
+Branch on `null` inside the macro body if you need optional-with-no-default
+behavior.
 
 See `examples/17-input-var-missing.fqm` for the pre-flight rejection envelope.
 
@@ -274,10 +273,10 @@ consolidation doc's identification-block shapes.
 - `fq.get_document({ identifiers, include? })` — returns a single canned doc, or
   a `{ error: "not_found", ... }` envelope when nothing matches
 - `fq.write_document({ mode: "create" | "update", path?, title?, identifier?, content?, frontmatter?, tags? })`
-- `fq.move_document({ identifier, destination_path })`
-- `fq.apply_tags({ targets, tags })`
+- `fq.move_document({ identifier, destination })`
+- `fq.apply_tags({ targets, add_tags?, remove_tags? })`
 - `fq.archive_document({ identifiers })`
-- `fq.manage_directory({ action: "create" | "remove", paths })`
+- `fq.manage_directory({ action: "create" | "remove" | "rename" | "move", paths, destinations? })`
 - `fq.insert_in_doc({ identifier, position, content, heading?, ... })`
 
 The same registry shape will host external brokered MCP servers (e.g.,
@@ -426,8 +425,8 @@ drafts = fq.search({ query: "tag:#draft" })
 
 # For loop. No ;do — newline is enough. End with done.
 for d in $drafts
-  fq.move_document({ identifier: $d.fq_id, destination_path: "Q3-2026/" })
-  fq.apply_tags({ targets: [{ entity_type: "document", identifier: $d.fq_id }], tags: ["#archived"] })
+  fq.move_document({ identifier: $d.fq_id, destination: "Q3-2026/" })
+  fq.apply_tags({ targets: [{ entity_type: "document", identifier: $d.fq_id }], add_tags: ["#archived"] })
 done
 
 # ----- Shell-script layer (builtins, control flow, values) -----
@@ -443,7 +442,7 @@ verdict = fq.call_model({
   parameters: { response_format: { type: "json_schema", schema: { "ready": "boolean" } } }
 })
 if $verdict.ready then
-  fq.move_document({ identifier: $d.fq_id, destination_path: "Review/" })
+  fq.move_document({ identifier: $d.fq_id, destination: "Review/" })
 else
   echo "not ready"
 fi

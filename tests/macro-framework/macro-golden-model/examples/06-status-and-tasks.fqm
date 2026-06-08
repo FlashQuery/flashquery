@@ -31,10 +31,10 @@ for d in $drafts do
   })
 
   if $verdict.ready then
-    fq.move_document({ identifier: $d.fq_id, destination_path: "Review/" })
+    fq.move_document({ identifier: $d.fq_id, destination: "Review/" })
     echo "  moved $d.fq_id to Review/ ($verdict.reason)"
   else
-    fq.apply_tags({ targets: [{ entity_type: "document", identifier: $d.fq_id }], tags: ["#needs-work"] })
+    fq.apply_tags({ targets: [{ entity_type: "document", identifier: $d.fq_id }], add_tags: ["#needs-work"] })
     echo "  kept $d.fq_id in drafts ($verdict.reason)"
   fi
 done

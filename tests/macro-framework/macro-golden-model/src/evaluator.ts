@@ -1768,7 +1768,7 @@ async function runToolCall(
         ctx.exec.sideEffects.vault_writes.push({
           kind: "move",
           identifier: typeof argObj.identifier === "string" ? argObj.identifier : undefined,
-          destination_path: typeof argObj.destination_path === "string" ? argObj.destination_path : undefined,
+          destination_path: typeof argObj.destination === "string" ? argObj.destination : undefined,
           at,
         });
       } else if (call.tool === "archive_document" || call.tool === "remove_document") {

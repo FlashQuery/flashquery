@@ -69,7 +69,7 @@ for p in $projections
   projection_tags = append $projection_tags "#projection/$p"
 done
 
-fq.apply_tags({ targets: $tag_targets, tags: $projection_tags })
+fq.apply_tags({ targets: $tag_targets, add_tags: $projection_tags })
 
 echo "added $projections to $doc.path"
 
