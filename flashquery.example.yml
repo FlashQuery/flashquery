@@ -231,6 +231,16 @@ logging:
   # file: "./logs/flashquery.log"
 
 
+# ─── Template Tool Exposure ─────────────────────────────────────────────────
+# "Restrictive" mode exposes templates only to purposes that explicitly bind them
+# with llm.purposes[].templates. This keeps non-language purposes such as
+# embedding out of model-visible tool admission.  Otherwise, set the default_access
+# to "Permissive" that allows any model to access templates.
+
+templates:
+  default_access: permissive
+
+
 # ─── LLM (optional) ─────────────────────────────────────────────────────────
 # Three-layer LLM config: providers + models + purposes.
 # Entire section is OPTIONAL. Comment out or delete it to disable call_model,
