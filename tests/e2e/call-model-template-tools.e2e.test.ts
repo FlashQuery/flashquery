@@ -196,7 +196,7 @@ llm:
   const transport = new StdioClientTransport({
     command: 'npx',
     args: ['tsx', entryPoint, 'start', '--config', configPath],
-    stderr: 'pipe',
+    stderr: 'ignore',
     env: process.env as Record<string, string>,
     cwd: projectRoot,
   });
@@ -223,6 +223,26 @@ async function callModel(client: Client, args: Record<string, unknown>): Promise
 }
 
 describe('call_model template-tool masquerade public E2E contracts', () => {
+  it('ATL-E2E-04 lists vault template masquerade tools on the host MCP surface', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      finalTextResponse('unused', 1, 1),
+    ]);
+    await provider.start();
+    try {
+      await withManagedMcp(provider, async (client) => {
+        const { tools } = await client.listTools();
+        const names = tools.map((tool) => tool.name);
+
+        expect(names).toEqual(expect.arrayContaining([
+          'flashquery_skill_research_skill',
+          'flashquery_skill_source_skill',
+        ]));
+      });
+    } finally {
+      await provider.stop();
+    }
+  }, 120000);
+
   it('ATL-E2E-04 exposes flashquery_skill_research_skill, dispatches it, and returns hydrated template tool content', async () => {
     const provider = new ScriptedOpenAiProvider([
       toolCallResponse([{ id: 'call_research_skill', name: 'flashquery_skill_research_skill', args: { topic: 'ATL-E2E-04' } }]),

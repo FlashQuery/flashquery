@@ -23,6 +23,7 @@ import { registerLlmUsageTools } from './tools/llm-usage.js';
 import { registerMacroTools } from './tools/macro.js';
 import { createBroker, type Broker } from '../services/mcp-broker.js';
 import { registerHostBrokeredTools } from './host-brokered-tools.js';
+import { registerHostTemplateTools } from './host-template-tools.js';
 import { getNativeToolCatalog, wrapServerWithToolCatalog, type RegisterToolFunction } from './tool-catalog.js';
 import { validateAndCacheNativeToolSchemas, type NativeToolHandler } from '../llm/tool-registry.js';
 import { dispatchNativeToolCore } from '../llm/native-tool-core.js';
@@ -661,6 +662,9 @@ export function createMcpServer(config: FlashQueryConfig, version: string, optio
         nativeToolNames: [...hostEnabledToolNames],
         ...(hostBrokerToolSearchEnabled ? { broker } : {}),
         toolMeta,
+      });
+      await registerHostTemplateTools(server, config, {
+        nativeToolCatalog: catalog,
       });
       await registerHostBrokeredTools(server, {
         broker,

@@ -7,6 +7,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { createMcpServer } from '../../src/mcp/server.js';
 import { registerHostBrokeredTools } from '../../src/mcp/host-brokered-tools.js';
+import { registerHostTemplateTools } from '../../src/mcp/host-template-tools.js';
 import { registerMemoryTools } from '../../src/mcp/tools/memory.js';
 import { registerDocumentTools } from '../../src/mcp/tools/documents.js';
 import { registerPluginTools } from '../../src/mcp/tools/plugins.js';
@@ -281,6 +282,65 @@ describe('MCP tool registration metadata', () => {
       details: {
         server: 'fq',
         tool: 'flashquery_skill_research_skill',
+      },
+    });
+  });
+
+  it('registers permissive template masquerade tools on the host MCP surface', async () => {
+    const vaultRoot = await mkdtemp(join(tmpdir(), 'fq-host-template-'));
+    await mkdir(join(vaultRoot, 'Templates'), { recursive: true });
+    await writeFile(
+      join(vaultRoot, 'Templates', 'Weekly Checklist.md'),
+      [
+        '---',
+        'fq_template: true',
+        'fq_expose_as_tool: true',
+        'fq_desc: Weekly checklist',
+        'fq_params:',
+        '  topic:',
+        '    type: string',
+        '    required: true',
+        '---',
+        '',
+        'Checklist for {{topic}}',
+      ].join('\n'),
+      'utf8'
+    );
+    const registered = new Map<string, {
+      config: { description?: string; inputSchema?: { safeParse(input: unknown): { success: boolean } } };
+      handler: (args: unknown) => Promise<CallToolResult>;
+    }>();
+    const server = {
+      registerTool: vi.fn((name: string, config: unknown, handler: (args: unknown) => Promise<CallToolResult>) => {
+        registered.set(name, { config: config as never, handler });
+        return { remove: vi.fn() };
+      }),
+    } as unknown as McpServer;
+    const config = {
+      ...mockConfig,
+      instance: {
+        id: 'host-template-registration-test',
+        name: 'Host Template Registration Test',
+        vault: { path: vaultRoot, markdownExtensions: ['.md'] },
+      },
+      templates: { defaultAccess: 'permissive' },
+    } as FlashQueryConfig;
+    delete (config as Partial<FlashQueryConfig>).supabase;
+
+    await registerHostTemplateTools(server, config, { nativeToolCatalog: [] });
+
+    expect(registered.has('flashquery_template_weekly_checklist')).toBe(true);
+    expect(registered.get('flashquery_template_weekly_checklist')?.config.description).toBe('Weekly checklist');
+    expect(registered.get('flashquery_template_weekly_checklist')?.config.inputSchema?.safeParse({ topic: 'planning' }).success).toBe(true);
+    expect(registered.get('flashquery_template_weekly_checklist')?.config.inputSchema?.safeParse({}).success).toBe(false);
+
+    const result = await registered.get('flashquery_template_weekly_checklist')?.handler({ topic: 'planning' });
+    expect(result?.isError).toBeUndefined();
+    expect(JSON.parse(result?.content[0]?.text ?? '')).toMatchObject({
+      ok: true,
+      result: {
+        template_path: 'Templates/Weekly Checklist.md',
+        content: expect.stringContaining('Checklist for planning'),
       },
     });
   });
