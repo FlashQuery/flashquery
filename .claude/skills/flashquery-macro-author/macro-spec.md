@@ -122,6 +122,55 @@ val = input_var "key" --default 5
 val = input_var "key" --default=5
 ```
 
+### 1.6 Shell verbs (read verbs + the `sed -i` write) — REQ-064/065/066
+
+Eight ShellJS-backed verbs operate on vault files (path-jailed to the vault root). Six READ content (`cat`, `grep`, `sed`, `wc`, `head`, `tail`); `find` / `ls` match paths/entries.
+
+**`--scope` — what region a content verb sees (REQ-065).** The six content verbs accept `--scope "body" | "both" | "frontmatter"`, **default `body`** (the content after the YAML frontmatter). `both` = the whole raw file; `frontmatter` = the YAML block between the `---` fences. Frontmatter-less files: `body` == `both` == whole content. `find` / `ls` reject `--scope` (`invalid_scope`). Use the long-flag-with-value form `--scope "body"`; single-dash `-body` is invalid (it lexes as bundled short flags). In a pipeline, set `--scope` on the FILE-reading stage (downstream stages read stdin and ignore it).
+
+| Verb | Form | `--scope`? |
+|---|---|---|
+| `cat` | `cat [--scope S] file...` | yes |
+| `grep` | `grep [-i][-v][-c][-l][-n] [--scope S] PATTERN file...` | yes |
+| `sed` | `sed [-i] [--scope S] "s/OLD/NEW/[gim]" file...` | yes |
+| `wc` | `wc [-l][-w][-c] [--scope S] file...` | yes |
+| `head` | `head [-n N] [--scope S] file...` | yes |
+| `tail` | `tail [-n N] [--scope S] file...` | yes |
+| `find` | `find PATH [--name "*.md"] [--type f\|d]` | no |
+| `ls` | `ls [-A][-d][-l][-R] path` | no |
+
+Every content verb with `--scope`:
+
+```
+body    = cat "Notes/doc.md"                          # body (default — frontmatter excluded)
+raw     = cat --scope "both" "Notes/doc.md"           # whole file, including frontmatter
+fm      = cat --scope "frontmatter" "Notes/doc.md"    # the YAML block only
+hits    = grep --scope "body" "TODO" "Notes/doc.md"
+fm_hits = grep --scope "frontmatter" "status:" "Notes/doc.md"
+n_body  = wc -l --scope "body" "Notes/doc.md"
+top     = head -n 5 --scope "body" "Notes/doc.md"
+last3   = tail -n 3 --scope "both" "Notes/doc.md"
+preview = sed --scope "body" "s/TODO/DONE/" "Notes/doc.md"   # read mode → transformed text (no write)
+```
+
+**`sed -i` — in-place surgical edit (REQ-066).** With `-i`, `sed` writes the substitution back to the file. **Default body scope leaves frontmatter — including `fq_id` — untouched.** This is the natural, line-precise way to edit a document; `find -exec` / `find -delete` remain forbidden.
+
+```
+sed -i "s/timeout: 30/timeout: 60/" "Notes/config.md"        # edit a body line in place
+sed -i "s/retries: 2/retries: 5/" "Notes/config.md"          # chain one substitution per edit
+sed -i --scope "both" "s/old/new/" "data.txt"                # whole-file (frontmatter-less files)
+```
+
+`--scope "frontmatter"` edits the YAML block, but the result must stay valid YAML and FQ-managed fields (`fq_id`, `fq_status`, …) are immutable under `sed` — a write that would alter them is rejected. Prefer `fq.write_document({ frontmatter: … })` for managed frontmatter.
+
+**`echo` is value-producing (REQ-064).** `echo` writes to the trace channel AND **returns its joined string**, so it can bind to a variable or seed a pipeline (this is no longer a no-op — the prior null-return bug is fixed):
+
+```
+greeting = echo "hello" $name             # binds the string "hello <name>"
+line     = echo $count " items"           # stringifies + joins its args
+slug     = echo $title | sed "s/ /-/g"    # transform a bound VALUE through sed (now works)
+```
+
 ---
 
 ## 2. Truthiness and equality (REQ-022)
