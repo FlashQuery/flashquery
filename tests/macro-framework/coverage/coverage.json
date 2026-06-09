@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "generated_at": "2026-05-21T18:10:55.054Z",
+  "generated_at": "2026-06-08T23:33:20.581Z",
   "cells": {
     "MTF-G-001": {
       "count": 4,
@@ -1001,12 +1001,11 @@
       ]
     },
     "MTF-E-007": {
-      "count": 5,
-      "last_verified": "2026-05-20T17:25:14.261Z",
+      "count": 4,
+      "last_verified": "2026-06-08T23:33:20.581Z",
       "tests": [
         "mtf-e-709-vault-jail-violation-cat",
         "mtf-e-710-vault-jail-violation-ls",
-        "mtf-e-890-shell-sed-in-place-forbidden",
         "mtf-e-891-shell-find-exec-forbidden",
         "mtf-e-892-shell-find-delete-forbidden"
       ]

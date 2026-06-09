@@ -57,10 +57,14 @@ export const builtins: Builtins = {
   // ----- Operators -----
 
   echo: (positional, _named, ctx) => {
+    // REQ-064 (8-Jun-2026): echo is value-producing. It still logs to the
+    // trace/liveness channel, but ALSO returns its rendered string so it can
+    // seed a pipeline (`echo $v | sed ...`) or bind to a variable. Previously
+    // returned null, which made `echo $v | sed` fail with stdin_type_mismatch.
     const message = positional.map(stringifyValue).join(" ");
     ctx.log(message);
     ctx.exec?.taskRegistry.appendTrace({ kind: "log", message });
-    return null;
+    return message;
   },
 
   // ----- Termination -----

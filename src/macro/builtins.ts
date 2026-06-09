@@ -164,11 +164,15 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     return buildRange(numbers[0], numbers[1], numbers[2]);
   },
   echo: (positional, named, context) => {
+    // REQ-064 (8-Jun-2026): echo is value-producing. It still logs to the
+    // trace/liveness channel, but ALSO returns its rendered string so it can
+    // seed a pipeline (`echo $v | sed ...`) or bind to a variable. Previously
+    // returned null, which made `echo $v | sed` fail with stdin_type_mismatch.
     requireNamedArgs('echo', named, []);
     const message = positional.map(stringifyMacroValue).join(' ');
     context.log.push(message);
     context.traceBuilder.add({ kind: 'log', message });
-    return null;
+    return message;
   },
   status: async (positional, named, context) => {
     requireNamedArgs('status', named, ['progress', 'total']);

@@ -16,11 +16,13 @@
 // refused with ForbiddenPathError. Plus ShellJS's cwd is set to the vault
 // root at the start of each shell-verb dispatch.
 //
-// Flag-level rejections (per OQ #25, 2026-05-12). Three flags are refused
-// at dispatch time via MacroForbiddenFlagError:
-//   - `sed -i` (in-place file modification)
+// Flag-level rejections. Two flags are refused by the pre-scan in
+// evaluator.ts:
 //   - `find -exec` (arbitrary command execution)
 //   - `find -delete` (file mutation)
+// REQ-066/068 (8-Jun-2026): `sed -i` is NO LONGER forbidden — it is the single
+// permitted, vault-jailed, scope-guarded shell mutation. Default `--scope body`
+// keeps frontmatter byte-preserved; see the `--scope` helpers below.
 //
 // Restrictions vs. real shell:
 //   - No subshells, no $(...), no redirects.
@@ -171,6 +173,110 @@ function toVaultRelative(paths: string[], root: string | undefined): string[] {
 sh.config.silent = true;
 sh.config.fatal = false;
 
+// ----- REQ-065 / REQ-066 (8-Jun-2026): --scope region selection -----
+//
+// Content-reading verbs (cat, grep, sed, wc, head, tail) operate on a REGION
+// of a vault Markdown document selected by `--scope`:
+//   "body"        (default) — content after the YAML frontmatter block
+//   "both"        — the whole raw file
+//   "frontmatter" — the YAML mapping text between the `---` fences
+// Files without frontmatter: body == both == whole content; frontmatter == "".
+// `find` / `ls` do not read content and reject `--scope`.
+
+type Scope = "body" | "both" | "frontmatter";
+
+// Leading YAML frontmatter: a `---` fence, the mapping, a closing `---` fence,
+// all at the very start of the file.
+const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
+
+interface FrontmatterSplit {
+  hasFm: boolean;
+  prefix: string; // the full `---\n...\n---\n` block ("" when no frontmatter)
+  fmText: string; // the YAML mapping text between the fences
+  body: string;   // everything after the frontmatter block
+}
+
+function splitFrontmatter(raw: string): FrontmatterSplit {
+  const m = raw.match(FRONTMATTER_RE);
+  if (!m) return { hasFm: false, prefix: "", fmText: "", body: raw };
+  return { hasFm: true, prefix: m[0], fmText: m[1], body: raw.slice(m[0].length) };
+}
+
+// Parse `--scope` for a content verb (default "body"); throw invalid_input on a
+// bad value.
+function parseScope(named: Record<string, Value>, verb: string): Scope {
+  const s = named.scope;
+  if (s === undefined) return "body";
+  if (s === "body" || s === "both" || s === "frontmatter") return s;
+  throw new MacroRuntimeError(
+    `${verb}: invalid --scope ${JSON.stringify(s)}; expected "body", "both", or "frontmatter".`,
+    undefined,
+    { reason: "invalid_scope" },
+  );
+}
+
+// find / ls do not read content — reject `--scope`.
+function rejectScope(named: Record<string, Value>, verb: string): void {
+  if (named.scope !== undefined) {
+    throw new MacroRuntimeError(
+      `${verb} does not support --scope (it matches paths/entries, not content).`,
+      undefined,
+      { reason: "invalid_scope" },
+    );
+  }
+}
+
+// Apply a scope to raw file text, returning the selected region.
+function applyScope(raw: string, scope: Scope): string {
+  const fm = splitFrontmatter(raw);
+  if (!fm.hasFm) return scope === "frontmatter" ? "" : raw;
+  if (scope === "both") return raw;
+  if (scope === "frontmatter") return fm.fmText;
+  return fm.body;
+}
+
+// Read file args (glob-expanded, vault-jailed) and return the scoped text,
+// concatenated. Replaces prior `sh.cat(...files).stdout` reads so every content
+// verb honors --scope uniformly.
+function scopedFileText(fileArgs: Value[], root: string | undefined, scope: Scope): string {
+  const files = globExpandFiles(fileArgs, root);
+  return files.map((f) => applyScope(sh.cat(f).stdout, scope)).join("");
+}
+
+// Pull a top-level `key: value` out of YAML-ish frontmatter text (first match).
+function fmField(fmText: string, key: string): string | undefined {
+  const m = fmText.match(new RegExp(`^${key}:[ \\t]*(.*)$`, "m"));
+  return m ? m[1].trim() : undefined;
+}
+
+// REQ-066 ac4: a `sed -i --scope frontmatter` write MUST NOT alter/remove an
+// FQ-managed reserved field (fq_id) and MUST remain structurally valid
+// frontmatter. The golden has no YAML parser, so it does a lightweight check;
+// production re-parses with js-yaml.
+const FQ_RESERVED_FIELDS = ["fq_id"];
+function guardFrontmatterEdit(before: string, after: string, verb: string): void {
+  for (const key of FQ_RESERVED_FIELDS) {
+    if (fmField(before, key) !== fmField(after, key)) {
+      throw new MacroRuntimeError(
+        `${verb}: --scope frontmatter edit would alter the FQ-managed field "${key}", which is immutable.`,
+        undefined,
+        { reason: "fq_managed_field_mutation" },
+      );
+    }
+  }
+  for (const line of after.split(/\r?\n/)) {
+    if (line.trim() === "") continue;
+    if (/^[ \t]/.test(line)) continue; // nested / continuation
+    if (/^- /.test(line)) continue; // list item
+    if (/^[A-Za-z0-9_.-]+:/.test(line)) continue; // mapping entry
+    throw new MacroRuntimeError(
+      `${verb}: --scope frontmatter edit produced invalid frontmatter near ${JSON.stringify(line)}.`,
+      undefined,
+      { reason: "invalid_frontmatter_yaml" },
+    );
+  }
+}
+
 // ----- grep -----
 // Bash:  grep [-i] [-v] [-c] [-l] [-n] PATTERN file...
 // DSL:   grep [-i] [-v] [-c] [-l] [-n] PATTERN file_or_glob...
@@ -184,64 +290,53 @@ const grep: BuiltinFn = (positional, named, ctx) => {
   const root = ensureVaultCwd(ctx);
   const pattern = String(positional[0]);
   const fileArgs = positional.slice(1);
-  // GG-018: `-c` (count) and `-n` (line numbers) are NOT passed to ShellJS.
-  // ShellJS's grep only supports -i / -v / -l. We compute -c and -n
-  // ourselves below. Passing -c to ShellJS produced empty output (the
-  // golden previously returned `[]` for `grep -c`, where production
-  // returns the count as a number).
-  const flagArgs = flagsToShellArgs(named, ["i", "v", "l"]);
+  const scope = parseScope(named, "grep"); // REQ-065: default body
+  // `-c`/`-n`/`-l` are computed here; only `-i`/`-v` go to ShellJS's grep.
+  const flagArgs = flagsToShellArgs(named, ["i", "v"]);
   const wantCount = named.c === true;
   const wantLineNumbers = named.n === true;
   const wantFilenames = named.l === true;
 
-  let outputText = "";
-  if (ctx.stdin !== undefined) {
-    // Pipe input. Build a ShellString and call .grep on it.
-    const text = linesToText(valueToLines(ctx.stdin));
+  const grepText = (text: string): string[] => {
     const ss = new sh.ShellString(text);
     const result =
       flagArgs.length > 0
         ? (ss.grep as (...a: unknown[]) => { stdout: string })(...flagArgs, pattern)
         : ss.grep(pattern);
-    outputText = result.stdout;
-  } else {
+    const ls = result.stdout.split(/\r?\n/);
+    while (ls.length > 0 && ls[ls.length - 1] === "") ls.pop();
+    return ls;
+  };
+
+  // `-l` returns matching FILE paths; evaluate per-file so the scope applies
+  // and the filename attribution survives.
+  if (wantFilenames && ctx.stdin === undefined) {
     if (fileArgs.length === 0) {
       throw new Error("grep: missing file argument (and nothing piped in)");
     }
     const files = globExpandFiles(fileArgs, root);
-    const result =
-      flagArgs.length > 0
-        ? (sh.grep as (...a: unknown[]) => { stdout: string })(...flagArgs, pattern, ...files)
-        : sh.grep(pattern, ...files);
-    outputText = result.stdout;
+    const matched = files.filter((f) => grepText(applyScope(sh.cat(f).stdout, scope)).length > 0);
+    return toVaultRelative(matched, root);
   }
 
-  // Split into lines, drop ALL trailing blanks. GG-018: a file's trailing
-  // newline produces a phantom empty line; under `-v` (invert) that empty
-  // line is "kept" and leaks into the result as a spurious "" entry. Pop
-  // every trailing empty string, not just one, so `grep -v` matches
-  // production.
-  const lines = outputText.split(/\r?\n/);
-  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-
-  // GG-018: `-l` returns matching FILE paths. ShellJS emits absolute host
-  // paths; translate them to vault-relative form (no host-layout leak).
-  if (wantFilenames) {
-    return toVaultRelative(lines, root);
+  // Build the source text: stdin as-is; files read through the scope.
+  let sourceText: string;
+  if (ctx.stdin !== undefined) {
+    sourceText = linesToText(valueToLines(ctx.stdin));
+  } else {
+    if (fileArgs.length === 0) {
+      throw new Error("grep: missing file argument (and nothing piped in)");
+    }
+    sourceText = scopedFileText(fileArgs, root, scope);
   }
-  // GG-018: `-c` returns the match COUNT as a number, not a list.
+
+  const lines = grepText(sourceText);
+
   if (wantCount) {
     return lines.length;
   }
-  // GG-018: `-n` prefixes each match with its 1-indexed line number.
-  // (ShellJS doesn't emit line numbers; we synthesize them by re-scanning.)
   if (wantLineNumbers) {
-    // Re-derive line numbers from the source so the prefix is the line's
-    // position in the original file, not in the filtered result.
-    const sourceText =
-      ctx.stdin !== undefined
-        ? linesToText(valueToLines(ctx.stdin))
-        : sh.cat(...globExpandFiles(fileArgs, root)).stdout;
+    // Line numbers are relative to the (scoped) source text.
     const sourceLines = sourceText.split(/\r?\n/);
     const matchSet = new Set(lines);
     const numbered: string[] = [];
@@ -262,6 +357,7 @@ const find: BuiltinFn = (positional, named, ctx) => {
   if (positional.length < 1) {
     throw new Error("find: missing PATH");
   }
+  rejectScope(named, "find"); // REQ-065: find matches paths, not content
   // Flag-level rejections (OQ #25 `find -exec` / `find -delete`) are
   // enforced by the pre-scan in evaluator.ts before this dispatcher is
   // ever called.
@@ -317,14 +413,10 @@ function globToRegex(glob: string): RegExp {
 
 const sedExpr = /^s(.)((?:\\.|(?!\1).)+)\1((?:\\.|(?!\1).)*)\1([gim]*)$/;
 
-const sed: BuiltinFn = (positional, _named, ctx) => {
+const sed: BuiltinFn = (positional, named, ctx) => {
   if (positional.length < 1) {
     throw new Error("sed: missing s/.../.../ expression");
   }
-  // Flag-level rejection of `sed -i` (in-place file modification, per
-  // OQ #25) is enforced by the pre-scan in evaluator.ts before this
-  // dispatcher is called. sed in macros is therefore strictly read-only
-  // (pipeline-mode and file-mode return new text without mutating files).
   const root = ensureVaultCwd(ctx);
   const expr = String(positional[0]);
   const m = expr.match(sedExpr);
@@ -335,35 +427,54 @@ const sed: BuiltinFn = (positional, _named, ctx) => {
   }
   const [, , oldRaw, newRaw, sedFlags] = m;
   const flagsForRegex = sedFlags.includes("i") ? "gi" : sedFlags.includes("g") ? "g" : "";
-  // Default to global replace on each line if "g" not specified — mirrors common
-  // expectation. To replace only once per line, omit "g" (we'd need different default).
-  // For v0, we honor whatever flags the user wrote.
-  const regex = new RegExp(oldRaw, flagsForRegex);
   const replacement = newRaw;
+  // Fresh regex per use — a global regex carries lastIndex state across calls.
+  const makeRegex = () => new RegExp(oldRaw, flagsForRegex);
 
+  // Pipeline (stdin) mode: --scope and -i do not apply (no file to scope/write).
   if (ctx.stdin !== undefined) {
-    // GG-018: when stdin is already a string (the common case — `cat | sed`),
-    // operate on it DIRECTLY. The previous `linesToText(valueToLines(...))`
-    // round-trip is lossy: valueToLines drops the trailing newline, so a
-    // file with a trailing newline lost it through the pipe. Only the
-    // non-string stdin case (a list piped in) needs the join.
     const text =
       typeof ctx.stdin === "string"
         ? ctx.stdin
         : linesToText(valueToLines(ctx.stdin));
-    return text.replace(regex, replacement);
+    return text.replace(makeRegex(), replacement);
   }
 
+  const scope = parseScope(named, "sed"); // REQ-065: default body
   const fileArgs = positional.slice(1);
   if (fileArgs.length === 0) {
     throw new Error("sed: missing file argument (and nothing piped in)");
   }
   const files = globExpandFiles(fileArgs, root);
+  // REQ-066: `-i` (short flag) requests an in-place write. Default body scope
+  // keeps frontmatter byte-preserved.
+  const inPlace = named.i !== undefined && named.i !== false && named.i !== null;
+
+  if (inPlace) {
+    for (const f of files) {
+      const raw = sh.cat(f).stdout;
+      const fm = splitFrontmatter(raw);
+      let next: string;
+      if (!fm.hasFm || scope === "both") {
+        next = raw.replace(makeRegex(), replacement);
+      } else if (scope === "frontmatter") {
+        const newFm = fm.fmText.replace(makeRegex(), replacement);
+        guardFrontmatterEdit(fm.fmText, newFm, "sed");
+        next = fm.prefix.replace(fm.fmText, newFm) + fm.body;
+      } else {
+        // body (default): substitute the body only; frontmatter prefix preserved.
+        next = fm.prefix + fm.body.replace(makeRegex(), replacement);
+      }
+      new sh.ShellString(next).to(f);
+    }
+    return null; // in-place write is a side effect; no value
+  }
+
+  // Read mode: return the transformed scoped text per file (never mutates).
   const out: string[] = [];
   for (const f of files) {
-    const text = sh.cat(f).stdout;
-    const replaced = text.replace(regex, replacement);
-    out.push(replaced);
+    const text = applyScope(sh.cat(f).stdout, scope);
+    out.push(text.replace(makeRegex(), replacement));
   }
   return out.join("");
 };
@@ -374,16 +485,16 @@ const sed: BuiltinFn = (positional, _named, ctx) => {
 //        (acts as identity when used after a pipe)
 // Returns: concatenated text (string).
 
-const cat: BuiltinFn = (positional, _named, ctx) => {
+const cat: BuiltinFn = (positional, named, ctx) => {
   if (ctx.stdin !== undefined && positional.length === 0) {
     return linesToText(valueToLines(ctx.stdin));
   }
   if (positional.length === 0) {
     throw new Error("cat: missing file argument (and nothing piped in)");
   }
+  const scope = parseScope(named, "cat"); // REQ-065: default body
   const root = ensureVaultCwd(ctx);
-  const files = globExpandFiles(positional, root);
-  return sh.cat(...files).stdout;
+  return scopedFileText(positional, root, scope);
 };
 
 // ----- wc -----
@@ -400,9 +511,9 @@ const wc: BuiltinFn = (positional, named, ctx) => {
     if (positional.length === 0) {
       throw new Error("wc: missing file argument (and nothing piped in)");
     }
+    const scope = parseScope(named, "wc"); // REQ-065: default body
     const root = ensureVaultCwd(ctx);
-    const files = globExpandFiles(positional, root);
-    text = sh.cat(...files).stdout;
+    text = scopedFileText(positional, root, scope);
   }
   if (named.w === true) {
     return text.trim().length === 0 ? 0 : text.trim().split(/\s+/).length;
@@ -480,12 +591,11 @@ const head: BuiltinFn = (positional, named, ctx) => {
   if (rest.length === 0) {
     throw new Error("head: missing file argument (and nothing piped in)");
   }
-  const files = globExpandFiles(rest, root);
-  // ShellJS's head already limits to `count` lines.
-  const text = sh.head({ "-n": count }, ...files).stdout;
+  const scope = parseScope(named, "head"); // REQ-065: default body
+  const text = scopedFileText(rest, root, scope);
   const lines = text.split(/\r?\n/);
   while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  return lines;
+  return lines.slice(0, count);
 };
 
 // ----- tail -----
@@ -505,12 +615,11 @@ const tail: BuiltinFn = (positional, named, ctx) => {
   if (rest.length === 0) {
     throw new Error("tail: missing file argument (and nothing piped in)");
   }
-  const files = globExpandFiles(rest, root);
-  // ShellJS's tail already limits to the last `count` lines.
-  const text = sh.tail({ "-n": count }, ...files).stdout;
+  const scope = parseScope(named, "tail"); // REQ-065: default body
+  const text = scopedFileText(rest, root, scope);
   const lines = text.split(/\r?\n/);
   while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  return lines;
+  return lines.slice(Math.max(0, lines.length - count));
 };
 
 // ----- ls -----
@@ -524,6 +633,7 @@ const tail: BuiltinFn = (positional, named, ctx) => {
 
 const ls: BuiltinFn = (positional, named, ctx) => {
   const root = ensureVaultCwd(ctx);
+  rejectScope(named, "ls"); // REQ-065: ls lists entries, not content
   // Build ShellJS options bundle from boolean flags.
   const flagLetters: string[] = [];
   if (named.A === true) flagLetters.push("A");

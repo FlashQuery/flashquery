@@ -1,7 +1,8 @@
 import { basename } from 'node:path';
-import { existsSync, lstatSync } from 'node:fs';
+import { existsSync, lstatSync, writeFileSync } from 'node:fs';
 import fastGlob from 'fast-glob';
 import shelljs from 'shelljs';
+import * as yaml from 'js-yaml';
 import {
   MacroRuntimeError,
 } from './runtime-errors.js';
@@ -12,6 +13,7 @@ import type {
   MacroValue,
 } from './runtime-types.js';
 import { assertRealPathInsideVault, resolveMacroPath, toMacroPath } from './path-wrapper.js';
+import { FM } from '../constants/frontmatter-fields.js';
 
 const sh = shelljs;
 sh.config.silent = true;
@@ -21,10 +23,99 @@ function isMacroValueArray(value: MacroValue): value is MacroValue[] {
   return Array.isArray(value);
 }
 
+// ----- REQ-065 / REQ-066 (8-Jun-2026): --scope region selection -----
+//
+// Content-reading verbs (cat, grep, sed, wc, head, tail) operate on a REGION
+// of a vault Markdown document selected by `--scope`:
+//   "body"        (default) — content after the YAML frontmatter block
+//   "both"        — the whole raw file
+//   "frontmatter" — the YAML mapping text between the `---` fences
+// Files without frontmatter: body == both == whole content; frontmatter == "".
+// find / ls do not read content and reject `--scope`.
+type Scope = 'body' | 'both' | 'frontmatter';
+
+// Leading YAML frontmatter: `---` fence, mapping, closing `---` fence, at the
+// very start of the file. Byte-preserving (we keep the exact prefix/body so a
+// default-body `sed -i` leaves the frontmatter untouched).
+const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
+
+interface FrontmatterSplit {
+  hasFm: boolean;
+  prefix: string; // the full `---\n...\n---\n` block ('' when no frontmatter)
+  fmText: string; // the YAML mapping text between the fences
+  body: string; // everything after the frontmatter block
+}
+
+function splitFrontmatter(raw: string): FrontmatterSplit {
+  const match = FRONTMATTER_RE.exec(raw);
+  if (!match) return { hasFm: false, prefix: '', fmText: '', body: raw };
+  return { hasFm: true, prefix: match[0], fmText: match[1] ?? '', body: raw.slice(match[0].length) };
+}
+
+function applyScope(raw: string, scope: Scope): string {
+  const fm = splitFrontmatter(raw);
+  if (!fm.hasFm) return scope === 'frontmatter' ? '' : raw;
+  if (scope === 'both') return raw;
+  if (scope === 'frontmatter') return fm.fmText;
+  return fm.body;
+}
+
+function parseScope(named: MacroNamedArgs, verb: string): Scope {
+  const value = named['scope'];
+  if (value === undefined) return 'body';
+  const str = requireString(value, `${verb}_scope_type`);
+  if (str === 'body' || str === 'both' || str === 'frontmatter') return str;
+  throw new MacroRuntimeError(`${verb} --scope must be "body", "both", or "frontmatter".`, undefined, {
+    reason: 'invalid_scope',
+  });
+}
+
+function rejectScope(named: MacroNamedArgs, verb: string): void {
+  if (named['scope'] !== undefined) {
+    throw new MacroRuntimeError(`${verb} does not support --scope (it matches paths/entries, not content).`, undefined, {
+      reason: 'invalid_scope',
+    });
+  }
+}
+
+// FQ-managed frontmatter fields (fq_id, fq_status, ...) are immutable; a
+// `sed -i --scope frontmatter` MUST NOT alter or remove any of them.
+const FQ_MANAGED_FRONTMATTER = new Set<string>(Object.values(FM));
+
+// REQ-066 ac4: validate a `sed -i --scope frontmatter` write — the result must
+// re-parse as valid YAML and must not change any FQ-managed field.
+function guardFrontmatterEdit(before: string, after: string): void {
+  let parsedAfter: unknown;
+  try {
+    parsedAfter = yaml.load(after);
+  } catch {
+    throw new MacroRuntimeError('sed --scope frontmatter produced invalid YAML.', undefined, {
+      reason: 'invalid_frontmatter_yaml',
+    });
+  }
+  let parsedBefore: unknown;
+  try {
+    parsedBefore = yaml.load(before);
+  } catch {
+    parsedBefore = {};
+  }
+  const a = parsedAfter && typeof parsedAfter === 'object' ? (parsedAfter as Record<string, unknown>) : {};
+  const b = parsedBefore && typeof parsedBefore === 'object' ? (parsedBefore as Record<string, unknown>) : {};
+  for (const field of FQ_MANAGED_FRONTMATTER) {
+    if (JSON.stringify(b[field]) !== JSON.stringify(a[field])) {
+      throw new MacroRuntimeError(
+        `sed --scope frontmatter cannot alter the FQ-managed field "${field}".`,
+        undefined,
+        { reason: 'fq_managed_field_mutation' }
+      );
+    }
+  }
+}
+
 export const shellBuiltins: Record<string, MacroBuiltin> = {
   grep: (positional, named, context) => grepBuiltin(positional, named, context),
   find: (positional, named, context) => findBuiltin(positional, named, context),
-  sed: (positional, _named, context) => sedBuiltin(positional, context),
+  sed: (positional, named, context) => sedBuiltin(positional, named, context),
   cat: (positional, named, context) => catBuiltin(positional, named, context),
   wc: (positional, named, context) => wcBuiltin(positional, named, context),
   head: (positional, named, context) => headBuiltin(positional, named, context),
@@ -39,9 +130,10 @@ function grepBuiltin(
 ): MacroValue {
   requireArgCount('grep', positional, 1, Number.POSITIVE_INFINITY);
   const pattern = requireString(positional[0], 'grep_pattern_type');
+  const scope = parseScope(named, 'grep'); // REQ-065: default body
   const sourceLines =
     context.stdin === undefined
-      ? readLinesFromPaths(positional.slice(1), context)
+      ? readLinesFromPaths(positional.slice(1), context, scope)
       : valueToLines(context.stdin);
   const matcher = buildMatcher(pattern, hasFlag(named, 'i'));
   const inverted = hasFlag(named, 'v');
@@ -61,6 +153,7 @@ function findBuiltin(
   context: MacroInvocationContext
 ): MacroValue {
   requireArgCount('find', positional, 1, 1);
+  rejectScope(named, 'find'); // REQ-065: find matches paths, not content
   const vaultRoot = requireVaultRoot(context);
   const macroRoot = requireString(positional[0], 'find_path_type');
   const root = resolveMacroPath(macroRoot, vaultRoot);
@@ -89,24 +182,67 @@ function findBuiltin(
   return results.map((path) => toMacroPath(path, vaultRoot)).sort();
 }
 
-function sedBuiltin(positional: MacroValue[], context: MacroInvocationContext): MacroValue {
+function sedBuiltin(
+  positional: MacroValue[],
+  named: MacroNamedArgs,
+  context: MacroInvocationContext
+): MacroValue {
   requireArgCount('sed', positional, 1, Number.POSITIVE_INFINITY);
   const expression = requireString(positional[0], 'sed_expression_type');
-  const input =
-    context.stdin === undefined
-      ? readTextFromPaths(positional.slice(1), context)
-      : linesToText(valueToLines(context.stdin).map((line) => line.text));
   const { pattern, replacement, flags } = parseSedExpression(expression);
-  return input.replace(new RegExp(pattern, flags), replacement);
+  // Fresh regex per use — a global regex carries lastIndex state across calls.
+  const makeRegex = (): RegExp => new RegExp(pattern, flags);
+
+  // Pipeline (stdin) mode: --scope and -i do not apply (no file to scope/write).
+  if (context.stdin !== undefined) {
+    const input = linesToText(valueToLines(context.stdin).map((line) => line.text));
+    return input.replace(makeRegex(), replacement);
+  }
+
+  const scope = parseScope(named, 'sed'); // REQ-065: default body
+  const fileArgs = positional.slice(1);
+
+  // REQ-066: `-i` requests an in-place write — the single permitted shell
+  // mutation. Default body scope keeps frontmatter byte-preserved.
+  if (hasFlag(named, 'i')) {
+    if (fileArgs.length === 0) {
+      throw new MacroRuntimeError('sed -i requires at least one file path.', undefined, {
+        reason: 'path_argument_required',
+      });
+    }
+    const vaultRoot = requireVaultRoot(context);
+    for (const { hostPath } of expandPaths(fileArgs, vaultRoot)) {
+      const raw = String(sh.cat(hostPath).stdout);
+      const fm = splitFrontmatter(raw);
+      let next: string;
+      if (!fm.hasFm || scope === 'both') {
+        next = raw.replace(makeRegex(), replacement);
+      } else if (scope === 'frontmatter') {
+        const newFm = fm.fmText.replace(makeRegex(), replacement);
+        guardFrontmatterEdit(fm.fmText, newFm);
+        next = fm.prefix.replace(fm.fmText, newFm) + fm.body;
+      } else {
+        // body (default): substitute the body only; frontmatter prefix preserved.
+        next = fm.prefix + fm.body.replace(makeRegex(), replacement);
+      }
+      writeFileSync(hostPath, next);
+    }
+    return null; // in-place write is a side effect; no value
+  }
+
+  // Read mode: return the transformed (scoped) text; never mutates.
+  const input = readTextFromPaths(fileArgs, context, scope);
+  return input.replace(makeRegex(), replacement);
 }
 
 function catBuiltin(
   positional: MacroValue[],
-  _named: MacroNamedArgs,
+  named: MacroNamedArgs,
   context: MacroInvocationContext
 ): MacroValue {
   requireArgCount('cat', positional, 1, Number.POSITIVE_INFINITY);
-  return readTextFromPaths(positional, context);
+  const scope = parseScope(named, 'cat'); // REQ-065: default body
+  return readTextFromPaths(positional, context, scope);
 }
 
 function wcBuiltin(
@@ -115,9 +251,10 @@ function wcBuiltin(
   context: MacroInvocationContext
 ): MacroValue {
   const mode = wcMode(named);
+  const scope = parseScope(named, 'wc'); // REQ-065: default body
   const input =
     context.stdin === undefined
-      ? readTextFromPaths(positional, context)
+      ? readTextFromPaths(positional, context, scope)
       : linesToText(valueToLines(context.stdin).map((line) => line.text));
 
   if (mode === 'l') return countLines(input);
@@ -131,8 +268,9 @@ function headBuiltin(
   context: MacroInvocationContext
 ): MacroValue {
   const { count, rest } = extractLineCount('head', positional, named);
+  const scope = parseScope(named, 'head'); // REQ-065: default body
   const lines =
-    context.stdin === undefined ? readLinesFromPaths(rest, context) : valueToLines(context.stdin);
+    context.stdin === undefined ? readLinesFromPaths(rest, context, scope) : valueToLines(context.stdin);
   return lines.slice(0, count).map((line) => line.text);
 }
 
@@ -142,8 +280,9 @@ function tailBuiltin(
   context: MacroInvocationContext
 ): MacroValue {
   const { count, rest } = extractLineCount('tail', positional, named);
+  const scope = parseScope(named, 'tail'); // REQ-065: default body
   const lines =
-    context.stdin === undefined ? readLinesFromPaths(rest, context) : valueToLines(context.stdin);
+    context.stdin === undefined ? readLinesFromPaths(rest, context, scope) : valueToLines(context.stdin);
   return lines.slice(-count).map((line) => line.text);
 }
 
@@ -153,6 +292,7 @@ function lsBuiltin(
   context: MacroInvocationContext
 ): MacroValue {
   requireArgCount('ls', positional, 1, 1);
+  rejectScope(named, 'ls'); // REQ-065: ls lists entries, not content
   const vaultRoot = requireVaultRoot(context);
   const macroPath = requireString(positional[0], 'ls_path_type');
   const hostPath = resolveMacroPath(macroPath, vaultRoot);
@@ -189,8 +329,12 @@ interface SourceLine {
   source: string | null;
 }
 
-function readLinesFromPaths(paths: MacroValue[], context: MacroInvocationContext): SourceLine[] {
-  return readTextEntries(paths, context).flatMap((entry) =>
+function readLinesFromPaths(
+  paths: MacroValue[],
+  context: MacroInvocationContext,
+  scope: Scope
+): SourceLine[] {
+  return readTextEntries(paths, context, scope).flatMap((entry) =>
     splitLines(entry.text).map((text, index) => ({
       text,
       lineNumber: index + 1,
@@ -199,15 +343,20 @@ function readLinesFromPaths(paths: MacroValue[], context: MacroInvocationContext
   );
 }
 
-function readTextFromPaths(paths: MacroValue[], context: MacroInvocationContext): string {
-  return readTextEntries(paths, context)
+function readTextFromPaths(
+  paths: MacroValue[],
+  context: MacroInvocationContext,
+  scope: Scope
+): string {
+  return readTextEntries(paths, context, scope)
     .map((entry) => entry.text)
     .join('');
 }
 
 function readTextEntries(
   paths: MacroValue[],
-  context: MacroInvocationContext
+  context: MacroInvocationContext,
+  scope: Scope
 ): Array<{ text: string; macroPath: string }> {
   if (paths.length === 0) {
     throw new MacroRuntimeError('Shell command requires at least one path.', undefined, {
@@ -216,7 +365,7 @@ function readTextEntries(
   }
   const vaultRoot = requireVaultRoot(context);
   return expandPaths(paths, vaultRoot).map(({ hostPath, macroPath }) => ({
-    text: String(sh.cat(hostPath).stdout),
+    text: applyScope(String(sh.cat(hostPath).stdout), scope),
     macroPath,
   }));
 }

@@ -19,40 +19,15 @@ function expectForbiddenFlag(
 }
 
 describe('macro forbidden shell flag pre-scan', () => {
-  it('T-U-144 rejects sed -i before execution', async () => {
-    const { result, payload } = await run('sed -i "s/a/b/" "file.md"');
-
-    expect(result.isError).toBe(false);
-    expectForbiddenFlag(payload, {
-      verb: 'sed',
-      flag: '-i',
-      reason: 'sed_in_place_mutates_files',
-      line: 1,
-    });
-  });
-
-  it('T-U-145 rejects sed --in-place before execution', async () => {
-    const { result, payload } = await run('sed --in-place "s/a/b/" "file.md"');
-
-    expect(result.isError).toBe(false);
-    expectForbiddenFlag(payload, {
-      verb: 'sed',
-      flag: '--in-place',
-      reason: 'sed_in_place_mutates_files',
-      line: 1,
-    });
-  });
-
-  it('T-U-146 rejects bundled sed -ie before execution', async () => {
-    const { result, payload } = await run('sed -ie "s/a/b/" "file.md"');
-
-    expect(result.isError).toBe(false);
-    expectForbiddenFlag(payload, {
-      verb: 'sed',
-      flag: '-ie',
-      reason: 'sed_in_place_mutates_files',
-      line: 1,
-    });
+  // REQ-066/068 (8-Jun-2026): `sed -i` is no longer forbidden — it is the single
+  // permitted shell mutation. It must pass the forbidden-flag pre-scan. (Without
+  // a vault root the call fails later, but NOT as forbidden_shell_flag.) This
+  // replaces retired T-U-144/145/146, which asserted the prior forbidden behavior.
+  it('T-U-259 does NOT reject sed -i at pre-scan', async () => {
+    for (const source of ['sed -i "s/a/b/" "file.md"', 'sed -ie "s/a/b/" "file.md"']) {
+      const { payload } = await run(source);
+      expect(payload).not.toMatchObject({ error: 'forbidden_shell_flag' });
+    }
   });
 
   it('T-U-147 rejects find -exec before execution', async () => {

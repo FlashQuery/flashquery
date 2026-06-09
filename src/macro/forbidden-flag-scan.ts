@@ -1,9 +1,11 @@
 import { MacroExpectedError } from './runtime-errors.js';
 import type { Arg, Call, Expr, Pipeline, Program, Statement } from './types.js';
 
-type ForbiddenVerb = 'sed' | 'find';
+// REQ-068 (8-Jun-2026): `sed -i` is no longer forbidden — it is the single
+// permitted, vault-jailed, scope-guarded shell mutation (REQ-066). Only
+// `find -exec` / `find -delete` remain forbidden.
+type ForbiddenVerb = 'find';
 type ForbiddenReason =
-  | 'sed_in_place_mutates_files'
   | 'find_exec_mutates_or_executes'
   | 'find_delete_mutates_files';
 
@@ -88,26 +90,8 @@ function visitPipeline(pipeline: Pipeline): void {
 function visitCall(call: Call): void {
   call.args.forEach((arg) => visitExpr(arg.value));
 
-  if (call.name === 'sed') {
-    scanSedCall(call);
-    return;
-  }
   if (call.name === 'find') {
     scanFindCall(call);
-  }
-}
-
-function scanSedCall(call: Call): void {
-  for (const arg of call.args) {
-    const namedFlag = namedFlagImage(arg);
-    if (namedFlag && isSedInPlaceFlag(namedFlag, arg)) {
-      throwForbiddenFlag('sed', namedFlag, 'sed_in_place_mutates_files', call.line);
-    }
-
-    const positionalFlag = positionalStringFlag(arg);
-    if (positionalFlag && isSedInPlacePositionalFlag(positionalFlag)) {
-      throwForbiddenFlag('sed', positionalFlag, 'sed_in_place_mutates_files', call.line);
-    }
   }
 }
 
@@ -139,18 +123,6 @@ function namedFlagImage(arg: Arg): string | null {
 function positionalStringFlag(arg: Arg): string | null {
   if (arg.kind !== 'PositionalArg' || arg.value.kind !== 'StringLit') return null;
   return arg.value.raw;
-}
-
-function isSedInPlaceFlag(flag: string, arg: Arg): boolean {
-  if (arg.kind !== 'NamedArg') return false;
-  if (arg.rawShortFlag) {
-    return arg.rawShortFlag.startsWith('-') && arg.rawShortFlag.slice(1).includes('i');
-  }
-  return arg.name === 'i' || arg.name === 'in-place';
-}
-
-function isSedInPlacePositionalFlag(flag: string): boolean {
-  return flag === '--i' || flag === '--in-place' || flag === '-i' || flag.startsWith('-i');
 }
 
 function throwForbiddenFlag(

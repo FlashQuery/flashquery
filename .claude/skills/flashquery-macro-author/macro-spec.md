@@ -398,26 +398,35 @@ exit { sum: $total }
 exit { path: $_self.path, marker: $_self.frontmatter.marker, completed: $completed }
 ```
 
-### 9.8 Surgical edits (bash verbs) vs. section / whole-document edits (`fq.*`)
+### 9.8 Surgical edits (`sed -i`) vs. section / whole-document edits (`fq.*`)
 
-**Granularity rule — pick the right tool for the precision you need.** Bash-style shell verbs (`sed`, `grep`, `head`, `tail`, ...) are the **surgical, line-level** mechanism — use them for "change these specific lines/values." The native `fq.*` document tools operate at **section or whole-document** granularity (`replace_doc_section` = one heading section; `insert_in_doc` = insert at an anchor; `write_document` = whole body/frontmatter). For precision INTO a document, reach for the shell verbs; for section/whole-doc moves, use `fq.*`.
+*Reflects the 8-Jun-2026 update (REQ-064/065/066): `sed -i` in-place editing, `--scope`, and value-producing `echo`.*
 
-**Mechanism — `sed` transforms text, it does not mutate the file.** FlashQuery's `sed` returns the transformed text; it does NOT edit in place (`sed -i` is forbidden, §10). A bare `sed "file" "s/a/b/"` statement computes a result and discards it — nothing changes. The surgical pattern is **read → `sed`-transform → write the result back**: `sed` does the precise edit; `get_document` / `write_document` are just the read and persist endpoints.
+**Granularity rule — pick the right tool for the precision you need.** Bash-style shell verbs (`sed`, `grep`, `cat`, ...) are the **surgical, line-level** mechanism — use them for "change these specific lines/values." The native `fq.*` document tools operate at **section or whole-document** granularity (`replace_doc_section` = one heading section; `insert_in_doc` = insert at an anchor; `write_document` = whole body/frontmatter). For precision INTO a document, reach for `sed -i`; for section/whole-doc moves, use `fq.*`.
 
-**Surgical body line/section edit (the canonical pattern):**
+**Surgical line edit — `sed -i` (the natural form):**
 ```
-doc = fq.get_document({ identifiers: "Notes/config.md", include: ["body"] })   # body only — no frontmatter
-new_body = echo $doc.body | sed "s/timeout: 30/timeout: 60/" | sed "s/retries: 2/retries: 5/"
-fq.write_document({ mode: "update", identifier: "Notes/config.md", content: $new_body })
+sed -i "s/timeout: 30/timeout: 60/" "Notes/config.md"
+sed -i "s/retries: 2/retries: 5/" "Notes/config.md"
 ```
-Reading via `get_document` `include: ["body"]` yields the body WITHOUT frontmatter, so writing `content` back is clean. `echo $var | sed ...` pipes the value through the transform — chain one `sed` per substitution (`grep` the same way to filter lines). The body field of the read result is `$doc.body`.
+`sed -i` writes the substitution back to the file in place. It is the single permitted shell mutation (`find -exec`/`-delete` remain forbidden).
 
-**Frontmatter / config values are NOT body text.** Set them directly — `write_document` update MERGES frontmatter (named fields overwritten, others preserved, `null` deletes a field):
+**`--scope` (default `body`) — what region the verb sees.** The content verbs (`cat`, `grep`, `sed`, `wc`, `head`, `tail`) accept `--scope "body" | "both" | "frontmatter"`, defaulting to **body** (the content after the YAML frontmatter). So `sed -i` **edits the body and leaves frontmatter — including `fq_id` — untouched by default**. `--scope "both"` targets the whole raw file; `--scope "frontmatter"` targets the YAML block (guarded: it must stay valid YAML and cannot alter FQ-managed fields like `fq_id`). Files without frontmatter: `body` == `both` == whole content. `find`/`ls` reject `--scope`.
+
+**Reading a region.** `cat "doc.md"` returns the **body** (frontmatter excluded) by default; `cat --scope "both"` returns the raw file. `grep` defaults to body too, so `grep` and `sed -i` agree on "the document."
+
+**`echo $var | sed` works** (REQ-064) — `echo` returns its value, so you can transform a bound string through `sed` in a pipeline:
+```
+slug = echo $title | sed "s/ /-/g"
+```
+
+**Frontmatter / config values.** Prefer `write_document` for managed frontmatter — update MERGES (named fields overwritten, others preserved, `null` deletes):
 ```
 fq.write_document({ mode: "update", identifier: "Specs/limits.md", frontmatter: { default_limit: 250 } })
 ```
+For non-managed YAML values you may use `sed --scope "frontmatter" -i`, but FQ-managed fields (`fq_id`, `fq_status`, …) are immutable under `sed` and a write that would alter them is rejected.
 
-**Whole-file `cat` variant.** `cat "file"` reads the RAW on-disk file (frontmatter + body). Use `cat | sed | write_document content` only for frontmatter-LESS files; otherwise the frontmatter text folds into the body. Prefer the `get_document` body-only form above.
+**Reconcile (eventual).** A `sed -i` write changes the raw file outside the `fq.*` path, so the search index / embeddings / version_token reconcile on the **next vault scan** (REQ-067) — not synchronously. A **host-origin** macro MAY end with `fq.maintain_vault({ action: "sync" })` to reconcile immediately; **delegated/native-origin macros cannot call `maintain_vault`** (it's system/admin) and rely on the automatic scan.
 
 ---
 

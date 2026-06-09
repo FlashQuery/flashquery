@@ -1139,17 +1139,10 @@ function preScanForbiddenFlags(program: Program): void {
     // `sed_in_place_mutates_files` / `find_exec_mutates_or_executes` /
     // `find_delete_mutates_files`. The golden previously used free-text
     // English ("sed -i mutates files"), which isn't a stable identifier.
-    if (call.name === "sed") {
-      for (const a of call.args) {
-        if (a.kind !== "NamedArg") continue;
-        if (a.name === "i" && a.rawShortFlag) {
-          throw new MacroForbiddenFlagError("sed", "-i", "sed_in_place_mutates_files");
-        }
-        if ((a.name === "in-place" || a.name === "i") && !a.rawShortFlag) {
-          throw new MacroForbiddenFlagError("sed", "--" + a.name, "sed_in_place_mutates_files");
-        }
-      }
-    } else if (call.name === "find") {
+    // REQ-068 (8-Jun-2026): `sed -i` is NO LONGER forbidden — it is the single
+    // permitted, vault-jailed, scope-guarded shell mutation (REQ-066). Only
+    // `find -exec` / `find -delete` remain forbidden.
+    if (call.name === "find") {
       for (const a of call.args) {
         if (a.kind !== "NamedArg") continue;
         if (a.rawShortFlag === "-exec") {

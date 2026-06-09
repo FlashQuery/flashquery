@@ -39,6 +39,13 @@ const MANAGED_FRONTMATTER_LITERAL_ALLOWLIST = new Set([
   'src/mcp/utils/frontmatter-sanitizer.ts',
   'src/storage/vault.ts',
   'src/utils/frontmatter.ts',
+  // Golden-model prototype (standalone module boundary — cannot import FM
+  // constants) intentionally references the managed `fq_id` field name as the
+  // sed -i --scope frontmatter immutability guard (REQ-066 ac4).
+  'tests/macro-framework/macro-golden-model/src/shellbuiltins.ts',
+  // Surgical-edit golden test fixtures use literal `fq_id` frontmatter (REQ-066).
+  'tests/unit/macro-golden-surgical-edit.test.ts',
+  'tests/unit/macro-surgical-edit.test.ts',
   'tests/e2e/call-model-template-tools.e2e.test.ts',
   'tests/helpers/discovery-fixtures.ts',
   'tests/helpers/synthetic-vault-generator.ts',

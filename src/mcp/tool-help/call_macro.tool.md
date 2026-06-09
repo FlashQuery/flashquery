@@ -64,6 +64,8 @@ Loads macro source from the vault and validates it without applying side effects
 - When a macro needs read-modify-write safety across steps, pass explicit version preconditions once the target tool supports them; automatic macro token threading and atomic macro execution are deferred.
 - Use explicit budgets for broad loops or model/tool-heavy programs.
 - If the macro needs a user decision, return a `needs_user_input` style value instead of guessing.
+- For surgical, line-level edits, use the `sed -i` shell verb (e.g. `sed -i "s/old/new/" "Notes/doc.md"`); for section or whole-document edits use `replace_doc_section` / `insert_in_doc` / `write_document`. Shell content verbs (`cat`, `grep`, `sed`, `wc`, `head`, `tail`) default to `--scope "body"` (frontmatter excluded), so `sed -i` leaves frontmatter — including `fq_id` — untouched by default; pass `--scope "both"` for the whole raw file.
+- A `sed -i` write reconciles into the search index/embeddings on the next vault scan, not synchronously.
 
 ## Related Tools
 

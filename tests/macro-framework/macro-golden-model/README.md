@@ -168,7 +168,7 @@ See `examples/15-vault-jail.fqm` for both halves of the contract.
 
 ### Operators
 
-- `echo a b c ...`     — print arguments separated by spaces to stdout (trace channel)
+- `echo a b c ...`     — join args with spaces; write to the trace channel AND return the joined string (value-producing, REQ-064), so `echo $v | sed ...` and `x = echo $v` work
 - `input_var "key" [--default <literal>]` — read a caller-supplied input from `input_vars` (per OQ #23). Each call declares one input in the macro's contract; pre-flight validates required keys before execution.
 - `fail "msg"`         — deliberately abort the macro with a canonical error envelope; statements below `fail` do not run
 - `exit value`         — deliberately halt the macro successfully with `value` as the structured `result` (any Value type — string, list, object, etc.). Zero-arg form returns `null`. Statements below `exit` do not run.
@@ -198,22 +198,39 @@ would emit a `notifications/progress` JSON-RPC message on the MCP channel.
 
 ### Shell-style builtins (backed by ShellJS)
 
-Per OQ #25 (resolved 2026-05-12), the v0 whitelist is **8 read-only verbs**.
-All filesystem mutation goes through the FlashQuery tool layer (`fq.*`).
+The v0 whitelist is **8 verbs**. Filesystem mutation goes through the FlashQuery
+tool layer (`fq.*`) — EXCEPT `sed -i`, the single permitted shell mutation
+(REQ-066).
 
-- `grep [-i] [-v] [-c] [-l] [-n] PATTERN file_or_glob...` — returns matching lines
+- `grep [-i] [-v] [-c] [-l] [-n] [--scope S] PATTERN file_or_glob...` — returns matching lines
   - In a pipeline: `cat "*.md" | grep "TODO"`
-- `find PATH [--name "*.md"] [--type f|d]` — returns list of paths
-- `sed "s/OLD/NEW/[gim]" file_or_glob...` — text substitution (returns rewritten text; never mutates files)
+- `find PATH [--name "*.md"] [--type f|d]` — returns list of paths (no `--scope`)
+- `sed [-i] [--scope S] "s/OLD/NEW/[gim]" file_or_glob...` — text substitution. Without `-i`, returns rewritten text (never mutates). With `-i`, writes the result back in place (REQ-066)
   - In a pipeline: `cat "x.md" | sed "s/foo/bar/g"`
-- `cat file_or_glob...` — concatenate file contents (or pass through stdin in a pipe)
-- `wc [-l] [-w] [-c] file_or_glob...` — count lines, words, or chars (default lines)
-- `head [-n N] file_or_glob...` — first N lines (default 10); also pipeline-friendly
-- `tail [-n N] file_or_glob...` — last N lines (default 10); also pipeline-friendly
-- `ls [-A] [-d] [-l] [-R] [path_or_glob...]` — directory listing; `-l` returns objects with `{name, size, mtime}`
+- `cat [--scope S] file_or_glob...` — concatenate file contents (or pass through stdin in a pipe)
+- `wc [-l] [-w] [-c] [--scope S] file_or_glob...` — count lines, words, or chars (default lines)
+- `head [-n N] [--scope S] file_or_glob...` — first N lines (default 10); also pipeline-friendly
+- `tail [-n N] [--scope S] file_or_glob...` — last N lines (default 10); also pipeline-friendly
+- `ls [-A] [-d] [-l] [-R] [path_or_glob...]` — directory listing; `-l` returns objects with `{name, size, mtime}` (no `--scope`)
 
 Bundled short flags work like Bash: `grep -iv "todo"` is the same as
 `grep -i -v "todo"`. Long flags take a value: `find . --name "*.md"`.
+
+#### `--scope` region selection (REQ-065)
+
+The six content-reading verbs (`cat`, `grep`, `sed`, `wc`, `head`, `tail`) accept
+`--scope "body" | "both" | "frontmatter"`, selecting which region of a vault
+Markdown document they operate on. **Default is `body`** — the content after the
+YAML frontmatter. `both` is the whole raw file; `frontmatter` is the YAML block.
+Files without frontmatter: `body` == `both` == whole content; `frontmatter` is
+empty. `find`/`ls` reject `--scope` (`invalid_scope`). The default keeps `sed -i`
+from touching frontmatter, and keeps `grep` and `sed -i` agreeing on what "the
+document" is.
+
+```bash
+# Surgical body edit: read body (default), transform, write back in place.
+sed -i "s/default_limit: 100/default_limit: 250/" "Specs/limits.md"
+```
 
 #### Vault-jail wrapper
 
@@ -227,11 +244,13 @@ so bare relative paths resolve there. The runner accepts `--vault-root
 
 #### Flag-level rejections
 
-Three flags are refused at pre-scan time with `forbidden_shell_flag`:
+Two flags are refused at pre-scan time with `forbidden_shell_flag` (REQ-068):
 
-- `sed -i`     — in-place file modification
 - `find -exec` — arbitrary command execution
 - `find -delete` — file mutation via find
+
+(`sed -i` was previously forbidden; it is now the single permitted, scope-guarded
+shell mutation — see REQ-066.)
 
 The pre-scan walks the AST before any execution begins, so a rejected
 flag halts the macro before any side effects.
@@ -507,7 +526,8 @@ to the calling client; the stdout content stays as the macro's trace and result.
   it transitions to `cancelled`).
 - Shell builtins (`grep`, `find`, `sed`, `cat`, `wc`, `head`, `tail`, `ls`) DO
   read real files through ShellJS, with glob expansion, jailed under the
-  configured `--vault-root` (default `sample-vault/`). They never mutate
-  files — `sed -i`, `find -exec`, and `find -delete` are refused at
-  pre-scan time, and the v0 whitelist contains no mutation verbs.
-  Filesystem mutation goes through the FlashQuery tool layer in production.
+  configured `--vault-root` (default `sample-vault/`). They are read-only
+  EXCEPT `sed -i`, which writes its (scope-guarded, default-body) result back
+  in place (REQ-066). `find -exec` and `find -delete` remain refused at
+  pre-scan time. All other filesystem mutation goes through the FlashQuery
+  tool layer.
