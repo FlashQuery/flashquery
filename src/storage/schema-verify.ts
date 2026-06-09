@@ -39,6 +39,49 @@ export async function columnExists(client: pg.Client, tableName: string, columnN
   return (result.rows[0] as Record<string, unknown>).exists === true;
 }
 
+export async function verifyEmbeddingDimensions(
+  client: pg.Client,
+  expectedDimensions: number
+): Promise<void> {
+  const result = await client.query(
+    `
+    SELECT c.table_name, format_type(a.atttypid, a.atttypmod) AS formatted_type
+    FROM information_schema.columns c
+    JOIN pg_class cl
+      ON cl.relname = c.table_name
+    JOIN pg_namespace n
+      ON n.oid = cl.relnamespace
+     AND n.nspname = c.table_schema
+    JOIN pg_attribute a
+      ON a.attrelid = cl.oid
+     AND a.attname = c.column_name
+    WHERE c.table_schema = 'public'
+      AND c.table_name IN ('fqc_documents', 'fqc_memory')
+      AND c.column_name = 'embedding'
+    ORDER BY c.table_name
+    `
+  );
+
+  const mismatches: string[] = [];
+  const expectedType = `vector(${expectedDimensions})`;
+  for (const row of result.rows as Array<{ table_name?: unknown; formatted_type?: unknown }>) {
+    const tableName = typeof row.table_name === 'string' ? row.table_name : 'unknown_table';
+    const formattedType = typeof row.formatted_type === 'string' ? row.formatted_type : 'unknown';
+    if (formattedType !== expectedType) {
+      mismatches.push(`${tableName}.embedding is ${formattedType}`);
+    }
+  }
+
+  if (mismatches.length > 0) {
+    throw new Error(
+      `Embedding dimension mismatch: config expects ${expectedType}, but existing schema has ` +
+      `${mismatches.join(', ')}. FlashQuery uses shared embedding columns per database; ` +
+      'changing instance.id does not create separate vector dimensions. Use an embedding model ' +
+      'with the existing dimensions, or migrate/recreate the FlashQuery schema for the new dimensions.'
+    );
+  }
+}
+
 /**
  * Verifies that all required FlashQuery tables exist in the database.
  *
@@ -63,7 +106,7 @@ export async function columnExists(client: pg.Client, tableName: string, columnN
  * @returns Resolves successfully if all tables exist
  * @throws Error listing missing tables if any table is not found
  */
-export async function verifySchema(client: pg.Client): Promise<void> {
+export async function verifySchema(client: pg.Client, expectedEmbeddingDimensions?: number): Promise<void> {
   const requiredTables = [
     'fqc_memory',
     'fqc_vault',
@@ -119,5 +162,9 @@ export async function verifySchema(client: pg.Client): Promise<void> {
 
   if (missingColumns.length > 0) {
     throw new Error(`Missing required columns after DDL: [${missingColumns.join(', ')}]`);
+  }
+
+  if (expectedEmbeddingDimensions !== undefined) {
+    await verifyEmbeddingDimensions(client, expectedEmbeddingDimensions);
   }
 }

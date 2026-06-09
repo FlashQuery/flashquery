@@ -983,13 +983,17 @@ class SupabaseManagerImpl implements SupabaseManager {
           const verifyClient = createPgClientIPv4(databaseUrl);
           await verifyClient.connect();
           try {
-            await verifySchema(verifyClient);
+            await verifySchema(verifyClient, dimensions);
             logger.debug('Schema verification: all tables present (skip_ddl: true)');
           } finally {
             await verifyClient.end();
           }
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
+          if (message.includes('Embedding dimension mismatch')) {
+            logger.error(`Schema verification failed with skip_ddl: true — ${message}`);
+            throw err;
+          }
           logger.warn(
             `Schema verification failed with skip_ddl: true — tables may be missing: ${message}`
           );
@@ -1017,7 +1021,7 @@ class SupabaseManagerImpl implements SupabaseManager {
           const verifyClient = createPgClientIPv4(databaseUrl);
           await verifyClient.connect();
           try {
-            await verifySchema(verifyClient);
+            await verifySchema(verifyClient, dimensions);
           } finally {
             await verifyClient.end();
           }

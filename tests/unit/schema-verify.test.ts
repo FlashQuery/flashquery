@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { tableExists, verifySchema } from '../../src/storage/schema-verify.js';
+import {
+  tableExists,
+  verifyEmbeddingDimensions,
+  verifySchema,
+} from '../../src/storage/schema-verify.js';
 import type pg from 'pg';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -209,5 +213,84 @@ describe('verifySchema', () => {
       const callArgs = mockQuery.mock.calls[index];
       expect(callArgs[1]).toEqual([table]);
     });
+  });
+
+  it('throws when embedding columns use a different vector dimension than configured', async () => {
+    mockQuery.mockImplementation((sql: string) => {
+      if (sql.includes('format_type')) {
+        return Promise.resolve({
+          rows: [
+            { table_name: 'fqc_documents', formatted_type: 'vector(1536)' },
+            { table_name: 'fqc_memory', formatted_type: 'vector(1536)' },
+          ],
+        });
+      }
+      if (sql.includes('information_schema.columns')) {
+        return Promise.resolve({ rows: [{ exists: true }] });
+      }
+      return Promise.resolve({ rows: [{ '?column?': true }] });
+    });
+
+    await expect(verifySchema(mockClient, 768)).rejects.toThrow(
+      'Embedding dimension mismatch: config expects vector(768), but existing schema has fqc_documents.embedding is vector(1536), fqc_memory.embedding is vector(1536)'
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tests for verifyEmbeddingDimensions()
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('verifyEmbeddingDimensions', () => {
+  let mockClient: pg.Client;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockClient = { query: mockQuery } as unknown as pg.Client;
+  });
+
+  it('passes when document and memory embedding columns match configured dimensions', async () => {
+    mockQuery.mockResolvedValue({
+      rows: [
+        { table_name: 'fqc_documents', formatted_type: 'vector(768)' },
+        { table_name: 'fqc_memory', formatted_type: 'vector(768)' },
+      ],
+    });
+
+    await expect(verifyEmbeddingDimensions(mockClient, 768)).resolves.toBeUndefined();
+  });
+
+  it('throws an actionable error when existing vector dimensions differ from config', async () => {
+    mockQuery.mockResolvedValue({
+      rows: [
+        { table_name: 'fqc_documents', formatted_type: 'vector(1536)' },
+        { table_name: 'fqc_memory', formatted_type: 'vector(1536)' },
+      ],
+    });
+
+    await expect(verifyEmbeddingDimensions(mockClient, 768)).rejects.toThrow(
+      'Embedding dimension mismatch: config expects vector(768), but existing schema has fqc_documents.embedding is vector(1536), fqc_memory.embedding is vector(1536)'
+    );
+  });
+
+  it('verifySchema checks embedding dimensions when expected dimensions are supplied', async () => {
+    mockQuery.mockImplementation((sql: string) => {
+      if (sql.includes('format_type')) {
+        return Promise.resolve({
+          rows: [
+            { table_name: 'fqc_documents', formatted_type: 'vector(1536)' },
+            { table_name: 'fqc_memory', formatted_type: 'vector(1536)' },
+          ],
+        });
+      }
+      if (sql.includes('information_schema.columns')) {
+        return Promise.resolve({ rows: [{ exists: true }] });
+      }
+      return Promise.resolve({ rows: [{ '?column?': true }] });
+    });
+
+    await expect(verifySchema(mockClient, 768)).rejects.toThrow(
+      'Embedding dimension mismatch'
+    );
   });
 });
