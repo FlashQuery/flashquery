@@ -116,6 +116,10 @@ export class ShutdownCoordinator {
     }
   }
 
+  isShutdownInProgress(): boolean {
+    return this.isExecuting;
+  }
+
   private setShutdownFlag(): void {
     this.logInfo('Flag set: isShuttingDown=true');
     setShuttingDown(true);
@@ -267,14 +271,7 @@ export class ShutdownCoordinator {
 
   // Logging with INFO, DEBUG, WARN, ERROR levels (per D-08)
   private logInfo(message: string): void {
-    const timestamp = this.formatTimestamp();
     logger.info(`${message}`);
-    // Also write to stderr directly for visibility during shutdown
-    try {
-      process.stderr.write(`${timestamp} INFO  [SHUTDOWN] ${message}\n`);
-    } catch {
-      // Ignore if stderr is already closed
-    }
   }
 
   private logDebug(message: string): void {
@@ -282,34 +279,11 @@ export class ShutdownCoordinator {
   }
 
   private logWarn(message: string): void {
-    const timestamp = this.formatTimestamp();
     logger.warn(`${message}`);
-    try {
-      process.stderr.write(`${timestamp} WARN  [SHUTDOWN] ${message}\n`);
-    } catch {
-      // Ignore if stderr is already closed
-    }
   }
 
   private logError(message: string): void {
-    const timestamp = this.formatTimestamp();
     logger.error(`${message}`);
-    try {
-      process.stderr.write(`${timestamp} ERROR [SHUTDOWN] ${message}\n`);
-    } catch {
-      // Ignore if stderr is already closed
-    }
-  }
-
-  private formatTimestamp(): string {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
-    return `[${year}-${month}-${day} ${hours}:${minutes}:${seconds}]`;
   }
 }
 
@@ -319,15 +293,21 @@ export async function initializeShutdownHandlers(
   httpServer?: http.Server
 ): Promise<ShutdownCoordinator> {
   const coordinator = new ShutdownCoordinator(config, httpServer);
+  let shutdownSignalReceived = false;
+
+  const handleShutdownSignal = (message: string): void => {
+    if (shutdownSignalReceived || coordinator.isShutdownInProgress()) return;
+    shutdownSignalReceived = true;
+    logger.info(message);
+    coordinator.execute().catch(() => process.exit(1));
+  };
 
   process.on('SIGINT', () => {
-    logger.info('Received SIGINT (Ctrl+C) — initiating graceful shutdown');
-    coordinator.execute().catch(() => process.exit(1));
+    handleShutdownSignal('Received SIGINT (Ctrl+C) — initiating graceful shutdown');
   });
 
   process.on('SIGTERM', () => {
-    logger.info('Received SIGTERM (systemd/Docker) — initiating graceful shutdown');
-    coordinator.execute().catch(() => process.exit(1));
+    handleShutdownSignal('Received SIGTERM (systemd/Docker) — initiating graceful shutdown');
   });
 
   // SIGHUP: sent by the OS when the controlling terminal closes (e.g. SSH disconnect,
@@ -337,8 +317,7 @@ export async function initializeShutdownHandlers(
   // in an inconsistent state. Treat SIGHUP the same as SIGTERM so that all subsystems
   // are flushed before the process exits.
   process.on('SIGHUP', () => {
-    logger.info('Received SIGHUP (terminal closed / parent exited) — initiating graceful shutdown');
-    coordinator.execute().catch(() => process.exit(1));
+    handleShutdownSignal('Received SIGHUP (terminal closed / parent exited) — initiating graceful shutdown');
   });
 
   return coordinator;

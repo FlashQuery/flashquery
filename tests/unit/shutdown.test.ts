@@ -12,9 +12,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ShutdownCoordinator, MAX_SHUTDOWN_MS, MCP_REQUEST_DRAIN_TIMEOUT_MS } from '../../src/server/shutdown.js';
+import { ShutdownCoordinator, MAX_SHUTDOWN_MS, MCP_REQUEST_DRAIN_TIMEOUT_MS, initializeShutdownHandlers } from '../../src/server/shutdown.js';
 import * as shutdownState from '../../src/server/shutdown-state.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
+import { logger } from '../../src/logging/logger.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Module mocks
@@ -155,6 +156,14 @@ describe('ShutdownCoordinator', () => {
     await expect(coordinator.execute()).rejects.toThrow('process.exit called');
   });
 
+  it('logs shutdown milestones only through the normal logger', async () => {
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    await expect(coordinator.execute()).rejects.toThrow('process.exit called');
+
+    expect(stderrSpy).not.toHaveBeenCalledWith(expect.stringContaining('[SHUTDOWN]'));
+  });
+
   it('should handle error during shutdown', async () => {
     // Coordinator should handle errors gracefully and still call process.exit
     // (though with code 1 instead of 0)
@@ -177,4 +186,39 @@ describe('ShutdownCoordinator', () => {
     expect(exitSpy).toHaveBeenNthCalledWith(1, 0);
     expect(exitSpy).toHaveBeenNthCalledWith(2, 1);
   });
+
+  it('logs a repeated SIGINT only once while shutdown is already running', async () => {
+    vi.clearAllMocks();
+    const existingSigint = process.listeners('SIGINT');
+    const existingSigterm = process.listeners('SIGTERM');
+    const existingSighup = process.listeners('SIGHUP');
+    const executeSpy = vi
+      .spyOn(ShutdownCoordinator.prototype, 'execute')
+      .mockImplementation(async function mockExecute() {
+        (this as unknown as { isExecuting: boolean }).isExecuting = true;
+      });
+
+    try {
+      await initializeShutdownHandlers(config);
+
+      process.emit('SIGINT');
+      process.emit('SIGINT');
+
+      expect(logger.info).toHaveBeenCalledTimes(1);
+      expect(logger.info).toHaveBeenCalledWith('Received SIGINT (Ctrl+C) — initiating graceful shutdown');
+      expect(executeSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      removeAddedListeners('SIGINT', existingSigint);
+      removeAddedListeners('SIGTERM', existingSigterm);
+      removeAddedListeners('SIGHUP', existingSighup);
+    }
+  });
 });
+
+function removeAddedListeners(event: NodeJS.Signals, keep: Function[]): void {
+  for (const listener of process.listeners(event)) {
+    if (!keep.includes(listener)) {
+      process.off(event, listener as NodeJS.SignalsListener);
+    }
+  }
+}

@@ -119,7 +119,7 @@ export async function scheduleBackgroundEmbedding(
     } catch (pendingErr) {
       logPendingEmbeddingLost(log, options.target, message, errorMessage(pendingErr));
     }
-    logBackgroundEmbedFailure(log, options.target, message);
+    logBackgroundEmbedFailure(log, options.target, options.provider, options.embedText, message);
     return { warnings: [EMBEDDING_DEFERRED_WARNING] };
   }
 }
@@ -235,15 +235,78 @@ async function nextAttemptCount(
 function logBackgroundEmbedFailure(
   log: StructuredLogger,
   target: BackgroundEmbeddingTarget,
+  provider: EmbeddingProvider,
+  embedText: string,
   message: string
 ): void {
-  log.error('background_embed_failed', {
+  const providerInfo = provider.getProviderInfo?.();
+  const humanMessage = formatBackgroundEmbedFailureMessage({
+    target,
+    providerName: providerInfo?.provider,
+    model: providerInfo?.model,
+    inputChars: embedText.length,
+    error: message,
+  });
+
+  log.error(humanMessage, {
     target_kind: target.kind,
     target_table: target.targetTable,
     target_id: target.targetId,
     target_label: target.targetLabel,
+    provider: providerInfo?.provider,
+    model: providerInfo?.model,
+    input_chars: embedText.length,
     error: message,
   });
+}
+
+function formatBackgroundEmbedFailureMessage(input: {
+  target: BackgroundEmbeddingTarget;
+  providerName?: string;
+  model?: string;
+  inputChars: number;
+  error: string;
+}): string {
+  const label = input.target.targetLabel ?? input.target.targetId;
+  const targetKind = input.target.kind;
+  const providerClause =
+    input.providerName && input.model
+      ? ` with ${input.providerName} model "${input.model}"`
+      : ' with the configured embedding model';
+  const explanation = humanEmbeddingError(input.error, input.providerName);
+  return `Failed to embed ${targetKind} "${label}"${providerClause} after sending ${formatCount(input.inputChars, 'character')}. ${explanation} The ${targetKind} was saved and embedding will be retried later.`;
+}
+
+function humanEmbeddingError(error: string, providerName?: string): string {
+  const dimensionMismatch = error.match(/expected\s+(\d+)\s+dimensions,\s+not\s+(\d+)/i);
+  if (dimensionMismatch) {
+    return `The database expected a ${formatNumber(Number(dimensionMismatch[1]))}-dimensional vector but the model returned ${formatNumber(Number(dimensionMismatch[2]))} dimensions.`;
+  }
+
+  const contextLength = error.match(/input length exceeds (?:the )?context length/i);
+  if (contextLength) {
+    const speaker = providerName ? `${providerName} said` : 'The embedding provider said';
+    return `${speaker}: the input length exceeds the context length.`;
+  }
+
+  const ollamaError = error.match(/Ollama API returned \d+(?::\s*(.+?))?\.?$/i);
+  if (ollamaError?.[1]) {
+    return `Ollama said: ${trimTrailingPeriod(ollamaError[1])}.`;
+  }
+
+  return `The embedding provider said: ${trimTrailingPeriod(error)}.`;
+}
+
+function formatCount(value: number, singular: string): string {
+  return `${formatNumber(value)} ${value === 1 ? singular : `${singular}s`}`;
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat('en-US').format(value);
+}
+
+function trimTrailingPeriod(value: string): string {
+  return value.trim().replace(/\.+$/, '');
 }
 
 function logPendingEmbeddingLost(
@@ -252,7 +315,7 @@ function logPendingEmbeddingLost(
   originalError: string,
   pendingError: string
 ): void {
-  log.error('background_embed_failed_pending_lost', {
+  log.error(formatPendingEmbeddingLostMessage(target, originalError, pendingError), {
     target_kind: target.kind,
     target_table: target.targetTable,
     target_id: target.targetId,
@@ -260,6 +323,15 @@ function logPendingEmbeddingLost(
     error: originalError,
     pending_error: pendingError,
   });
+}
+
+function formatPendingEmbeddingLostMessage(
+  target: BackgroundEmbeddingTarget,
+  originalError: string,
+  pendingError: string
+): string {
+  const label = target.targetLabel ?? target.targetId;
+  return `Could not save embedding retry state for ${target.kind} "${label}". Original embedding error: ${trimTrailingPeriod(originalError)}. Retry-state error: ${trimTrailingPeriod(pendingError)}. The ${target.kind} was saved, but automatic embedding retry may not happen.`;
 }
 
 function makeDefaultStructuredLogger(): StructuredLogger {

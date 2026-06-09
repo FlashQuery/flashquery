@@ -10,6 +10,7 @@ import { getEmbeddingDimensions } from './dimensions.js';
 export interface EmbeddingProvider {
   embed(text: string): Promise<number[]>;
   getDimensions(): number;
+  getProviderInfo?(): { provider: string; model: string };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -85,6 +86,10 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
   getDimensions(): number {
     return this.dimensions;
   }
+
+  getProviderInfo(): { provider: string; model: string } {
+    return { provider: this.providerName, model: this.model };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -120,7 +125,14 @@ export class OllamaProvider implements EmbeddingProvider {
     }
 
     if (!response.ok) {
-      throw new Error(`Embedding error: Ollama API returned ${response.status}.`);
+      let detail = '';
+      try {
+        const data = (await response.json()) as { error?: unknown };
+        detail = typeof data.error === 'string' ? `: ${data.error}` : '';
+      } catch {
+        detail = '';
+      }
+      throw new Error(`Embedding error: Ollama API returned ${response.status}${detail}.`);
     }
 
     const data = (await response.json()) as { embedding: number[] };
@@ -131,6 +143,10 @@ export class OllamaProvider implements EmbeddingProvider {
 
   getDimensions(): number {
     return this.dimensions;
+  }
+
+  getProviderInfo(): { provider: string; model: string } {
+    return { provider: 'Ollama', model: this.model };
   }
 }
 
@@ -154,6 +170,10 @@ export class NullEmbeddingProvider implements EmbeddingProvider {
 
   getDimensions(): number {
     return this.dimensions;
+  }
+
+  getProviderInfo(): { provider: string; model: string } {
+    return { provider: 'none', model: 'none' };
   }
 }
 
@@ -186,6 +206,13 @@ export class FallbackEmbeddingProvider implements EmbeddingProvider {
 
   getDimensions(): number {
     return this.dimensions;
+  }
+
+  getProviderInfo(): { provider: string; model: string } {
+    return {
+      provider: this.providers.map(({ name }) => name).join(' fallback chain'),
+      model: 'fallback embedding chain',
+    };
   }
 }
 

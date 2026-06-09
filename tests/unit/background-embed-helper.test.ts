@@ -23,6 +23,14 @@ function makeProvider(result: number[] | Error): EmbeddingProvider {
   };
 }
 
+function makeNamedProvider(result: number[] | Error, provider: string, model: string): EmbeddingProvider {
+  return {
+    embed: result instanceof Error ? vi.fn().mockRejectedValue(result) : vi.fn().mockResolvedValue(result),
+    getDimensions: () => 3,
+    getProviderInfo: () => ({ provider, model }),
+  };
+}
+
 function makeSupabaseMock(options: {
   updateError?: { message: string };
   pendingUpsertError?: { message: string };
@@ -115,7 +123,7 @@ describe('background embedding helper', () => {
     );
   });
 
-  it('T-U-007 upserts durable pending state and logs background_embed_failed on provider failure', async () => {
+  it('T-U-007 upserts durable pending state and logs a readable failure on provider failure', async () => {
     const supabase = makeSupabaseMock();
     const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
 
@@ -143,12 +151,45 @@ describe('background embedding helper', () => {
       { onConflict: 'instance_id,target_kind,target_table,target_id' }
     );
     expect(logger.error).toHaveBeenCalledWith(
-      'background_embed_failed',
+      'Failed to embed document "Doc One" with the configured embedding model after sending 15 characters. The embedding provider said: provider down. The document was saved and embedding will be retried later.',
       expect.objectContaining({
         target_kind: 'document',
         target_table: 'fqc_documents',
         target_id: 'doc-1',
+        target_label: 'Doc One',
+        input_chars: 15,
         error: 'provider down',
+      })
+    );
+  });
+
+  it('logs a user-readable failure message with target label, model, input size, and retry outcome', async () => {
+    const supabase = makeSupabaseMock();
+    const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
+
+    await scheduleBackgroundEmbedding({
+      target: documentEmbeddingTarget({
+        instanceId: 'inst',
+        id: 'doc-1',
+        label: 'Skills/Macro Author/Macro Author SKILL.md',
+      }),
+      embedText: 'Macro Author SKILL\n\n' + 'x'.repeat(39905),
+      provider: makeNamedProvider(
+        new Error('Embedding error: Ollama API returned 500: the input length exceeds the context length'),
+        'Ollama',
+        'nomic-embed-text'
+      ),
+      supabase: supabase.client,
+      logger,
+    });
+
+    expect(logger.error).toHaveBeenCalledWith(
+      'Failed to embed document "Skills/Macro Author/Macro Author SKILL.md" with Ollama model "nomic-embed-text" after sending 39,925 characters. Ollama said: the input length exceeds the context length. The document was saved and embedding will be retried later.',
+      expect.objectContaining({
+        target_kind: 'document',
+        target_id: 'doc-1',
+        input_chars: 39925,
+        error: 'Embedding error: Ollama API returned 500: the input length exceeds the context length',
       })
     );
   });
@@ -195,20 +236,23 @@ describe('background embedding helper', () => {
 
     expect(result.warnings).toEqual([EMBEDDING_DEFERRED_WARNING]);
     expect(logger.error).toHaveBeenCalledWith(
-      'background_embed_failed_pending_lost',
+      'Could not save embedding retry state for document "Doc Two". Original embedding error: provider unavailable. Retry-state error: Failed to record pending embedding: pending table unavailable. The document was saved, but automatic embedding retry may not happen.',
       expect.objectContaining({
         target_kind: 'document',
         target_table: 'fqc_documents',
         target_id: 'doc-2',
+        target_label: 'Doc Two',
         error: 'provider unavailable',
         pending_error: 'Failed to record pending embedding: pending table unavailable',
       })
     );
     expect(logger.error).toHaveBeenCalledWith(
-      'background_embed_failed',
+      'Failed to embed document "Doc Two" with the configured embedding model after sending 30 characters. The embedding provider said: provider unavailable. The document was saved and embedding will be retried later.',
       expect.objectContaining({
         target_kind: 'document',
         target_id: 'doc-2',
+        target_label: 'Doc Two',
+        input_chars: 30,
         error: 'provider unavailable',
       })
     );
