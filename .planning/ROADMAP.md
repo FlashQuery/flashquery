@@ -37,7 +37,7 @@
 
 ## Phases
 
-- [ ] **Phase 165: Foundation Infrastructure** — Catalog table + YAML config-sync; per-entry column sets + HNSW indexes + core-table RPCs + drift detection; stamping, length guard, heuristic removal (Spec §8 Phase 1, sub-steps 1.1 → 1.2 → 1.3)
+- [x] **Phase 165: Foundation Infrastructure** — Catalog table + YAML config-sync; per-entry column sets + HNSW indexes + core-table RPCs + drift detection; stamping, length guard, heuristic removal (Spec §8 Phase 1, sub-steps 1.1 → 1.2 → 1.3)
 - [ ] **Phase 166: Embedding Pipeline** — Write path (parallel per-entry + pending queue); rate limiting + 429 backoff; search + RRF fusion; plugin-table integration (Spec §8 Phase 2, sub-steps 2.1 → 2.2 → 2.3 → 2.4)
 - [ ] **Phase 167: Lifecycle Operations and Validation** — `maintain_vault` lifecycle actions + concurrency; operator recipes integration validation (Spec §8 Phase 3, sub-steps 3.1 → 3.2)
 
@@ -168,7 +168,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 165. Foundation Infrastructure | 2/3 | In progress | - |
+| 165. Foundation Infrastructure | 3/3 | Complete | 2026-06-10 |
 | 166. Embedding Pipeline | 0/? | Not started | - |
 | 167. Lifecycle Operations and Validation | 0/? | Not started | - |
 

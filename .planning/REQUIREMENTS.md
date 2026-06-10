@@ -67,7 +67,7 @@ All 43 requirements are committed scope for v4.0. Each maps to exactly one phase
 ### Per-Entry Columns, Stamping & Drift Detection
 
 - [ ] **REQ-008**: Per-entry column set creation (`embedding_<X>` + 4 stamping columns + HNSW index) transactionally per table, with orphaned-column pre-flight check (§6.2.1)
-- [ ] **REQ-009**: Per-row model-version stamping on write (model/dimensions/provider/truncated written atomically with the vector) (§6.2.2)
+- [x] **REQ-009**: Per-row model-version stamping on write (model/dimensions/provider/truncated written atomically with the vector) (§6.2.2)
 - [x] **REQ-010**: Dimension drift detection in `verifySchema` per catalog entry's columns; mismatch fails startup loudly (§6.2.3)
 - [x] **REQ-011**: Gated test/dev destructive repair path (drop + recreate column at configured width); never runs in production by default (§6.2.4)
 
@@ -79,8 +79,8 @@ All 43 requirements are committed scope for v4.0. Each maps to exactly one phase
 - [ ] **REQ-015**: Pending-worker retries per-entry using each entry's endpoint chain; skips deactivated, deletes retired (§6.3.4)
 - [ ] **REQ-016**: Oversized-input truncation at paragraph/sentence boundary with `_truncated` stamping, warning, and reactive 75% retry (§6.3.5)
 - [ ] **REQ-017**: Per-endpoint rate limiting (`min_delay_ms`) and 429 exponential backoff before failover (§6.3.6)
-- [ ] **REQ-018**: Runtime vector-length guard inside each leaf provider's `embed()` (§6.3.7)
-- [ ] **REQ-019**: Remove the `includeDimensions` heuristic entirely; never send `dimensions` to embedding APIs (§6.3.8)
+- [x] **REQ-018**: Runtime vector-length guard inside each leaf provider's `embed()` (§6.3.7)
+- [x] **REQ-019**: Remove the `includeDimensions` heuristic entirely; never send `dimensions` to embedding APIs (§6.3.8)
 
 ### Search & RRF Fusion
 
@@ -171,7 +171,7 @@ Each requirement maps to exactly one roadmap phase. For incrementally-built REQs
 | REQ-006 | Phase 166 | Pending |
 | REQ-007 | Phase 165 | Pending |
 | REQ-008 | Phase 166 | Pending |
-| REQ-009 | Phase 165 | Pending |
+| REQ-009 | Phase 165 | Complete |
 | REQ-010 | Phase 165 | Complete |
 | REQ-011 | Phase 165 | Complete |
 | REQ-012 | Phase 166 | Pending |
@@ -180,8 +180,8 @@ Each requirement maps to exactly one roadmap phase. For incrementally-built REQs
 | REQ-015 | Phase 166 | Pending |
 | REQ-016 | Phase 166 | Pending |
 | REQ-017 | Phase 166 | Pending |
-| REQ-018 | Phase 165 | Pending |
-| REQ-019 | Phase 165 | Pending |
+| REQ-018 | Phase 165 | Complete |
+| REQ-019 | Phase 165 | Complete |
 | REQ-020 | Phase 166 | Pending |
 | REQ-021 | Phase 166 | Pending |
 | REQ-022 | Phase 166 | Pending |

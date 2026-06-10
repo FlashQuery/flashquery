@@ -7,10 +7,10 @@ last_updated: "2026-06-10T00:00:00.000Z"
 last_activity: 2026-06-10
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 67
+  completed_plans: 3
+  percent: 100
 ---
 
 # FlashQuery Core — State
@@ -20,30 +20,30 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-10)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** v4.0 Embedding Management & Multi-Provider Support — Phase 165: Foundation Infrastructure
+**Current focus:** v4.0 Embedding Management & Multi-Provider Support — Phase 166: Embedding Pipeline
 
 ## Current Position
 
-Phase: 165 — Foundation Infrastructure
-Plan: 03 — Stamping, Length Guard, Heuristic Removal
-Status: Ready to execute next plan
-Last activity: 2026-06-10 — Phase 165 Plan 02 completed: core per-entry columns, HNSW indexes, core RPCs, drift detection, and gated repair
+Phase: 166 — Embedding Pipeline
+Plan: TBD — Write Path + Pending Queue
+Status: Ready to plan next phase
+Last activity: 2026-06-10 — Phase 165 Plan 03 completed: atomic stamping, provider length guard, and dimensions request heuristic removal
 
-Progress: ███████░░░ 67% (2/3 Phase 165 plans)
+Progress: ██████████ 100% (3/3 Phase 165 plans)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 2 (this milestone)
-- Average duration: ~35 min
-- Total execution time: ~1h 10m
+- Total plans completed: 3 (this milestone)
+- Average duration: ~30 min
+- Total execution time: ~1h 30m
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 165 | 2 | ~1h 10m | ~35m |
+| 165 | 3 | ~1h 30m | ~30m |
 | 166 | ? | - | - |
 | 167 | ? | - | - |
 
@@ -68,10 +68,13 @@ Progress: ███████░░░ 67% (2/3 Phase 165 plans)
 - Phase 165 Plan 02 completed core scope for REQ-008 and REQ-021: core table column sets, HNSW indexes, and `match_memories_<name>` / `match_documents_<name>` RPCs. Plugin-table completion remains in Phase 166.
 - Catalog-aware `verifySchema(client, { instanceId })` is now the active-entry drift path; legacy `verifySchema(client, number)` remains for existing single-column verification.
 - Destructive embedding dimension repair exists only through explicit `repairEmbeddingDimensionDrift(..., { enabled: true })`; default startup verification refuses and does not mutate schema.
+- Phase 165 Plan 03 keeps legacy singular embedding compatibility explicit via `getLegacyEmbeddingDimensions` while catalog-driven embeddings use strict entry dimensions.
+- Per-entry stamping is opt-in through `embeddingName` during Phase 165; Phase 166 will wire catalog fan-out and pending queue shape.
+- Leaf embedding providers reject wrong-width vectors before callers can write them; OpenAI-compatible request bodies no longer include `dimensions`.
 
 ### Todos
 
-- Execute Phase 165 Plan 03 next
+- Plan Phase 166 Embedding Pipeline next
 
 ### Blockers
 
@@ -79,9 +82,9 @@ None
 
 ## Session Continuity
 
-**Last session:** 2026-06-10 — Phase 165 Plan 02 completed
-**Next action:** Execute `.planning/phases/165-foundation-infrastructure/165-03-PLAN.md`
-**Context needed:** Plan 03 should build on `.planning/phases/165-foundation-infrastructure/165-01-SUMMARY.md` and `165-02-SUMMARY.md`, plus spec §8 Phase 1 sub-step 1.3.
+**Last session:** 2026-06-10 — Phase 165 Plan 03 completed
+**Next action:** Plan Phase 166 Embedding Pipeline
+**Context needed:** Phase 166 should build on `.planning/phases/165-foundation-infrastructure/165-01-SUMMARY.md`, `165-02-SUMMARY.md`, and `165-03-SUMMARY.md`, plus spec §8 Phase 2 sub-steps 2.1 through 2.4.
 
 ## v4.0 Deferred Items
 
