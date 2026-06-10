@@ -943,6 +943,214 @@ export function buildRetireLegacyWriteLocksDDL(): string {
   return `DROP TABLE IF EXISTS fqc_write_locks`;
 }
 
+export interface CoreEmbeddingColumnSetEntry {
+  name: string;
+  dimensions: number;
+}
+
+const CORE_EMBEDDING_TABLES = ['fqc_documents', 'fqc_memory'] as const;
+const EMBEDDING_IDENTIFIER_PATTERN = /^[a-z][a-z0-9_]*$/;
+
+function quoteIdentifier(identifier: string): string {
+  return `"${identifier.replaceAll('"', '""')}"`;
+}
+
+export function validateEmbeddingSqlName(name: string): void {
+  if (!EMBEDDING_IDENTIFIER_PATTERN.test(name)) {
+    throw new Error(
+      `Embedding catalog entry '${name}' cannot be used as a SQL identifier. ` +
+        'Names must start with a lowercase letter and contain only lowercase letters, numbers, and underscores.'
+    );
+  }
+}
+
+function buildMemoryMatchRpc(entry: CoreEmbeddingColumnSetEntry): string {
+  const functionName = quoteIdentifier(`match_memories_${entry.name}`);
+  const embeddingColumn = quoteIdentifier(`embedding_${entry.name}`);
+  return `
+DROP FUNCTION IF EXISTS ${functionName}(vector, double precision, integer, text[], text, text, boolean) CASCADE;
+CREATE OR REPLACE FUNCTION ${functionName}(
+  query_embedding vector(${entry.dimensions}),
+  match_threshold float DEFAULT 0.7,
+  match_count int DEFAULT 10,
+  filter_tags text[] DEFAULT NULL,
+  filter_tag_match text DEFAULT 'any',
+  filter_instance_id text DEFAULT NULL,
+  include_archived boolean DEFAULT false
+)
+RETURNS TABLE (
+  id uuid,
+  content text,
+  tags text[],
+  plugin_scope text,
+  similarity float,
+  created_at timestamptz,
+  updated_at timestamptz,
+  is_latest boolean
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    m.id,
+    m.content,
+    m.tags,
+    m.plugin_scope,
+    1 - (m.${embeddingColumn} <=> query_embedding) AS similarity,
+    m.created_at,
+    m.updated_at,
+    m.is_latest
+  FROM fqc_memory m
+  WHERE (include_archived OR m.status = 'active')
+    AND m.is_latest = true
+    AND m.${embeddingColumn} IS NOT NULL
+    AND 1 - (m.${embeddingColumn} <=> query_embedding) > match_threshold
+    AND (filter_tags IS NULL OR
+      CASE WHEN filter_tag_match = 'all'
+        THEN m.tags @> filter_tags
+        ELSE m.tags && filter_tags
+      END
+    )
+    AND (filter_instance_id IS NULL OR m.instance_id = filter_instance_id)
+  ORDER BY m.${embeddingColumn} <=> query_embedding
+  LIMIT match_count;
+END;
+$$;
+`;
+}
+
+function buildDocumentMatchRpc(entry: CoreEmbeddingColumnSetEntry): string {
+  const functionName = quoteIdentifier(`match_documents_${entry.name}`);
+  const embeddingColumn = quoteIdentifier(`embedding_${entry.name}`);
+  return `
+DROP FUNCTION IF EXISTS ${functionName}(vector, double precision, integer, text, text[], text, boolean) CASCADE;
+CREATE OR REPLACE FUNCTION ${functionName}(
+  query_embedding vector(${entry.dimensions}),
+  match_threshold float DEFAULT 0.7,
+  match_count int DEFAULT 10,
+  filter_instance_id text DEFAULT NULL,
+  filter_tags text[] DEFAULT NULL,
+  filter_tag_match text DEFAULT 'any',
+  include_archived boolean DEFAULT false
+)
+RETURNS TABLE (
+  id uuid,
+  path text,
+  title text,
+  tags text[],
+  similarity float,
+  created_at timestamptz
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    d.id,
+    d.path,
+    d.title,
+    d.tags,
+    1 - (d.${embeddingColumn} <=> query_embedding) AS similarity,
+    d.created_at
+  FROM fqc_documents d
+  WHERE (include_archived OR d.status = 'active')
+    AND d.${embeddingColumn} IS NOT NULL
+    AND 1 - (d.${embeddingColumn} <=> query_embedding) > match_threshold
+    AND (filter_instance_id IS NULL OR d.instance_id = filter_instance_id)
+    AND (filter_tags IS NULL OR
+      CASE WHEN filter_tag_match = 'all'
+        THEN d.tags @> filter_tags
+        ELSE d.tags && filter_tags
+      END
+    )
+  ORDER BY d.${embeddingColumn} <=> query_embedding
+  LIMIT match_count;
+END;
+$$;
+`;
+}
+
+export function buildCoreEmbeddingColumnSetDDL(entry: CoreEmbeddingColumnSetEntry): string {
+  validateEmbeddingSqlName(entry.name);
+
+  const baseColumn = `embedding_${entry.name}`;
+  const requiredColumns = [
+    baseColumn,
+    `${baseColumn}_model`,
+    `${baseColumn}_dimensions`,
+    `${baseColumn}_provider`,
+    `${baseColumn}_truncated`,
+  ];
+  const requiredColumnsSql = requiredColumns.map((column) => `'${column}'`).join(', ');
+
+  const ddl: string[] = [
+    'BEGIN;',
+    `
+DO $$
+DECLARE
+  orphaned text[];
+BEGIN
+  WITH target_tables(table_name) AS (
+    VALUES ${CORE_EMBEDDING_TABLES.map((table) => `('${table}')`).join(', ')}
+  ),
+  table_columns AS (
+    SELECT t.table_name, c.column_name
+    FROM target_tables t
+    LEFT JOIN information_schema.columns c
+      ON c.table_schema = 'public'
+     AND c.table_name = t.table_name
+     AND c.column_name = ANY(ARRAY[${requiredColumnsSql}]::text[])
+  ),
+  grouped AS (
+    SELECT
+      table_name,
+      bool_or(column_name = '${baseColumn}') AS has_base,
+      count(column_name) FILTER (WHERE column_name IS NOT NULL) AS column_count
+    FROM table_columns
+    GROUP BY table_name
+  )
+  SELECT array_agg(format('%s.%s', table_name, '${baseColumn}') ORDER BY table_name)
+  INTO orphaned
+  FROM grouped
+  WHERE has_base AND column_count <> ${requiredColumns.length};
+
+  IF orphaned IS NOT NULL THEN
+    RAISE EXCEPTION 'orphaned embedding column(s) for entry ${entry.name}: %', array_to_string(orphaned, ', ');
+  END IF;
+END $$;
+`,
+  ];
+
+  for (const table of CORE_EMBEDDING_TABLES) {
+    ddl.push(`
+ALTER TABLE ${quoteIdentifier(table)} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(baseColumn)} vector(${entry.dimensions});
+ALTER TABLE ${quoteIdentifier(table)} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(`${baseColumn}_model`)} TEXT;
+ALTER TABLE ${quoteIdentifier(table)} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(`${baseColumn}_dimensions`)} INT;
+ALTER TABLE ${quoteIdentifier(table)} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(`${baseColumn}_provider`)} TEXT;
+ALTER TABLE ${quoteIdentifier(table)} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(`${baseColumn}_truncated`)} BOOLEAN;
+CREATE INDEX IF NOT EXISTS ${quoteIdentifier(`idx_${table}_${baseColumn}`)}
+  ON ${quoteIdentifier(table)} USING hnsw (${quoteIdentifier(baseColumn)} vector_cosine_ops);
+`);
+  }
+
+  ddl.push(buildMemoryMatchRpc(entry));
+  ddl.push(buildDocumentMatchRpc(entry));
+  ddl.push('COMMIT;');
+  return ddl.join('\n');
+}
+
+export async function createCoreEmbeddingColumnSet(
+  config: FlashQueryConfig,
+  entry: CoreEmbeddingColumnSetEntry
+): Promise<void> {
+  const { url: supabaseUrl, serviceRoleKey, databaseUrl } = config.supabase;
+  await ddlQuery(supabaseUrl, serviceRoleKey, buildCoreEmbeddingColumnSetDDL(entry), databaseUrl);
+  logger.info(
+    `Embedding catalog: ensured core column set for entry '${entry.name}' on ${CORE_EMBEDDING_TABLES.join(', ')}`
+  );
+}
+
 /**
  * Drops the unused `description` column from the `fqc_documents` table.
  * This migration is intentionally idempotent and silent for the common no-op

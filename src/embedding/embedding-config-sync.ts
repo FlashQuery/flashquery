@@ -1,6 +1,6 @@
 import { logger } from '../logging/logger.js';
 import type { FlashQueryConfig } from '../config/types.js';
-import { supabaseManager } from '../storage/supabase.js';
+import { createCoreEmbeddingColumnSet, supabaseManager } from '../storage/supabase.js';
 
 export interface EmbeddingCatalogSyncResult {
   inserted: number;
@@ -144,6 +144,7 @@ export async function syncEmbeddingCatalog(config: FlashQueryConfig): Promise<Em
     const endpoints = incoming.endpoints.map(endpointToRow);
     const existing = existingByName.get(incoming.name);
     if (!existing) {
+      await createCoreEmbeddingColumnSet(config, incoming);
       const { error: insertError } = await client.from('fqc_embeddings').insert({
         instance_id: instanceId,
         name: incoming.name,
@@ -188,6 +189,7 @@ export async function syncEmbeddingCatalog(config: FlashQueryConfig): Promise<Em
         logger.info(`Embedding catalog: applied changes to embedding entry '${incoming.name}'`);
       }
     }
+    await createCoreEmbeddingColumnSet(config, incoming);
   }
 
   for (const existing of existingRows) {

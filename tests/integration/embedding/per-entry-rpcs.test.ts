@@ -23,6 +23,10 @@ const managedColumns = [
   'embedding_primary_truncated',
 ] as const;
 
+function vectorLiteral(dimensions: number): string {
+  return `[${Array.from({ length: dimensions }, () => '0').join(',')}]`;
+}
+
 function configWithEmbeddings(embeddings: FlashQueryConfig['embeddings']): FlashQueryConfig {
   const config = loadConfig(configPath);
   if (process.env.SUPABASE_URL) config.supabase.url = process.env.SUPABASE_URL;
@@ -45,10 +49,10 @@ async function cleanupPrimarySchema(client: pg.Client): Promise<void> {
   }
 }
 
-async function getFunctionArgumentType(client: pg.Client, functionName: string): Promise<string | undefined> {
+async function getFunctionDefinition(client: pg.Client, functionName: string): Promise<string | undefined> {
   const result = await client.query(
     `
-    SELECT pg_get_function_arguments(p.oid) AS arguments
+    SELECT pg_get_functiondef(p.oid) AS definition
     FROM pg_proc p
     JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public'
@@ -56,7 +60,7 @@ async function getFunctionArgumentType(client: pg.Client, functionName: string):
     `,
     [functionName]
   );
-  return result.rows[0]?.arguments;
+  return result.rows[0]?.definition;
 }
 
 describe.skipIf(!HAS_SUPABASE).sequential('per-entry-rpcs core RPC creation', () => {
@@ -70,11 +74,15 @@ describe.skipIf(!HAS_SUPABASE).sequential('per-entry-rpcs core RPC creation', ()
   }, 90000);
 
   beforeEach(async () => {
+    await client.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]);
+    await client.query('DELETE FROM fqc_memory WHERE instance_id = $1', [TEST_INSTANCE_ID]);
     await cleanupPrimarySchema(client);
     await client.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]);
   }, 60000);
 
   afterAll(async () => {
+    await client?.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
+    await client?.query('DELETE FROM fqc_memory WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await cleanupPrimarySchema(client).catch(() => undefined);
     await client?.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.end().catch(() => undefined);
@@ -90,11 +98,29 @@ describe.skipIf(!HAS_SUPABASE).sequential('per-entry-rpcs core RPC creation', ()
       },
     ]));
 
-    await expect(getFunctionArgumentType(client, 'match_memories_primary')).resolves.toContain(
-      'query_embedding vector(96)'
+    await expect(getFunctionDefinition(client, 'match_memories_primary')).resolves.toContain(
+      'm."embedding_primary" <=> query_embedding'
     );
-    await expect(getFunctionArgumentType(client, 'match_documents_primary')).resolves.toContain(
-      'query_embedding vector(96)'
+    await expect(getFunctionDefinition(client, 'match_documents_primary')).resolves.toContain(
+      'd."embedding_primary" <=> query_embedding'
     );
+
+    await client.query(
+      `INSERT INTO fqc_memory (instance_id, content, embedding_primary)
+       VALUES ($1, 'rpc memory probe', $2::vector)`,
+      [TEST_INSTANCE_ID, vectorLiteral(96)]
+    );
+    await client.query(
+      `INSERT INTO fqc_documents (id, instance_id, path, title, embedding_primary)
+       VALUES (gen_random_uuid(), $1, '/rpc-probe.md', 'RPC Probe', $2::vector)`,
+      [TEST_INSTANCE_ID, vectorLiteral(96)]
+    );
+
+    await expect(
+      client.query(`SELECT * FROM match_memories_primary($1::vector, 0, 1)`, [vectorLiteral(95)])
+    ).rejects.toThrow(/different vector dimensions|expected 96 dimensions/i);
+    await expect(
+      client.query(`SELECT * FROM match_documents_primary($1::vector, 0, 1)`, [vectorLiteral(95)])
+    ).rejects.toThrow(/different vector dimensions|expected 96 dimensions/i);
   });
 });

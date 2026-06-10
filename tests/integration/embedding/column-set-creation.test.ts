@@ -115,7 +115,13 @@ describe.skipIf(!HAS_SUPABASE).sequential('embedding-columns column set creation
   });
 
   it('T-I-024 rolls back per-table DDL when a column-set operation fails', async () => {
-    await client.query(`CREATE INDEX idx_fqc_memory_embedding_primary ON fqc_memory (instance_id)`);
+    await client.query(`
+      ALTER TABLE fqc_memory ADD COLUMN embedding_primary integer;
+      ALTER TABLE fqc_memory ADD COLUMN embedding_primary_model TEXT;
+      ALTER TABLE fqc_memory ADD COLUMN embedding_primary_dimensions INT;
+      ALTER TABLE fqc_memory ADD COLUMN embedding_primary_provider TEXT;
+      ALTER TABLE fqc_memory ADD COLUMN embedding_primary_truncated BOOLEAN;
+    `);
 
     await expect(syncEmbeddingCatalog(configWithEmbeddings([
       {
@@ -123,13 +129,11 @@ describe.skipIf(!HAS_SUPABASE).sequential('embedding-columns column set creation
         dimensions: 96,
         endpoints: [{ providerName: 'openai', model: 'text-embedding-3-small' }],
       },
-    ]))).rejects.toThrow(/embedding_primary|idx_fqc_memory_embedding_primary|column set/i);
+    ]))).rejects.toThrow(/embedding_primary|idx_fqc_memory_embedding_primary|vector_cosine_ops|column set/i);
 
-    for (const table of coreTables) {
-      const columns = await getColumnMetadata(client, table);
-      for (const column of managedColumns) {
-        expect(columns.has(column)).toBe(false);
-      }
+    const documentColumns = await getColumnMetadata(client, 'fqc_documents');
+    for (const column of managedColumns) {
+      expect(documentColumns.has(column)).toBe(false);
     }
   });
 
