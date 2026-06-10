@@ -372,9 +372,20 @@ describe('MCP tool registration metadata', () => {
     expect(registered.has('flashquery_template_weekly_checklist')).toBe(true);
     expect(registered.get('flashquery_template_weekly_checklist')?.config.description).toBe('Weekly checklist');
     expect(registered.get('flashquery_template_weekly_checklist')?.config.inputSchema?.safeParse({ topic: 'planning' }).success).toBe(true);
+    expect(registered.get('flashquery_template_weekly_checklist')?.config.inputSchema?.safeParse({
+      topic: 'planning',
+      _meta: { trace_id: 'cate-trace-1' },
+    }).success).toBe(true);
     expect(registered.get('flashquery_template_weekly_checklist')?.config.inputSchema?.safeParse({}).success).toBe(false);
+    expect(registered.get('flashquery_template_weekly_checklist')?.config.inputSchema?.safeParse({
+      topic: 'planning',
+      unexpected: 'value',
+    }).success).toBe(false);
 
-    const result = await registered.get('flashquery_template_weekly_checklist')?.handler({ topic: 'planning' });
+    const result = await registered.get('flashquery_template_weekly_checklist')?.handler({
+      topic: 'planning',
+      _meta: { trace_id: 'cate-trace-1' },
+    });
     expect(result?.isError).toBeUndefined();
     expect(JSON.parse(result?.content[0]?.text ?? '')).toMatchObject({
       ok: true,
@@ -383,6 +394,9 @@ describe('MCP tool registration metadata', () => {
         content: expect.stringContaining('Checklist for planning'),
       },
     });
+    expect(JSON.parse(result?.content[0]?.text ?? '').result.template_warnings ?? []).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ param: '_meta' })])
+    );
   });
 
   it('refresh manager registers, updates, removes, and only notifies on host template changes', async () => {

@@ -48,7 +48,10 @@ function zodSchemaForJsonSchema(schema: unknown): z.ZodTypeAny {
   if (type === 'array') return z.array(zodSchemaForJsonSchema(schema['items']));
   if (type === 'object') {
     const shape = zodRawShapeForJsonSchema(schema);
-    const objectSchema = z.object(shape);
+    const objectSchema = z.object({
+      ...shape,
+      ...(Object.prototype.hasOwnProperty.call(shape, '_meta') ? {} : { _meta: z.record(z.string(), z.unknown()).optional() }),
+    });
     if (schema['additionalProperties'] === false) {
       return objectSchema.strict();
     }

@@ -423,7 +423,7 @@ class TemplateReferenceError extends Error {
   }
 }
 
-const RESERVED_TEMPLATE_PARAM_KEYS = new Set(['_template', '_items', '_separator']);
+const RESERVED_TEMPLATE_PARAM_KEYS = new Set(['_template', '_items', '_separator', '_meta']);
 
 export function isTemplateDocument(result: Record<string, unknown>): boolean {
   const frontmatter = result.frontmatter;
