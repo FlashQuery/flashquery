@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
 import type { FlashQueryConfig } from '../../src/config/types.js';
 import { getEmbeddingDimensions } from '../../src/embedding/dimensions.js';
+import { createEmbeddingProvider } from '../../src/embedding/provider.js';
 
 function makeConfig(overrides: Partial<FlashQueryConfig>): FlashQueryConfig {
   return {
@@ -85,5 +88,37 @@ describe('embedding dimension policy', () => {
     const config = makeConfig({});
 
     expect(getEmbeddingDimensions(config)).toBe(1536);
+  });
+});
+
+describe('embedding API request dimensions policy', () => {
+  it('T-U-012 OpenAI-compatible request JSON never includes dimensions', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: [{ embedding: [0.1, 0.2, 0.3] }] }),
+    } as unknown as Response);
+
+    const provider = createEmbeddingProvider({
+      provider: 'openai',
+      model: 'text-embedding-3-small',
+      apiKey: 'sk-test',
+      dimensions: 3,
+    });
+    await provider.embed('hello');
+
+    const [, options] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(options.body as string)).toEqual({
+      model: 'text-embedding-3-small',
+      input: 'hello',
+    });
+    expect(options.body as string).not.toContain('dimensions');
+  });
+
+  it('T-U-013 no includeDimensions heuristic source path remains under src', () => {
+    const srcRoot = join(process.cwd(), 'src');
+    const providerSource = readFileSync(join(srcRoot, 'embedding/provider.ts'), 'utf8');
+
+    expect(providerSource).not.toContain('includeDimensions');
   });
 });
