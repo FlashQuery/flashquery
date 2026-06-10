@@ -413,3 +413,24 @@ llm:
     #   tools:
     #     - tier:read-only
     #   tool_search: disabled
+
+
+# ─── Embedding Catalog ──────────────────────────────────────────────────────
+# Native-width embedding entries. `dimensions` sizes local pgvector columns; it
+# is never sent to provider APIs as a dimensions-reduction request parameter.
+
+embeddings:
+  - name: primary
+    dimensions: 768
+    endpoints:
+      - provider_name: local-ollama
+        model: nomic-embed-text
+        rate_limit:
+          min_delay_ms: 100
+
+  # OpenAI native-width example:
+  # - name: openai_small
+  #   dimensions: 1536
+  #   endpoints:
+  #     - provider_name: openai
+  #       model: text-embedding-3-small

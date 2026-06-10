@@ -1,7 +1,7 @@
 import type { FlashQueryConfig } from '../config/types.js';
 import { logger } from '../logging/logger.js';
 import type { LlmClient } from '../llm/client.js';
-import { getEmbeddingDimensions } from './dimensions.js';
+import { getLegacyEmbeddingDimensions } from './legacy-dimensions.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EmbeddingProvider interface
@@ -295,7 +295,7 @@ export function createEmbeddingProvider(config: NonNullable<FlashQueryConfig['em
 export let embeddingProvider: EmbeddingProvider;
 
 export function initEmbedding(config: FlashQueryConfig, llmClient?: LlmClient): void {
-  const dimensions = getEmbeddingDimensions(config);
+  const dimensions = getLegacyEmbeddingDimensions(config);
 
   // Purpose path (D-03, D-04, D-05, D-06): check config.llm.purposes FIRST.
   // Guard with `llmClient` truthiness BEFORE calling getModelForPurpose.

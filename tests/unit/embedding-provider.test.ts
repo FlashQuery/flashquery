@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { FlashQueryConfig } from '../../src/config/types.js';
-import { getEmbeddingDimensions } from '../../src/embedding/dimensions.js';
+import { getLegacyEmbeddingDimensions } from '../../src/embedding/legacy-dimensions.js';
 import { createEmbeddingProvider } from '../../src/embedding/provider.js';
 
 function makeConfig(overrides: Partial<FlashQueryConfig>): FlashQueryConfig {
@@ -69,7 +69,7 @@ describe('embedding dimension policy', () => {
       },
     });
 
-    expect(getEmbeddingDimensions(config)).toBe(3072);
+    expect(getLegacyEmbeddingDimensions(config)).toBe(3072);
   });
 
   it('falls back to legacy embedding dimensions when no LLM embedding purpose is configured', () => {
@@ -81,13 +81,13 @@ describe('embedding dimension policy', () => {
       },
     });
 
-    expect(getEmbeddingDimensions(config)).toBe(768);
+    expect(getLegacyEmbeddingDimensions(config)).toBe(768);
   });
 
   it('falls back to 1536 when neither LLM model nor legacy dimensions are configured', () => {
     const config = makeConfig({});
 
-    expect(getEmbeddingDimensions(config)).toBe(1536);
+    expect(getLegacyEmbeddingDimensions(config)).toBe(1536);
   });
 });
 
