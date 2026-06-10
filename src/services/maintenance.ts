@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { logger } from '../logging/logger.js';
-import type { ErrorEnvelope, MaintenanceActionResult } from '../mcp/utils/response-formats.js';
+import type { ErrorEnvelope, HostTemplateRefreshSummary, MaintenanceActionResult } from '../mcp/utils/response-formats.js';
 import { maintenanceActionResult } from '../mcp/utils/response-formats.js';
 import { getIsShuttingDown } from '../server/shutdown-state.js';
 import { invalidateReconciliationCache } from './plugin-reconciliation.js';
@@ -51,10 +51,18 @@ interface MaintenanceJobRecord extends MaintenanceStatusPayload {
 
 let maintenanceInProgress = false;
 const jobs = new Map<string, MaintenanceJobRecord>();
+let hostTemplateRefreshHook: ((config: FlashQueryConfig) => Promise<HostTemplateRefreshSummary>) | undefined;
+
+export function setHostTemplateRefreshHook(
+  hook: ((config: FlashQueryConfig) => Promise<HostTemplateRefreshSummary>) | undefined
+): void {
+  hostTemplateRefreshHook = hook;
+}
 
 export function resetMaintenanceStateForTests(): void {
   maintenanceInProgress = false;
   jobs.clear();
+  hostTemplateRefreshHook = undefined;
 }
 
 export async function maintainVault(
@@ -222,6 +230,7 @@ async function executeActions(
 
     const result = await runScanOnce(config);
     invalidateReconciliationCache();
+    const hostTemplateRefresh = await refreshHostTemplatesAfterSync(config);
     const finishedAt = new Date().toISOString();
     results.push(maintenanceActionResult({
       action: 'sync',
@@ -230,9 +239,17 @@ async function executeActions(
       dry_run: false,
       counts: scanCounts(result),
       warnings: scanWarnings(result),
+      ...(hostTemplateRefresh === undefined ? {} : { host_template_refresh: hostTemplateRefresh }),
     }));
   }
   return results;
+}
+
+async function refreshHostTemplatesAfterSync(
+  config: FlashQueryConfig
+): Promise<HostTemplateRefreshSummary | undefined> {
+  if (hostTemplateRefreshHook === undefined) return undefined;
+  return await hostTemplateRefreshHook(config);
 }
 
 function createJob(actions: Array<'sync' | 'repair'>, dryRun: boolean): MaintenanceJobRecord {

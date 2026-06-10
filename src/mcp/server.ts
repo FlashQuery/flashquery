@@ -23,7 +23,12 @@ import { registerLlmUsageTools } from './tools/llm-usage.js';
 import { registerMacroTools } from './tools/macro.js';
 import { createBroker, type Broker } from '../services/mcp-broker.js';
 import { registerHostBrokeredTools } from './host-brokered-tools.js';
-import { registerHostTemplateTools } from './host-template-tools.js';
+import {
+  bindHostTemplateToolSearchService,
+  refreshHostTemplateToolsForAllSessions,
+  registerHostTemplateTools,
+  releaseHostTemplateToolsForServer,
+} from './host-template-tools.js';
 import { getNativeToolCatalog, wrapServerWithToolCatalog, type RegisterToolFunction } from './tool-catalog.js';
 import { validateAndCacheNativeToolSchemas, type NativeToolHandler } from '../llm/tool-registry.js';
 import { dispatchNativeToolCore } from '../llm/native-tool-core.js';
@@ -31,6 +36,7 @@ import { getResolvedHostToolExposure, type FlashQueryConfig } from '../config/lo
 import { assertRegisteredToolsHaveToolMeta, loadToolMetaSync } from '../services/tool-search/tool-meta.js';
 import { ToolSearchService } from '../services/tool-search/tool-search-service.js';
 import { createSearchToolsHandler } from '../services/tool-search/search-tools-handler.js';
+import { setHostTemplateRefreshHook } from '../services/maintenance.js';
 import { createMcpRequestLifecycle, type McpRequestLifecycle } from './request-lifecycle.js';
 import { registerMcpRequestLifecycle, unregisterMcpServerForShutdown } from './request-lifecycle-registry.js';
 export { getMcpRequestLifecycleForServer } from './request-lifecycle-registry.js';
@@ -654,6 +660,7 @@ export function createMcpServer(config: FlashQueryConfig, version: string, optio
     traceIdProvider: options.hostTraceIdProvider,
   });
   hostToolSearchServices.set(server, hostToolSearchService);
+  bindHostTemplateToolSearchService(server, hostToolSearchService);
   hostToolSearchInitializers.set(
     server,
     (async () => {
@@ -701,6 +708,7 @@ export async function initMCP(
   }
 
   const transportType = transportOverride ?? config.mcp.transport;
+  setHostTemplateRefreshHook(refreshHostTemplateToolsForAllSessions);
 
   logger.info('Correlation ID tracking enabled — all MCP requests logged with REQ:uuid');
 
@@ -802,6 +810,7 @@ export async function initMCP(
             unregisterMcpServerForShutdown(server);
             hostToolSearchServices.delete(server);
             hostToolSearchInitializers.delete(server);
+            releaseHostTemplateToolsForServer(server);
           };
 
           await server.connect(transport);

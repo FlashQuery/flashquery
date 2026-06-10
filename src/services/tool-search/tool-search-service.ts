@@ -31,7 +31,15 @@ export interface HostToolSearchBuildInput extends Omit<ToolSearchBuildInput, 'co
 
 type PresentationMetadata =
   | { kind: 'native'; helpHint: string; argSummary: ToolArgSummary[] }
-  | { kind: 'brokered'; argSummary: ToolArgSummary[] };
+  | { kind: 'brokered'; argSummary: ToolArgSummary[] }
+  | { kind: 'template'; argSummary: ToolArgSummary[]; displayDescription: string };
+
+export interface TemplateSearchTool {
+  name: string;
+  templatePath: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
 
 interface BuildArtifacts {
   documents: ToolSearchDocument[];
@@ -85,6 +93,18 @@ function brokeredDocument(tool: BrokeredTool): ToolSearchDocument {
     tool: tool.toolName,
     registry_key: tool.registryKey,
     description: tool.description ?? tool.upstreamDescription ?? '',
+    argNames: argSummary.map((arg) => arg.name),
+    arg_summary: argSummary,
+  };
+}
+
+function templateDocument(tool: TemplateSearchTool): ToolSearchDocument {
+  const argSummary = summarizeJsonSchema(tool.parameters);
+  return {
+    server: FQ_SEARCH_SERVER,
+    tool: tool.name,
+    registry_key: tool.name,
+    description: `${tool.description}\n${tool.name}\n${tool.templatePath}\n${argSummary.map((arg) => `${arg.name} ${arg.description}`).join('\n')}`,
     argNames: argSummary.map((arg) => arg.name),
     arg_summary: argSummary,
   };
@@ -160,6 +180,30 @@ export class ToolSearchService {
     void this.#indexer.removeTools(keys);
   }
 
+  addTemplateTools(tools: TemplateSearchTool[]): void {
+    if (tools.length === 0) return;
+    const documents: ToolSearchDocument[] = [];
+    for (const tool of tools) {
+      const document = templateDocument(tool);
+      documents.push(document);
+      this.#metadata.set(document.registry_key, {
+        kind: 'template',
+        argSummary: document.arg_summary ?? [],
+        displayDescription: tool.description,
+      });
+    }
+    void this.#indexer.addTools(documents);
+    this.#built = true;
+  }
+
+  removeTemplateTools(keys: string[]): void {
+    if (keys.length === 0) return;
+    for (const key of keys) {
+      this.#metadata.delete(key);
+    }
+    void this.#indexer.removeTools(keys);
+  }
+
   getStats(): ToolSearchStats {
     return this.#indexer.getStats();
   }
@@ -176,7 +220,7 @@ export class ToolSearchService {
         server: result.server,
         tool: result.tool,
         registry_key: result.registry_key,
-        description: result.description,
+        description: metadata?.kind === 'template' ? metadata.displayDescription : result.description,
         arg_summary: metadata?.argSummary ?? result.arg_summary ?? [],
         score: result.score,
         normalizedScore: result.normalizedScore,

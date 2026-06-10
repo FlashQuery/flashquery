@@ -226,6 +226,8 @@ const LoggingSchema = z
 const TemplatesSchema = z
   .object({
     default_access: z.enum(['permissive', 'restrictive']).default('permissive'),
+    host_access: z.enum(['permissive', 'restrictive']).default('permissive'),
+    host_templates: z.array(z.string()).default([]),
   })
   .strict()
   .prefault({});

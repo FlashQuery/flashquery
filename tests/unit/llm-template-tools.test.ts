@@ -234,6 +234,131 @@ describe('ATL-U-15 template masquerade name generation and discovery contracts',
     expect([...registry.templateReverseMap.keys()]).not.toContain('research_skill');
   });
 
+  it('uses host_templates as the restrictive binding source only for the __host__ purpose', async () => {
+    const { assembleTemplateToolRegistry } = await loadTemplateTools();
+    const vaultPath = await mkdtemp(join(tmpdir(), 'fqc-host-template-bindings-'));
+    await writeTemplate(vaultPath, 'Templates/Host.md', {
+      fq_template: true,
+      fq_expose_as_tool: true,
+      fq_desc: 'Host-visible template',
+    }, 'Host');
+    await writeTemplate(vaultPath, 'Templates/Delegated.md', {
+      fq_template: true,
+      fq_expose_as_tool: true,
+      fq_desc: 'Delegated-visible template',
+    }, 'Delegated');
+
+    const config = {
+      instance: { id: 'unit', vault: { path: vaultPath, markdownExtensions: ['.md'] } },
+      templates: {
+        defaultAccess: 'restrictive',
+        hostAccess: 'restrictive',
+        hostTemplates: ['./Templates/Host.md'],
+      },
+      llm: {
+        purposes: [{
+          name: 'researcher',
+          description: 'Researcher',
+          models: ['fast'],
+          templates: ['./Templates/Delegated.md'],
+        }],
+      },
+    };
+
+    const hostRegistry = await assembleTemplateToolRegistry({ config, purposeName: '__host__' });
+    const delegatedRegistry = await assembleTemplateToolRegistry({ config, purposeName: 'researcher' });
+
+    expect(hostRegistry.templateTools.map((tool) => tool.templatePath)).toEqual(['Templates/Host.md']);
+    expect(delegatedRegistry.templateTools.map((tool) => tool.templatePath)).toEqual(['Templates/Delegated.md']);
+  });
+
+  it('honors permissive host_access even when delegated default_access is restrictive', async () => {
+    const { assembleTemplateToolRegistry } = await loadTemplateTools();
+    const vaultPath = await mkdtemp(join(tmpdir(), 'fqc-host-template-permissive-'));
+    await writeTemplate(vaultPath, 'Templates/One.md', {
+      fq_template: true,
+      fq_expose_as_tool: true,
+      fq_desc: 'First host template',
+    }, 'One');
+    await writeTemplate(vaultPath, 'Templates/Two.md', {
+      fq_template: true,
+      fq_expose_as_tool: true,
+      fq_desc: 'Second host template',
+    }, 'Two');
+
+    const registry = await assembleTemplateToolRegistry({
+      config: {
+        instance: { id: 'unit', vault: { path: vaultPath, markdownExtensions: ['.md'] } },
+        templates: {
+          defaultAccess: 'restrictive',
+          hostAccess: 'permissive',
+          hostTemplates: [],
+        },
+        llm: { purposes: [{ name: 'researcher', description: 'Researcher', models: ['fast'] }] },
+      },
+      purposeName: '__host__',
+    });
+
+    expect(registry.templateTools.map((tool) => tool.templatePath).sort()).toEqual([
+      'Templates/One.md',
+      'Templates/Two.md',
+    ]);
+  });
+
+  it('returns no host templates for restrictive host_access with no host_templates', async () => {
+    const { assembleTemplateToolRegistry } = await loadTemplateTools();
+    const vaultPath = await mkdtemp(join(tmpdir(), 'fqc-host-template-empty-restrictive-'));
+    await writeTemplate(vaultPath, 'Templates/Hidden.md', {
+      fq_template: true,
+      fq_expose_as_tool: true,
+      fq_desc: 'Hidden host template',
+    }, 'Hidden');
+
+    const registry = await assembleTemplateToolRegistry({
+      config: {
+        instance: { id: 'unit', vault: { path: vaultPath, markdownExtensions: ['.md'] } },
+        templates: {
+          defaultAccess: 'permissive',
+          hostAccess: 'restrictive',
+          hostTemplates: [],
+        },
+        llm: { purposes: [{ name: 'researcher', description: 'Researcher', models: ['fast'] }] },
+      },
+      purposeName: '__host__',
+    });
+
+    expect(registry.templateTools).toEqual([]);
+  });
+
+  it('truncates overlong fq_desc metadata and reports a warning without body content', async () => {
+    const { assembleTemplateToolRegistry } = await loadTemplateTools();
+    const vaultPath = await mkdtemp(join(tmpdir(), 'fqc-template-desc-bound-'));
+    const overlongDescription = 'A'.repeat(1100);
+    await writeTemplate(vaultPath, 'Templates/Verbose.md', {
+      fq_template: true,
+      fq_expose_as_tool: true,
+      fq_desc: overlongDescription,
+    }, 'SECRET BODY CONTENT');
+
+    const registry = await assembleTemplateToolRegistry({
+      config: {
+        instance: { id: 'unit', vault: { path: vaultPath, markdownExtensions: ['.md'] } },
+        templates: { defaultAccess: 'permissive' },
+        llm: { purposes: [{ name: 'researcher', description: 'Researcher', models: ['fast'] }] },
+      },
+      purposeName: 'researcher',
+    });
+
+    expect((registry.templateTools[0].description as string).length).toBe(1024);
+    expect(registry.diagnostics.template_tool_warnings).toEqual([
+      expect.objectContaining({
+        template_path: 'Templates/Verbose.md',
+        code: 'description_truncated',
+      }),
+    ]);
+    expect(JSON.stringify(registry.diagnostics)).not.toContain('SECRET BODY CONTENT');
+  });
+
   it('keeps optional template params nullable under strict provider schemas', async () => {
     const { assembleTemplateToolRegistry } = await loadTemplateTools();
     const vaultPath = await mkdtemp(join(tmpdir(), 'fqc-template-tools-strict-'));

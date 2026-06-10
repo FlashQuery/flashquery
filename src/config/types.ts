@@ -27,7 +27,11 @@ export interface FlashQueryConfig {
     }>;
   }>;
   host: { mcpServers: string[]; toolSearch: 'enabled' | 'disabled' };
-  templates?: { defaultAccess: 'permissive' | 'restrictive' };
+  templates?: {
+    defaultAccess: 'permissive' | 'restrictive';
+    hostAccess: 'permissive' | 'restrictive';
+    hostTemplates: string[];
+  };
   macro: { defaultTimeoutMs: number };
   llm?: {
     providers: Array<{ name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; apiKey?: string; local?: boolean; timeoutMs?: number }>;

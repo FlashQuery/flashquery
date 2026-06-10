@@ -6,6 +6,7 @@ import {
   getMaintenanceJobStatus,
   maintainVault,
   resetMaintenanceStateForTests,
+  setHostTemplateRefreshHook,
 } from '../../src/services/maintenance.js';
 import { setShuttingDown } from '../../src/server/shutdown-state.js';
 
@@ -77,6 +78,7 @@ describe('maintainVault service contract', () => {
     vi.clearAllMocks();
     setShuttingDown(false);
     resetMaintenanceStateForTests();
+    setHostTemplateRefreshHook(undefined);
     scannerMocks.runScanOnce.mockResolvedValue({
       hashMismatches: 3,
       statusMismatches: 1,
@@ -327,6 +329,98 @@ describe('maintainVault service contract', () => {
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('embedding_status');
     expect(serialized).not.toContain('embeds_awaited');
+  });
+
+  it('runs the host template refresh hook after successful foreground sync and includes the summary', async () => {
+    const refreshSummary = {
+      attempted: true,
+      sessions: 1,
+      added: [{ tool: 'flashquery_template_new', path: 'Templates/New.md' }],
+      removed: [],
+      updated: [],
+      unchanged: 0,
+      skipped: [],
+      warnings: [],
+      conflicts: [],
+    };
+    const hook = vi.fn(async () => refreshSummary);
+    setHostTemplateRefreshHook(hook);
+
+    const result = await maintainVault(makeConfig(), { action: 'sync' });
+
+    expect(hook).toHaveBeenCalledWith(makeConfig());
+    expect(result).toMatchObject({
+      ok: true,
+      payload: {
+        actions: [
+          {
+            action: 'sync',
+            host_template_refresh: refreshSummary,
+          },
+        ],
+      },
+    });
+  });
+
+  it('does not run the host template refresh hook for repair-only maintenance', async () => {
+    const hook = vi.fn(async () => ({
+      attempted: true,
+      sessions: 1,
+      added: [],
+      removed: [],
+      updated: [],
+      unchanged: 0,
+      skipped: [],
+      warnings: [],
+      conflicts: [],
+    }));
+    setHostTemplateRefreshHook(hook);
+
+    const result = await maintainVault(makeConfig(), { action: 'repair' });
+
+    expect(result.ok).toBe(true);
+    expect(hook).not.toHaveBeenCalled();
+  });
+
+  it('runs the host template refresh hook when a background sync job completes', async () => {
+    const hook = vi.fn(async () => ({
+      attempted: true,
+      sessions: 2,
+      added: [],
+      removed: [{ tool: 'flashquery_template_old', path: 'Templates/Old.md' }],
+      updated: [],
+      unchanged: 1,
+      skipped: [],
+      warnings: [],
+      conflicts: [],
+    }));
+    setHostTemplateRefreshHook(hook);
+
+    const accepted = await maintainVault(makeConfig(), { action: 'sync', background: true });
+    expect(accepted.ok).toBe(true);
+    if (!accepted.ok) throw new Error('background sync should be accepted');
+
+    await vi.waitFor(() => {
+      const status = getMaintenanceJobStatus(accepted.payload.job_id);
+      expect(status.ok && status.payload.status).toBe('completed');
+    });
+    const status = getMaintenanceJobStatus(accepted.payload.job_id);
+
+    expect(hook).toHaveBeenCalledTimes(1);
+    expect(status).toMatchObject({
+      ok: true,
+      payload: {
+        actions: [
+          {
+            action: 'sync',
+            host_template_refresh: {
+              sessions: 2,
+              removed: [{ tool: 'flashquery_template_old', path: 'Templates/Old.md' }],
+            },
+          },
+        ],
+      },
+    });
   });
 });
 

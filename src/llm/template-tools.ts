@@ -125,6 +125,7 @@ export interface TemplateCandidateBinding {
 
 const TEMPLATE_TOOL_PREFIX = 'flashquery';
 const DEFAULT_NAMESPACE = 'template';
+const MAX_TEMPLATE_TOOL_DESCRIPTION_LENGTH = 1024;
 const NAMESPACE_PATTERN = /^[a-z][a-z0-9_]*$/;
 const TOOL_NAME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 // Contract markers: generated tools are `flashquery_${namespace}_${slug}` and
@@ -327,12 +328,18 @@ export function collectTemplateRegistryBoundPaths(input: {
   purposeName: string;
   runtimeBindings?: TemplateToolRuntimeBinding[];
 }): TemplateCandidateBinding[] {
-  const purpose = input.config.llm?.purposes.find((candidate) =>
-    candidate.name.toLowerCase() === input.purposeName.toLowerCase()
-  );
   const byPath = new Map<string, string>();
-  for (const path of purpose?.templates ?? []) {
-    byPath.set(normalizeTemplatePath(path), 'yaml');
+  if (input.purposeName === '__host__') {
+    for (const path of input.config.templates?.hostTemplates ?? []) {
+      byPath.set(normalizeTemplatePath(path), 'yaml');
+    }
+  } else {
+    const purpose = input.config.llm?.purposes.find((candidate) =>
+      candidate.name.toLowerCase() === input.purposeName.toLowerCase()
+    );
+    for (const path of purpose?.templates ?? []) {
+      byPath.set(normalizeTemplatePath(path), 'yaml');
+    }
   }
   for (const binding of input.runtimeBindings ?? []) {
     if (bindingPurpose(binding)?.toLowerCase() !== input.purposeName.toLowerCase()) continue;
@@ -482,7 +489,9 @@ export async function assembleTemplateToolRegistry(
     ? optionsOrConfig as AssembleTemplateToolRegistryOptions
     : { ...(maybeOptions ?? {}), config: optionsOrConfig as FlashQueryConfig, purposeName: purposeName ?? '' };
   const diagnostics = emptyDiagnostics();
-  const access = options.config.templates?.defaultAccess ?? 'permissive';
+  const access = options.purposeName === '__host__'
+    ? options.config.templates?.hostAccess ?? 'permissive'
+    : options.config.templates?.defaultAccess ?? 'permissive';
   const bound = collectTemplateRegistryBoundPaths(options);
   const boundByPath = new Map(bound.map((entry) => [entry.templatePath, entry.source]));
   const candidates = options.templateCandidates ?? await loadTemplateCandidatesForRegistry({
@@ -519,7 +528,18 @@ export async function assembleTemplateToolRegistry(
       });
       continue;
     }
-    const description = candidate.frontmatter.fq_desc as string;
+    const rawDescription = candidate.frontmatter.fq_desc as string;
+    const description = rawDescription.length > MAX_TEMPLATE_TOOL_DESCRIPTION_LENGTH
+      ? rawDescription.slice(0, MAX_TEMPLATE_TOOL_DESCRIPTION_LENGTH)
+      : rawDescription;
+    if (rawDescription.length > MAX_TEMPLATE_TOOL_DESCRIPTION_LENGTH) {
+      diagnostics.template_tool_warnings.push({
+        template_path: candidate.templatePath,
+        code: 'description_truncated',
+        message: `Template fq_desc exceeds ${MAX_TEMPLATE_TOOL_DESCRIPTION_LENGTH} characters and was truncated for tool metadata`,
+        ...(source === undefined ? {} : { source }),
+      });
+    }
     const namespace = typeof candidate.frontmatter.fq_namespace === 'string'
       ? candidate.frontmatter.fq_namespace
       : DEFAULT_NAMESPACE;

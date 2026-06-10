@@ -816,6 +816,40 @@ llm:
     }
   });
 
+  it('defaults host template exposure config while preserving strict templates validation', () => {
+    const tmpFile = join(tmpdir(), `fqc-host-template-config-defaults-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    writeFileSync(tmpFile, BASE_CONFIG_YAML);
+    try {
+      expect(loadConfig(tmpFile).templates).toMatchObject({
+        defaultAccess: 'permissive',
+        hostAccess: 'permissive',
+        hostTemplates: [],
+      });
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('loads host_access and host_templates from templates config', () => {
+    const tmpFile = join(tmpdir(), `fqc-host-template-config-values-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+templates:
+  host_access: restrictive
+  host_templates:
+    - ./Templates/Allowed.md
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(loadConfig(tmpFile).templates).toMatchObject({
+        defaultAccess: 'permissive',
+        hostAccess: 'restrictive',
+        hostTemplates: ['./Templates/Allowed.md'],
+      });
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
   it('[ATL-U-08] accepts only permissive or restrictive for templates.default_access', () => {
     const tmpFile = join(tmpdir(), `fqc-atl-u08-templates-invalid-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `

@@ -110,6 +110,21 @@ export interface MaintenanceActionResult {
     archived: number;
   };
   warnings?: WarningCode[];
+  host_template_refresh?: HostTemplateRefreshSummary;
+}
+
+export interface HostTemplateRefreshSummary {
+  attempted: boolean;
+  sessions: number;
+  added: Array<{ tool: string; path: string }>;
+  removed: Array<{ tool: string; path: string }>;
+  updated: Array<{ tool: string; path: string }>;
+  unchanged: number;
+  skipped: Array<{ path: string; code: string; message: string }>;
+  warnings: Array<{ path: string; code: string; message: string }>;
+  conflicts: Array<{ name: string; paths: string[] }>;
+  renames?: Array<{ from: string; to: string; path: string }>;
+  session_failures?: Array<{ session: string; message: string }>;
 }
 
 export interface MemoryIdentificationInput {
@@ -336,6 +351,7 @@ export function maintenanceActionResult(input: MaintenanceActionResult): Mainten
       archived: input.counts.archived,
     },
     ...(input.warnings === undefined ? {} : { warnings: input.warnings }),
+    ...(input.host_template_refresh === undefined ? {} : { host_template_refresh: input.host_template_refresh }),
   };
 }
 

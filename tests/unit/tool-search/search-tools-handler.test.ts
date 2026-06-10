@@ -238,4 +238,66 @@ describe('fq.search_tools handler', () => {
     sink.removeTools(['basic__echo']);
     expect(service.search('repeat diagnostics', 5)).toEqual([]);
   });
+
+  it('adds, updates, and removes host template documents', () => {
+    const service = ToolSearchService.createEmpty();
+
+    service.addTemplateTools([
+      {
+        name: 'flashquery_skill_research_brief',
+        templatePath: 'Templates/Research Brief.md',
+        description: 'Draft a research brief for a topic.',
+        parameters: {
+          type: 'object',
+          properties: {
+            topic: { type: 'string', description: 'Research topic.' },
+          },
+          required: ['topic'],
+          additionalProperties: false,
+        },
+      },
+    ]);
+
+    expect(service.search('research topic brief', 5)).toEqual([
+      expect.objectContaining({
+        server: 'flashquery',
+        tool: 'flashquery_skill_research_brief',
+        registry_key: 'flashquery_skill_research_brief',
+        description: 'Draft a research brief for a topic.',
+        has_help: false,
+        arg_summary: [
+          { name: 'topic', description: 'Research topic.', required: true },
+        ],
+      }),
+    ]);
+
+    service.addTemplateTools([
+      {
+        name: 'flashquery_skill_research_brief',
+        templatePath: 'Templates/Research Brief.md',
+        description: 'Create a concise executive research brief.',
+        parameters: {
+          type: 'object',
+          properties: {
+            audience: { type: 'string', description: 'Target audience.' },
+          },
+          required: ['audience'],
+          additionalProperties: false,
+        },
+      },
+    ]);
+
+    expect(service.search('executive audience', 5)).toEqual([
+      expect.objectContaining({
+        registry_key: 'flashquery_skill_research_brief',
+        description: 'Create a concise executive research brief.',
+        arg_summary: [
+          { name: 'audience', description: 'Target audience.', required: true },
+        ],
+      }),
+    ]);
+
+    service.removeTemplateTools(['flashquery_skill_research_brief']);
+    expect(service.search('executive audience', 5)).toEqual([]);
+  });
 });

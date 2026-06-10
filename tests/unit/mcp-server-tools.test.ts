@@ -1,13 +1,22 @@
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { createMcpServer } from '../../src/mcp/server.js';
 import { registerHostBrokeredTools } from '../../src/mcp/host-brokered-tools.js';
-import { registerHostTemplateTools } from '../../src/mcp/host-template-tools.js';
+import {
+  HostTemplateRegistryManager,
+  refreshHostTemplateToolsForAllSessions,
+  registerHostTemplateTools,
+} from '../../src/mcp/host-template-tools.js';
+import { createMcpRequestLifecycle } from '../../src/mcp/request-lifecycle.js';
+import {
+  registerMcpRequestLifecycle,
+  unregisterMcpServerForShutdown,
+} from '../../src/mcp/request-lifecycle-registry.js';
 import { registerMemoryTools } from '../../src/mcp/tools/memory.js';
 import { registerDocumentTools } from '../../src/mcp/tools/documents.js';
 import { registerPluginTools } from '../../src/mcp/tools/plugins.js';
@@ -21,6 +30,7 @@ import { registerLlmUsageTools } from '../../src/mcp/tools/llm-usage.js';
 import { registerMacroTools } from '../../src/mcp/tools/macro.js';
 import { getNativeToolCatalog, wrapServerWithToolCatalog } from '../../src/mcp/tool-catalog.js';
 import { initLogger } from '../../src/logging/logger.js';
+import { logger } from '../../src/logging/logger.js';
 import {
   assertRegisteredToolsHaveMetadata,
   requireToolMetadata,
@@ -53,6 +63,18 @@ const mockConfig: FlashQueryConfig = {
 };
 
 initLogger(mockConfig);
+
+const lifecycleServers: McpServer[] = [];
+
+afterEach(() => {
+  while (lifecycleServers.length > 0) {
+    const server = lifecycleServers.pop();
+    if (server !== undefined) {
+      unregisterMcpServerForShutdown(server);
+    }
+  }
+  vi.restoreAllMocks();
+});
 
 function makeCatalogServer(): McpServer {
   return wrapServerWithToolCatalog(new McpServer({ name: 'test', version: '0.1.0' }));
@@ -140,6 +162,11 @@ function makeCapturingServer(): McpServer & {
   return {
     registerTool: vi.fn(),
   } as unknown as McpServer & { registerTool: ReturnType<typeof vi.fn> };
+}
+
+function trackLifecycleServer(server: McpServer): void {
+  registerMcpRequestLifecycle(server, createMcpRequestLifecycle());
+  lifecycleServers.push(server);
 }
 
 describe('MCP tool registration metadata', () => {
@@ -343,6 +370,255 @@ describe('MCP tool registration metadata', () => {
         content: expect.stringContaining('Checklist for planning'),
       },
     });
+  });
+
+  it('refresh manager registers, updates, removes, and only notifies on host template changes', async () => {
+    const vaultRoot = await mkdtemp(join(tmpdir(), 'fq-host-template-refresh-'));
+    await mkdir(join(vaultRoot, 'Templates'), { recursive: true });
+    const templatePath = join(vaultRoot, 'Templates', 'Weekly Checklist.md');
+    await writeFile(
+      templatePath,
+      [
+        '---',
+        'fq_template: true',
+        'fq_expose_as_tool: true',
+        'fq_desc: Weekly checklist v1',
+        'fq_params:',
+        '  topic:',
+        '    type: string',
+        '    required: true',
+        '---',
+        '',
+        'Checklist for {{topic}}',
+      ].join('\n'),
+      'utf8'
+    );
+    const removeFns: Array<ReturnType<typeof vi.fn>> = [];
+    const registered = new Map<string, { config: { description?: string } }>();
+    const server = {
+      registerTool: vi.fn((name: string, config: unknown) => {
+        registered.set(name, { config: config as never });
+        const remove = vi.fn(() => registered.delete(name));
+        removeFns.push(remove);
+        return { remove };
+      }),
+      sendToolListChanged: vi.fn(async () => undefined),
+    } as unknown as McpServer;
+    const config = {
+      ...mockConfig,
+      instance: {
+        id: 'host-template-refresh-test',
+        name: 'Host Template Refresh Test',
+        vault: { path: vaultRoot, markdownExtensions: ['.md'] },
+      },
+      templates: { defaultAccess: 'permissive', hostAccess: 'permissive', hostTemplates: [] },
+    } as FlashQueryConfig;
+    delete (config as Partial<FlashQueryConfig>).supabase;
+    const manager = new HostTemplateRegistryManager({ nativeToolCatalog: [] });
+
+    const first = await manager.refreshServer(server, config);
+    const second = await manager.refreshServer(server, config);
+    await writeFile(
+      templatePath,
+      [
+        '---',
+        'fq_template: true',
+        'fq_expose_as_tool: true',
+        'fq_desc: Weekly checklist v2',
+        '---',
+        '',
+        'Checklist body changed without body metadata exposure',
+      ].join('\n'),
+      'utf8'
+    );
+    const third = await manager.refreshServer(server, config);
+    await writeFile(
+      templatePath,
+      [
+        '---',
+        'fq_template: true',
+        'fq_expose_as_tool: false',
+        'fq_desc: Weekly checklist v2',
+        '---',
+        '',
+        'Disabled',
+      ].join('\n'),
+      'utf8'
+    );
+    const fourth = await manager.refreshServer(server, config);
+
+    expect(first).toMatchObject({ attempted: true, sessions: 1, added: [{ tool: 'flashquery_template_weekly_checklist', path: 'Templates/Weekly Checklist.md' }] });
+    expect(second).toMatchObject({ attempted: true, sessions: 1, added: [], removed: [], updated: [], unchanged: 1 });
+    expect(third).toMatchObject({ updated: [{ tool: 'flashquery_template_weekly_checklist', path: 'Templates/Weekly Checklist.md' }] });
+    expect(fourth).toMatchObject({ removed: [{ tool: 'flashquery_template_weekly_checklist', path: 'Templates/Weekly Checklist.md' }] });
+    expect(server.registerTool).toHaveBeenCalledTimes(2);
+    expect(removeFns.reduce((count, remove) => count + remove.mock.calls.length, 0)).toBe(2);
+    expect(server.sendToolListChanged).toHaveBeenCalledTimes(3);
+    expect(registered.has('flashquery_template_weekly_checklist')).toBe(false);
+    expect(JSON.stringify(first)).not.toContain('Checklist for');
+    expect(JSON.stringify(third)).not.toContain('body changed');
+  });
+
+  it('refreshes every active session with that session startup manager state', async () => {
+    const vaultRoot = await mkdtemp(join(tmpdir(), 'fq-host-template-multi-session-'));
+    await mkdir(join(vaultRoot, 'Templates'), { recursive: true });
+    const templatePath = join(vaultRoot, 'Templates', 'Weekly Checklist.md');
+    await writeFile(
+      templatePath,
+      [
+        '---',
+        'fq_template: true',
+        'fq_expose_as_tool: true',
+        'fq_desc: Weekly checklist v1',
+        '---',
+        '',
+        'Checklist body',
+      ].join('\n'),
+      'utf8'
+    );
+    const makeServer = () => {
+      const registered = new Map<string, { description?: string }>();
+      const server = wrapServerWithToolCatalog({
+        registerTool: vi.fn((name: string, config: { description?: string }) => {
+          if (registered.has(name)) {
+            throw new Error(`Tool ${name} is already registered`);
+          }
+          registered.set(name, { description: config.description });
+          return { remove: vi.fn(() => registered.delete(name)) };
+        }),
+        sendToolListChanged: vi.fn(async () => undefined),
+      } as unknown as McpServer);
+      return { server, registered };
+    };
+    const sessionA = makeServer();
+    const sessionB = makeServer();
+    const config = {
+      ...mockConfig,
+      instance: {
+        id: 'host-template-multi-session-test',
+        name: 'Host Template Multi Session Test',
+        vault: { path: vaultRoot, markdownExtensions: ['.md'] },
+      },
+      templates: { defaultAccess: 'permissive', hostAccess: 'permissive', hostTemplates: [] },
+    } as FlashQueryConfig;
+    delete (config as Partial<FlashQueryConfig>).supabase;
+
+    await registerHostTemplateTools(sessionA.server, config, { nativeToolCatalog: getNativeToolCatalog(sessionA.server) });
+    await registerHostTemplateTools(sessionB.server, config, { nativeToolCatalog: getNativeToolCatalog(sessionB.server) });
+    trackLifecycleServer(sessionA.server);
+    trackLifecycleServer(sessionB.server);
+    await writeFile(
+      templatePath,
+      [
+        '---',
+        'fq_template: true',
+        'fq_expose_as_tool: true',
+        'fq_desc: Weekly checklist v2',
+        '---',
+        '',
+        'Checklist body',
+      ].join('\n'),
+      'utf8'
+    );
+
+    const summary = await refreshHostTemplateToolsForAllSessions(config);
+
+    expect(summary.session_failures).toBeUndefined();
+    expect(summary.updated).toEqual([
+      { tool: 'flashquery_template_weekly_checklist', path: 'Templates/Weekly Checklist.md' },
+      { tool: 'flashquery_template_weekly_checklist', path: 'Templates/Weekly Checklist.md' },
+    ]);
+    expect(sessionA.registered.get('flashquery_template_weekly_checklist')?.description).toBe('Weekly checklist v2');
+    expect(sessionB.registered.get('flashquery_template_weekly_checklist')?.description).toBe('Weekly checklist v2');
+  });
+
+  it('reports description truncation as a warning while still registering the host template', async () => {
+    const vaultRoot = await mkdtemp(join(tmpdir(), 'fq-host-template-warning-'));
+    await mkdir(join(vaultRoot, 'Templates'), { recursive: true });
+    await writeFile(
+      join(vaultRoot, 'Templates', 'Verbose.md'),
+      [
+        '---',
+        'fq_template: true',
+        'fq_expose_as_tool: true',
+        `fq_desc: ${'A'.repeat(1100)}`,
+        '---',
+        '',
+        'SECRET BODY CONTENT',
+      ].join('\n'),
+      'utf8'
+    );
+    const registered = new Set<string>();
+    const server = {
+      registerTool: vi.fn((name: string) => {
+        registered.add(name);
+        return { remove: vi.fn(() => registered.delete(name)) };
+      }),
+      sendToolListChanged: vi.fn(async () => undefined),
+    } as unknown as McpServer;
+    const config = {
+      ...mockConfig,
+      instance: {
+        id: 'host-template-warning-test',
+        name: 'Host Template Warning Test',
+        vault: { path: vaultRoot, markdownExtensions: ['.md'] },
+      },
+      templates: { defaultAccess: 'permissive', hostAccess: 'permissive', hostTemplates: [] },
+    } as FlashQueryConfig;
+    delete (config as Partial<FlashQueryConfig>).supabase;
+    const manager = new HostTemplateRegistryManager({ nativeToolCatalog: [] });
+
+    const summary = await manager.refreshServer(server, config);
+
+    expect(registered.has('flashquery_template_verbose')).toBe(true);
+    expect(summary.added).toEqual([{ tool: 'flashquery_template_verbose', path: 'Templates/Verbose.md' }]);
+    expect(summary.skipped).toEqual([]);
+    expect(summary.warnings).toEqual([
+      expect.objectContaining({
+        path: 'Templates/Verbose.md',
+        code: 'description_truncated',
+      }),
+    ]);
+    expect(JSON.stringify(summary)).not.toContain('SECRET BODY CONTENT');
+  });
+
+  it('logs changed host template tool names and paths during all-session refresh', async () => {
+    const vaultRoot = await mkdtemp(join(tmpdir(), 'fq-host-template-log-'));
+    await mkdir(join(vaultRoot, 'Templates'), { recursive: true });
+    await writeFile(
+      join(vaultRoot, 'Templates', 'Loggable.md'),
+      [
+        '---',
+        'fq_template: true',
+        'fq_expose_as_tool: true',
+        'fq_desc: Loggable template',
+        '---',
+        '',
+        'Body omitted from diagnostics',
+      ].join('\n'),
+      'utf8'
+    );
+    const server = wrapServerWithToolCatalog({
+      registerTool: vi.fn(() => ({ remove: vi.fn() })),
+      sendToolListChanged: vi.fn(async () => undefined),
+    } as unknown as McpServer);
+    trackLifecycleServer(server);
+    const config = {
+      ...mockConfig,
+      instance: {
+        id: 'host-template-log-test',
+        name: 'Host Template Log Test',
+        vault: { path: vaultRoot, markdownExtensions: ['.md'] },
+      },
+      templates: { defaultAccess: 'permissive', hostAccess: 'permissive', hostTemplates: [] },
+    } as FlashQueryConfig;
+    delete (config as Partial<FlashQueryConfig>).supabase;
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => undefined);
+
+    await refreshHostTemplateToolsForAllSessions(config);
+
+    expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('host template tool enabled: flashquery_template_loggable (Templates/Loggable.md)'));
+    expect(infoSpy.mock.calls.map(([message]) => message).join('\n')).not.toContain('Body omitted');
   });
 
   it('threads the MCP request signal into native macro tool dispatch context', async () => {
