@@ -231,6 +231,8 @@ See [`.env.example`](./.env.example), [`docker/.env.docker.example`](./docker/.e
 
 The `llm:` section in `flashquery.yml` is split into providers, models, and purposes. Providers define where requests go, models define the model aliases FlashQuery can call, and purposes define why a model is being called, including fallback chains and optional template tools. See [`docs/LLM Providers Models and Purposes.md`](./docs/LLM%20Providers%20Models%20and%20Purposes.md) for the full guide.
 
+Vault templates (`fq_template: true` documents) can be exposed as callable MCP tools two ways: to a delegated model during a purpose call, or directly on FlashQuery's host MCP surface via the top-level `templates.host_access` / `templates.host_templates` settings, so any connected client can call them without a purpose. See [`docs/Document Reference System.md`](./docs/Document%20Reference%20System.md) for template authoring and exposure.
+
 ### Non-interactive setup
 
 For CI or scripted installs, pass a pre-filled answers file to skip all prompts:
