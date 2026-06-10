@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { mkdir, stat, readdir, rmdir, rename } from 'node:fs/promises';
+import { mkdir, stat, readdir, rmdir, rename, unlink } from 'node:fs/promises';
 
 vi.mock('node:fs/promises', () => ({
   mkdir: vi.fn(),
@@ -7,6 +7,7 @@ vi.mock('node:fs/promises', () => ({
   readdir: vi.fn(),
   rmdir: vi.fn(),
   rename: vi.fn(),
+  unlink: vi.fn(),
   readFile: vi.fn(),
 }));
 
@@ -167,6 +168,7 @@ describe('manage_directory', () => {
     vi.mocked(mkdir).mockResolvedValue(undefined);
     vi.mocked(rmdir).mockResolvedValue(undefined);
     vi.mocked(rename).mockResolvedValue(undefined);
+    vi.mocked(unlink).mockResolvedValue(undefined);
     vi.mocked(stat).mockRejectedValue(makeErrnoError('ENOENT'));
     vi.mocked(readdir).mockResolvedValue([] as unknown as Awaited<ReturnType<typeof readdir>>);
     lockMock.withDirectoryLockExclusive.mockImplementation(async (_config, _dirPath, fn) => fn());
@@ -249,6 +251,23 @@ describe('manage_directory', () => {
       details: { reason: 'directory_not_empty' },
     });
     expect(vi.mocked(rmdir)).not.toHaveBeenCalled();
+  });
+
+  it('removes directories that contain only OS metadata files hidden from vault listings', async () => {
+    vi.mocked(stat).mockResolvedValue(makeStatResult(true));
+    vi.mocked(readdir).mockResolvedValue(['.DS_Store'] as unknown as Awaited<ReturnType<typeof readdir>>);
+
+    const result = await callManageDirectory({ action: 'remove', paths: ['Captures'] });
+    const payload = parseJson(result) as { results: Array<Record<string, unknown>> };
+
+    expect(result.isError).toBe(false);
+    expect(payload.results[0]).toMatchObject({
+      path: 'Captures',
+      action: 'remove',
+      status: 'removed',
+    });
+    expect(vi.mocked(unlink)).toHaveBeenCalledWith('/vault/Captures/.DS_Store');
+    expect(vi.mocked(rmdir)).toHaveBeenCalledWith('/vault/Captures');
   });
 
   it('returns path_traversal reason for unsafe vault paths', async () => {

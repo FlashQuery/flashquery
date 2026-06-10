@@ -16,7 +16,7 @@
 
 import { z } from 'zod';
 import type { Dirent } from 'node:fs';
-import { mkdir, stat, readdir, rmdir, readFile, rename } from 'node:fs/promises';
+import { mkdir, stat, readdir, rmdir, readFile, rename, unlink } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import matter from 'gray-matter';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -44,6 +44,7 @@ import {
 } from '../../services/document-lock.js';
 
 const DEFAULT_MARKDOWN_EXTENSIONS: string[] = ['.md'];
+const REMOVABLE_EMPTY_DIRECTORY_METADATA = new Set(['.DS_Store', '.localized', 'Thumbs.db', 'desktop.ini']);
 
 let manageDirectoryLockHookForTesting:
   | ((context: {
@@ -66,6 +67,10 @@ export function __setManageDirectoryCreateHookForTesting(
   hook: typeof manageDirectoryCreateHookForTesting
 ): void {
   manageDirectoryCreateHookForTesting = hook;
+}
+
+function isRemovableEmptyDirectoryMetadata(entryName: string): boolean {
+  return REMOVABLE_EMPTY_DIRECTORY_METADATA.has(entryName);
 }
 
 /**
@@ -404,17 +409,26 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
               throw readdirErr;
             }
 
-            if (entries.length > 0) {
+            const blockingEntries = entries.filter((entry) => !isRemovableEmptyDirectoryMetadata(entry));
+            if (blockingEntries.length > 0) {
               results.push({
                 error: 'conflict',
                 message: 'Directory is not empty',
                 identifier: inputPath,
-                details: { reason: 'directory_not_empty', count: entries.length },
+                details: { reason: 'directory_not_empty', count: blockingEntries.length },
               });
               return;
             }
 
             try {
+              for (const entry of entries) {
+                try {
+                  await unlink(join(absPath, entry));
+                } catch (unlinkErr) {
+                  if ((unlinkErr as NodeJS.ErrnoException).code === 'ENOENT') continue;
+                  throw unlinkErr;
+                }
+              }
               await rmdir(absPath);
               results.push(directoryResult({
                 path: safePath,
