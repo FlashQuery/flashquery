@@ -94,6 +94,32 @@ export function createInfoHandler(config: FlashQueryConfig, version: string) {
   };
 }
 
+export interface InvalidMcpSessionLogInput {
+  method: string;
+  path?: string;
+  sessionId?: string;
+  activeSessionCount: number;
+  jsonRpcMethod?: unknown;
+}
+
+export function logInvalidMcpSessionRequest(input: InvalidMcpSessionLogInput): void {
+  const reason = input.sessionId
+    ? `unknown mcp-session-id=${redactMcpSessionId(input.sessionId)}`
+    : 'missing mcp-session-id';
+  const jsonRpcMethod = typeof input.jsonRpcMethod === 'string'
+    ? input.jsonRpcMethod
+    : 'n/a';
+  logger.warn(
+    `[MCP session] rejected ${input.method} ${input.path ?? '/mcp'}: ${reason}; ` +
+      `jsonrpc_method=${jsonRpcMethod}; active_sessions=${input.activeSessionCount}`
+  );
+}
+
+function redactMcpSessionId(sessionId: string): string {
+  const prefix = sessionId.trim().slice(0, 8);
+  return prefix.length > 0 ? `${prefix}...` : '...';
+}
+
 /**
  * Global Express error handler middleware (D-04, T-49-07, T-49-08, T-49-09).
  *
@@ -816,6 +842,13 @@ export async function initMCP(
           await server.connect(transport);
           await transport.handleRequest(req, res, req.body);
         } else {
+          logInvalidMcpSessionRequest({
+            method: req.method,
+            path: req.path,
+            sessionId,
+            activeSessionCount: Object.keys(transports).length,
+            jsonRpcMethod: (req.body as Record<string, unknown> | undefined)?.method,
+          });
           res.status(400).json({
             jsonrpc: '2.0',
             error: { code: -32000, message: 'Bad Request: No valid session ID' },
@@ -832,6 +865,12 @@ export async function initMCP(
       try {
         const sessionId = req.headers['mcp-session-id'] as string | undefined;
         if (!sessionId || !transports[sessionId]) {
+          logInvalidMcpSessionRequest({
+            method: req.method,
+            path: req.path,
+            sessionId,
+            activeSessionCount: Object.keys(transports).length,
+          });
           res.status(400).send('Invalid or missing session ID');
           return;
         }
@@ -846,6 +885,12 @@ export async function initMCP(
       try {
         const sessionId = req.headers['mcp-session-id'] as string | undefined;
         if (!sessionId || !transports[sessionId]) {
+          logInvalidMcpSessionRequest({
+            method: req.method,
+            path: req.path,
+            sessionId,
+            activeSessionCount: Object.keys(transports).length,
+          });
           res.status(400).send('Invalid or missing session ID');
           return;
         }
