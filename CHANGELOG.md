@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-06-10
+
+> This release surfaces vault templates directly on FlashQuery's host MCP tool list — eligible templates become first-class `flashquery_*` tools that any connected AI client can call without going through a delegated `call_model` purpose. It also gives macros surgical, line-level editing of vault files through path-jailed shell verbs.
+
+### Added
+- Expose eligible vault templates (`fq_template: true` + `fq_expose_as_tool: true`) as generated `flashquery_<namespace>_<slug>` tools directly on the host MCP surface, with live refresh that adds, updates, removes, and renames tools as templates change and emits `tools/list` change notifications.
+- Add `templates.host_access` (`permissive` / `restrictive`) and `templates.host_templates` config to control which vault templates are exposed to host MCP clients.
+- Index host-exposed template tools in the host tool-search surface so they are discoverable alongside native and brokered tools.
+- Add macro shell verbs for content-level vault work — read verbs `cat`, `grep`, `wc`, `head`, `tail`, path-matching `find` / `ls`, and the `sed -i` in-place write — all path-jailed to the vault root.
+- Add `--scope` region selection (`body` | `both` | `frontmatter`, default `body`) for macro content verbs, so `sed -i` edits document bodies while leaving YAML frontmatter (including `fq_id`) untouched by default.
+
+### Changed
+- Fail fast at startup when an embedding model's vector dimension does not match the stored vector column, instead of writing inconsistent embeddings.
+- Improve shutdown and embedding-failure logging for clearer diagnostics during request draining and background embed retries.
+- Log invalid MCP session requests with request context to aid transport debugging.
+- Add the missing `templates` block (`default_access` plus host template settings) to `flashquery.example.yml`.
+
+### Fixed
+- Allow `_meta` metadata on generated template MCP tools, which were previously rejected.
+- Fix host template tool refresh diagnostics so add/update/remove/rename/skip/conflict counts are reported accurately.
+
 ## [4.0.0] - 2026-06-03
 
 This release rebuilds FlashQuery's vault write coherency layer so concurrent AI workflows can mutate vault files with durable writes, advisory locks, version-token conflict detection, and predictable batch outcomes. It also tightens startup safety around Postgres session semantics, making misconfigured transaction-pooler deployments fail fast instead of risking advisory-lock corruption.
@@ -457,7 +478,8 @@ This release introduces native filesystem navigation to the vault. The new `crea
 
 ---
 
-[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v4.1.0...HEAD
+[4.1.0]: https://github.com/FlashQuery/flashquery/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/FlashQuery/flashquery/compare/v3.2.0...v4.0.0
 [3.2.0]: https://github.com/FlashQuery/flashquery/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/FlashQuery/flashquery/compare/v3.0.0...v3.1.0
