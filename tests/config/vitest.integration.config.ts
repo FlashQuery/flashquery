@@ -36,6 +36,7 @@ export default defineConfig({
       'tests/integration/refused-write-envelope.integration.test.ts',
       'tests/integration/scanner-zero-writes.integration.test.ts',
       'tests/integration/reference-resolver.integration.test.ts',
+      'tests/integration/host-template-refresh.integration.test.ts',
       'tests/integration/supabase-schema-verify.test.ts',
       'tests/integration/template-tools.integration.test.ts',
       'tests/integration/macro-parse-error.test.ts',

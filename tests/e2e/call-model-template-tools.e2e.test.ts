@@ -1,10 +1,11 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import * as http from 'node:http';
 import { describe, expect, it } from 'vitest';
+import { ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 
 type MockResponse = { status?: number; body: Record<string, unknown> };
 const OPENAI_TOOL_NAME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
@@ -110,12 +111,22 @@ async function writeDoc(vaultPath: string, relPath: string, frontmatter: Record<
   await writeFile(path, `---\n${yaml}\n---\n\n${body}`);
 }
 
-async function withManagedMcp<T>(provider: ScriptedOpenAiProvider, fn: (client: Client, vaultPath: string) => Promise<T>): Promise<T> {
+interface ManagedMcpOptions {
+  seedTemplates?: boolean;
+  templatesYaml?: string;
+}
+
+async function withManagedMcp<T>(
+  provider: ScriptedOpenAiProvider,
+  fn: (client: Client, vaultPath: string) => Promise<T>,
+  options: ManagedMcpOptions = {}
+): Promise<T> {
   const tempDir = await mkdtemp(join(tmpdir(), 'fqc-template-tools-e2e-'));
   const configPath = join(tempDir, 'flashquery.yml');
   const vaultPath = join(tempDir, 'vault');
   const entryPoint = resolve('src/index.ts');
   const projectRoot = resolve('.');
+  const templatesYaml = options.templatesYaml ?? '  default_access: permissive';
   const config = `
 instance:
   name: Template Tools E2E
@@ -138,7 +149,7 @@ embedding:
   model: ''
   dimensions: 1536
 templates:
-  default_access: permissive
+${templatesYaml}
 logging:
   level: error
   output: stdout
@@ -174,23 +185,25 @@ llm:
       defaults: { max_iterations: 3, timeout_ms: 10000 }
 `;
   await writeFile(configPath, config);
-  await writeDoc(vaultPath, 'Templates/Research-Skill.md', {
-    fq_template: true,
-    fq_expose_as_tool: true,
-    fq_namespace: 'skill',
-    fq_desc: 'Research skill',
-    fq_params: { topic: { type: 'string', required: true } },
-  }, 'Research skill says {{topic}}.');
-  await writeDoc(vaultPath, 'Templates/Source-Skill.md', {
-    fq_template: true,
-    fq_expose_as_tool: true,
-    fq_namespace: 'skill',
-    fq_desc: 'Source skill',
-    fq_params: {
-      topic: { type: 'string', required: true },
-      source: { type: 'document', required: true },
-    },
-  }, 'Source skill says {{topic}} with {{source}}.');
+  if (options.seedTemplates !== false) {
+    await writeDoc(vaultPath, 'Templates/Research-Skill.md', {
+      fq_template: true,
+      fq_expose_as_tool: true,
+      fq_namespace: 'skill',
+      fq_desc: 'Research skill',
+      fq_params: { topic: { type: 'string', required: true } },
+    }, 'Research skill says {{topic}}.');
+    await writeDoc(vaultPath, 'Templates/Source-Skill.md', {
+      fq_template: true,
+      fq_expose_as_tool: true,
+      fq_namespace: 'skill',
+      fq_desc: 'Source skill',
+      fq_params: {
+        topic: { type: 'string', required: true },
+        source: { type: 'document', required: true },
+      },
+    }, 'Source skill says {{topic}} with {{source}}.');
+  }
   await writeDoc(vaultPath, 'Docs/Native.md', { fq_status: 'active' }, 'Native document body.');
 
   const transport = new StdioClientTransport({
@@ -220,6 +233,21 @@ async function callModel(client: Client, args: Record<string, unknown>): Promise
   };
   expect(result.isError).toBeFalsy();
   return JSON.parse(result.content[0].text) as Record<string, unknown>;
+}
+
+async function syncVault(client: Client): Promise<void> {
+  const result = await client.callTool({ name: 'maintain_vault', arguments: { action: 'sync' } }) as { isError?: boolean };
+  expect(result.isError).toBeFalsy();
+}
+
+async function toolNames(client: Client): Promise<string[]> {
+  const { tools } = await client.listTools();
+  return tools.map((tool) => tool.name);
+}
+
+async function getTool(client: Client, name: string) {
+  const { tools } = await client.listTools();
+  return tools.find((tool) => tool.name === name);
 }
 
 describe('call_model template-tool masquerade public E2E contracts', () => {
@@ -401,4 +429,181 @@ describe('call_model template-tool masquerade public E2E contracts', () => {
       await provider.stop();
     }
   }, 60000);
+
+  it('T-E-010 T-E-011 T-E-012 T-E-013 emits tools/list_changed only on host template add/remove/update and listTools reflects it', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      finalTextResponse('unused', 1, 1),
+    ]);
+    await provider.start();
+    try {
+      await withManagedMcp(provider, async (client, vaultPath) => {
+        let notified = 0;
+        client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
+          notified += 1;
+        });
+
+        await writeDoc(vaultPath, 'Templates/Notify.md', {
+          fq_template: true,
+          fq_expose_as_tool: true,
+          fq_namespace: 'skill',
+          fq_desc: 'Notify v1',
+        }, 'Notify body v1');
+        await syncVault(client);
+        expect(notified).toBeGreaterThanOrEqual(1);
+        expect(await toolNames(client)).toContain('flashquery_skill_notify');
+
+        const afterAdd = notified;
+        await syncVault(client);
+        expect(notified).toBe(afterAdd);
+
+        await writeDoc(vaultPath, 'Templates/Notify.md', {
+          fq_template: true,
+          fq_expose_as_tool: true,
+          fq_namespace: 'skill',
+          fq_desc: 'Notify v2',
+        }, 'Notify body v2');
+        await syncVault(client);
+        expect(notified).toBeGreaterThan(afterAdd);
+        expect((await getTool(client, 'flashquery_skill_notify'))?.description).toBe('Notify v2');
+
+        const afterUpdate = notified;
+        await writeDoc(vaultPath, 'Templates/Notify.md', {
+          fq_template: true,
+          fq_expose_as_tool: false,
+          fq_namespace: 'skill',
+          fq_desc: 'Notify v2',
+        }, 'Disabled body');
+        await syncVault(client);
+        expect(notified).toBeGreaterThan(afterUpdate);
+        expect(await toolNames(client)).not.toContain('flashquery_skill_notify');
+      }, {
+        seedTemplates: false,
+        templatesYaml: '  default_access: permissive\n  host_access: permissive\n  host_templates: []',
+      });
+    } finally {
+      await provider.stop();
+    }
+  }, 120000);
+
+  it('T-E-001 T-E-003 T-E-004 T-E-005 T-E-007 T-E-008 refreshes add/remove/update/rename host tools without restart', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      finalTextResponse('unused', 1, 1),
+    ]);
+    await provider.start();
+    try {
+      await withManagedMcp(provider, async (client, vaultPath) => {
+        await writeDoc(vaultPath, 'Templates/Dynamic.md', {
+          fq_template: true,
+          fq_expose_as_tool: true,
+          fq_namespace: 'skill',
+          fq_desc: 'Dynamic v1',
+          fq_params: { topic: { type: 'string', required: true } },
+        }, 'Dynamic {{topic}}');
+        await syncVault(client);
+        expect(await toolNames(client)).toContain('flashquery_skill_dynamic');
+
+        await writeDoc(vaultPath, 'Templates/Dynamic.md', {
+          fq_template: true,
+          fq_expose_as_tool: true,
+          fq_namespace: 'skill',
+          fq_desc: 'Dynamic v2',
+          fq_params: {
+            topic: { type: 'string', required: true },
+            audience: { type: 'string', required: true },
+          },
+        }, 'Dynamic {{topic}} for {{audience}}');
+        await syncVault(client);
+        const updated = await getTool(client, 'flashquery_skill_dynamic');
+        expect(updated?.description).toBe('Dynamic v2');
+        expect(JSON.stringify(updated?.inputSchema)).toContain('audience');
+
+        await rename(join(vaultPath, 'Templates', 'Dynamic.md'), join(vaultPath, 'Templates', 'Dynamic Renamed.md'));
+        await syncVault(client);
+        expect(await toolNames(client)).not.toContain('flashquery_skill_dynamic');
+        expect(await toolNames(client)).toContain('flashquery_skill_dynamic_renamed');
+
+        await writeDoc(vaultPath, 'Templates/Dynamic Renamed.md', {
+          fq_template: true,
+          fq_expose_as_tool: false,
+          fq_namespace: 'skill',
+          fq_desc: 'Dynamic v2',
+        }, 'Disabled dynamic');
+        await syncVault(client);
+        expect(await toolNames(client)).not.toContain('flashquery_skill_dynamic_renamed');
+        const removedCall = await client.callTool({
+          name: 'flashquery_skill_dynamic_renamed',
+          arguments: { topic: 'removed', audience: 'host' },
+        }) as { content: Array<{ text: string }>; isError?: boolean };
+        expect(removedCall.isError).toBe(true);
+        expect(removedCall.content[0].text).toContain('Tool flashquery_skill_dynamic_renamed not found');
+      }, {
+        seedTemplates: false,
+        templatesYaml: '  default_access: permissive\n  host_access: permissive\n  host_templates: []',
+      });
+    } finally {
+      await provider.stop();
+    }
+  }, 120000);
+
+  it('T-E-002 T-E-006 calls a generated host template tool and renders current body content', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      finalTextResponse('unused', 1, 1),
+    ]);
+    await provider.start();
+    try {
+      await withManagedMcp(provider, async (client, vaultPath) => {
+        const first = await client.callTool({
+          name: 'flashquery_skill_research_skill',
+          arguments: { topic: 'first' },
+        }) as { content: Array<{ text: string }>; isError?: boolean };
+        expect(first.isError).toBeFalsy();
+        expect(JSON.parse(first.content[0].text)).toMatchObject({
+          ok: true,
+          result: { content: expect.stringContaining('Research skill says first.') },
+        });
+
+        await writeDoc(vaultPath, 'Templates/Research-Skill.md', {
+          fq_template: true,
+          fq_expose_as_tool: true,
+          fq_namespace: 'skill',
+          fq_desc: 'Research skill',
+          fq_params: { topic: { type: 'string', required: true } },
+        }, 'Updated body says {{topic}}.');
+        const second = await client.callTool({
+          name: 'flashquery_skill_research_skill',
+          arguments: { topic: 'second' },
+        }) as { content: Array<{ text: string }>; isError?: boolean };
+        expect(second.isError).toBeFalsy();
+        expect(JSON.parse(second.content[0].text)).toMatchObject({
+          ok: true,
+          result: { content: expect.stringContaining('Updated body says second.') },
+        });
+      }, {
+        templatesYaml: '  default_access: permissive\n  host_access: permissive\n  host_templates: []',
+      });
+    } finally {
+      await provider.stop();
+    }
+  }, 120000);
+
+  it('T-E-009 restrictive host_access excludes unbound templates from tools/list', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      finalTextResponse('unused', 1, 1),
+    ]);
+    await provider.start();
+    try {
+      await withManagedMcp(provider, async (client) => {
+        expect(await toolNames(client)).not.toContain('flashquery_skill_research_skill');
+        expect(await toolNames(client)).toContain('flashquery_skill_source_skill');
+      }, {
+        templatesYaml: [
+          '  default_access: permissive',
+          '  host_access: restrictive',
+          '  host_templates: [Templates/Source-Skill.md]',
+        ].join('\n'),
+      });
+    } finally {
+      await provider.stop();
+    }
+  }, 120000);
 });
