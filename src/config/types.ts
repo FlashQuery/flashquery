@@ -65,6 +65,16 @@ export interface FlashQueryConfig {
       toolSearch: 'enabled' | 'disabled';
     }>;
   };
+  embeddings?: Array<{
+    name: string;
+    dimensions: number;
+    endpoints: Array<{
+      providerName: string;
+      model: string;
+      rateLimit?: { minDelayMs?: number };
+      maxInputChars?: number;
+    }>;
+  }>;
   embedding?: {
     provider: string;
     model: string;

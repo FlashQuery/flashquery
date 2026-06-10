@@ -204,6 +204,30 @@ const LlmSchema = z
   .strip()
   .optional();
 
+const EmbeddingEndpointSchema = z
+  .object({
+    provider_name: z.string().min(1),
+    model: z.string().min(1),
+    rate_limit: z
+      .object({
+        min_delay_ms: z.number().int().positive().optional(),
+      })
+      .strip()
+      .optional(),
+    max_input_chars: z.number().int().positive().optional(),
+  })
+  .strip();
+
+const EmbeddingCatalogEntrySchema = z
+  .object({
+    name: z.string().min(1),
+    dimensions: z.number().int().positive(),
+    endpoints: z.array(EmbeddingEndpointSchema).min(1),
+  })
+  .strip();
+
+const EmbeddingsSchema = z.array(EmbeddingCatalogEntrySchema).optional();
+
 const EmbeddingSchema = z
   .object({
     provider: z.enum(['openai', 'openrouter', 'ollama', 'none']),
@@ -289,6 +313,7 @@ const ConfigSchema = z
     mcp_servers: z.record(z.string(), BrokerServerSchema).default({}),
     host: HostSchema,
     llm: LlmSchema,
+    embeddings: EmbeddingsSchema,
     host_mcp_tools: HostMcpToolsSchema.optional(),
     templates: TemplatesSchema,
     embedding: EmbeddingSchema.optional(),
@@ -498,6 +523,7 @@ type RawLlmPurpose = {
 };
 type RawLlm = { providers: RawLlmProvider[]; models: RawLlmModel[]; purposes: RawLlmPurpose[] };
 type RawBrokerConfig = z.infer<typeof ConfigSchema>;
+type RawEmbeddingCatalogEntry = NonNullable<RawBrokerConfig['embeddings']>[number];
 
 /**
  * Normalizes all provider/model/purpose names and cross-references to lowercase.
@@ -513,6 +539,14 @@ function normalizeLlmNames(llm: RawLlm): void {
   for (const pu of llm.purposes) {
     pu.name = pu.name.toLowerCase();
     pu.models = pu.models.map((n) => n.toLowerCase());
+  }
+}
+
+function normalizeEmbeddingProviderNames(embeddings: RawEmbeddingCatalogEntry[]): void {
+  for (const entry of embeddings) {
+    for (const endpoint of entry.endpoints) {
+      endpoint.provider_name = endpoint.provider_name.toLowerCase();
+    }
   }
 }
 
@@ -655,6 +689,39 @@ function validateBrokerServerReferences(config: RawBrokerConfig): void {
         errors.push(
           `Config error: [purpose:${purpose.name}] purposes.${purpose.name}.mcp_servers references unknown MCP server '${serverId}'`
         );
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(errors.join('\n'));
+  }
+}
+
+function validateEmbeddingCatalogConfig(config: RawBrokerConfig): void {
+  const embeddings = config.embeddings ?? [];
+  if (embeddings.length === 0) return;
+
+  const errors: string[] = [];
+  const nameCounts = new Map<string, number>();
+  for (const entry of embeddings) {
+    nameCounts.set(entry.name, (nameCounts.get(entry.name) ?? 0) + 1);
+  }
+  for (const [name, count] of nameCounts) {
+    if (count > 1) {
+      errors.push(`Config error: duplicate embedding name '${name}' appears ${count} times`);
+    }
+  }
+
+  if (config.llm?.providers) {
+    const providerNames = new Set(config.llm.providers.map((provider) => provider.name));
+    for (const entry of embeddings) {
+      for (const endpoint of entry.endpoints) {
+        if (!providerNames.has(endpoint.provider_name)) {
+          errors.push(
+            `Config error: embedding '${entry.name}' endpoint provider_name '${endpoint.provider_name}' references unknown llm provider — defined providers: [${[...providerNames].join(', ') || '(none)'}]`
+          );
+        }
       }
     }
   }
@@ -865,6 +932,9 @@ export function loadConfig(configPath: string): FlashQueryConfig {
   // post-normalization name comparisons (CONF-01..CONF-04, CONF-07).
   if (result.data.llm) {
     normalizeLlmNames(result.data.llm);
+    if (result.data.embeddings) {
+      normalizeEmbeddingProviderNames(result.data.embeddings);
+    }
     const llmErrors = validateLlmConfig(result.data.llm);
     if (llmErrors.length > 0) {
       const message = llmErrors
@@ -874,6 +944,7 @@ export function loadConfig(configPath: string): FlashQueryConfig {
     }
     warnHardExcludedPurposeTools(result.data.llm);
   }
+  validateEmbeddingCatalogConfig(result.data);
 
   const hasLegacyLockTtl = result.data.locking.ttl_seconds !== undefined;
   delete result.data.locking.ttl_seconds;
