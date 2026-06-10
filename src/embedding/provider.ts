@@ -125,7 +125,7 @@ export class OllamaProvider implements EmbeddingProvider {
     }
 
     if (!response.ok) {
-      let detail = '';
+      let detail: string;
       try {
         const data = (await response.json()) as { error?: unknown };
         detail = typeof data.error === 'string' ? `: ${data.error}` : '';

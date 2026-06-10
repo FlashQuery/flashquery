@@ -190,7 +190,7 @@ export class HostTemplateRegistryManager {
     options: { notify?: boolean } = {}
   ): Promise<HostTemplateRefreshSummary> {
     const summary = emptySummary(1);
-    const state = this.#stateByServer.get(server) ?? { toolsByName: new Map() };
+    const state = this.#stateByServer.get(server) ?? { toolsByName: new Map<string, HostTemplateToolRegistration>() };
     this.#stateByServer.set(server, state);
 
     const fileBackedConfig = { ...config };
@@ -277,7 +277,10 @@ export class HostTemplateRegistryManager {
 
     if (options.notify !== false && (summary.added.length > 0 || summary.removed.length > 0 || summary.updated.length > 0)) {
       try {
-        await server.sendToolListChanged();
+        // McpServer types this as void, but the underlying Server.sendToolListChanged
+        // returns a rejectable Promise — wrap so the await is type-valid and async
+        // notification failures are still caught.
+        await Promise.resolve(server.sendToolListChanged());
       } catch (err: unknown) {
         logger.warn(`host template tool refresh notification failed: ${err instanceof Error ? err.message : String(err)}`);
       }
