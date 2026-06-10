@@ -18,6 +18,8 @@ export interface ProcessPendingEmbeddingsOptions {
   logger?: StructuredLogger;
   now?: () => Date;
   retryBackoffMs?: number;
+  embeddingName?: string;
+  truncated?: boolean;
 }
 
 export interface ProcessPendingEmbeddingsResult {
@@ -91,7 +93,21 @@ export async function processPendingEmbeddings(
       const target = targetFromPendingRow(row, options.instanceId);
       const embedText = await resolveEmbedText(options.supabase, row, target);
       const vector = await options.provider.embed(embedText);
-      await updateTargetEmbedding(target, vector, options.supabase, options.databaseUrl);
+      const providerInfo = options.provider.getProviderInfo?.();
+      await updateTargetEmbedding(
+        target,
+        vector,
+        options.supabase,
+        options.databaseUrl,
+        options.embeddingName
+          ? {
+              embeddingName: options.embeddingName,
+              model: providerInfo?.model ?? 'unknown',
+              provider: providerInfo?.provider ?? 'unknown',
+              truncated: options.truncated ?? false,
+            }
+          : undefined
+      );
       await clearPendingRow(options.supabase, row.id, options.instanceId);
       result.succeeded++;
     } catch (err) {

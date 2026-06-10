@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { initSupabase, createCoreEmbeddingColumnSet } from '../../../src/storage/supabase.js';
+import { initSupabase, createCoreEmbeddingColumnSet, supabaseManager } from '../../../src/storage/supabase.js';
+import { initLogger } from '../../../src/logging/logger.js';
 import { documentEmbeddingTarget, scheduleBackgroundEmbedding } from '../../../src/embedding/background-embed.js';
 import type { EmbeddingProvider } from '../../../src/embedding/provider.js';
 import type { FlashQueryConfig } from '../../../src/config/types.js';
@@ -53,6 +55,7 @@ describe.skipIf(!HAS_SUPABASE)('embedding stamping write roundtrip', () => {
 
   beforeAll(async () => {
     config = makeConfig();
+    initLogger(config);
     await initSupabase(config);
     await createCoreEmbeddingColumnSet(config, { name: ENTRY_NAME, dimensions: 3 });
     client = new pg.Client({ connectionString: TEST_DATABASE_URL });
@@ -76,17 +79,18 @@ describe.skipIf(!HAS_SUPABASE)('embedding stamping write roundtrip', () => {
   });
 
   it('T-I-031 write then read-back confirms vector and stamping columns populated atomically', async () => {
+    const documentId = randomUUID();
     await client.query(
-      `INSERT INTO fqc_documents (id, instance_id, path, title, content)
-       VALUES ($1, $2, $3, $4, $5)`,
-      ['doc-stamped', TEST_INSTANCE_ID, 'docs/stamped.md', 'Stamped', 'content']
+      `INSERT INTO fqc_documents (id, instance_id, path, title)
+       VALUES ($1, $2, $3, $4)`,
+      [documentId, TEST_INSTANCE_ID, 'docs/stamped.md', 'Stamped']
     );
 
     const result = await scheduleBackgroundEmbedding({
-      target: documentEmbeddingTarget({ instanceId: TEST_INSTANCE_ID, id: 'doc-stamped' }),
+      target: documentEmbeddingTarget({ instanceId: TEST_INSTANCE_ID, id: documentId }),
       embedText: 'content',
       provider,
-      supabase: { from: () => ({}) },
+      supabase: supabaseManager.getClient(),
       databaseUrl: TEST_DATABASE_URL,
       embeddingName: ENTRY_NAME,
     });
@@ -100,7 +104,7 @@ describe.skipIf(!HAS_SUPABASE)('embedding stamping write roundtrip', () => {
               ${pg.escapeIdentifier(`${BASE_COLUMN}_truncated`)} AS truncated
        FROM fqc_documents
        WHERE instance_id = $1 AND id = $2`,
-      [TEST_INSTANCE_ID, 'doc-stamped']
+      [TEST_INSTANCE_ID, documentId]
     );
 
     expect(rows[0]).toMatchObject({

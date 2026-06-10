@@ -23,10 +23,19 @@ export interface ScheduleBackgroundEmbeddingOptions {
   supabase: SupabaseLike;
   logger?: StructuredLogger;
   databaseUrl?: string;
+  embeddingName?: string;
+  truncated?: boolean;
 }
 
 export interface ScheduleBackgroundEmbeddingResult {
   warnings: EmbeddingWarning[];
+}
+
+export interface EmbeddingWriteStamp {
+  embeddingName: string;
+  model: string;
+  provider: string;
+  truncated?: boolean;
 }
 
 interface StructuredLogger {
@@ -109,7 +118,21 @@ export async function scheduleBackgroundEmbedding(
 
   try {
     const vector = await options.provider.embed(options.embedText);
-    await updateTargetEmbedding(options.target, vector, options.supabase, options.databaseUrl);
+    const providerInfo = options.provider.getProviderInfo?.();
+    await updateTargetEmbedding(
+      options.target,
+      vector,
+      options.supabase,
+      options.databaseUrl,
+      options.embeddingName
+        ? {
+            embeddingName: options.embeddingName,
+            model: providerInfo?.model ?? 'unknown',
+            provider: providerInfo?.provider ?? 'unknown',
+            truncated: options.truncated ?? false,
+          }
+        : undefined
+    );
     await clearPendingEmbedding(options.supabase, options.target);
     return { warnings: [] };
   } catch (err) {
@@ -128,20 +151,29 @@ export async function updateTargetEmbedding(
   target: BackgroundEmbeddingTarget,
   vector: number[],
   supabase: SupabaseLike,
-  databaseUrl?: string
+  databaseUrl?: string,
+  stamp?: EmbeddingWriteStamp
 ): Promise<void> {
-  if (target.kind === 'record' && databaseUrl) {
-    await updateRecordEmbeddingWithPg(target, vector, databaseUrl);
+  if (stamp) {
+    assertSafeEmbeddingName(stamp.embeddingName);
+  }
+
+  if ((target.kind === 'record' || stamp) && databaseUrl) {
+    await updateTargetEmbeddingWithPg(target, vector, databaseUrl, stamp);
     return;
   }
 
+  const payload = stamp
+    ? buildStampedEmbeddingPayload(vector, stamp, target.kind === 'record')
+    : {
+        embedding: JSON.stringify(vector),
+        ...(target.kind === 'record'
+          ? { embedding_updated_at: new Date().toISOString() }
+          : { updated_at: new Date().toISOString() }),
+      };
+
   const { error } = await (supabase.from(target.targetTable) as TableQuery)
-    .update({
-      embedding: JSON.stringify(vector),
-      ...(target.kind === 'record'
-        ? { embedding_updated_at: new Date().toISOString() }
-        : { updated_at: new Date().toISOString() }),
-    })
+    .update(payload)
     .eq('instance_id', target.instanceId)
     .eq('id', target.targetId);
 
@@ -150,19 +182,65 @@ export async function updateTargetEmbedding(
   }
 }
 
-async function updateRecordEmbeddingWithPg(
+async function updateTargetEmbeddingWithPg(
   target: BackgroundEmbeddingTarget,
   vector: number[],
-  databaseUrl: string
+  databaseUrl: string,
+  stamp?: EmbeddingWriteStamp
 ): Promise<void> {
-  assertSafeRecordTable(target.targetTable);
+  assertSafeTargetTable(target);
+  const baseColumn = stamp ? `embedding_${stamp.embeddingName}` : 'embedding';
+  const timestampColumn = target.kind === 'record' ? 'embedding_updated_at' : 'updated_at';
+
+  if (!stamp) {
+    await queryPgPool(
+      databaseUrl,
+      `UPDATE ${pg.escapeIdentifier(target.targetTable)}
+       SET embedding = $1::vector, ${pg.escapeIdentifier(timestampColumn)} = now()
+       WHERE instance_id = $2 AND id = $3`,
+      [`[${vector.join(',')}]`, target.instanceId, target.targetId]
+    );
+    return;
+  }
+
   await queryPgPool(
     databaseUrl,
     `UPDATE ${pg.escapeIdentifier(target.targetTable)}
-     SET embedding = $1::vector, embedding_updated_at = now()
-     WHERE instance_id = $2 AND id = $3`,
-    [`[${vector.join(',')}]`, target.instanceId, target.targetId]
+     SET ${pg.escapeIdentifier(baseColumn)} = $1::vector,
+         ${pg.escapeIdentifier(`${baseColumn}_model`)} = $2,
+         ${pg.escapeIdentifier(`${baseColumn}_dimensions`)} = $3,
+         ${pg.escapeIdentifier(`${baseColumn}_provider`)} = $4,
+         ${pg.escapeIdentifier(`${baseColumn}_truncated`)} = $5,
+         ${pg.escapeIdentifier(timestampColumn)} = now()
+     WHERE instance_id = $6 AND id = $7`,
+    [
+      `[${vector.join(',')}]`,
+      stamp.model,
+      vector.length,
+      stamp.provider,
+      stamp.truncated ?? false,
+      target.instanceId,
+      target.targetId,
+    ]
   );
+}
+
+function buildStampedEmbeddingPayload(
+  vector: number[],
+  stamp: EmbeddingWriteStamp,
+  isRecord: boolean
+): Record<string, unknown> {
+  const baseColumn = `embedding_${stamp.embeddingName}`;
+  return {
+    [baseColumn]: JSON.stringify(vector),
+    [`${baseColumn}_model`]: stamp.model,
+    [`${baseColumn}_dimensions`]: vector.length,
+    [`${baseColumn}_provider`]: stamp.provider,
+    [`${baseColumn}_truncated`]: stamp.truncated ?? false,
+    ...(isRecord
+      ? { embedding_updated_at: new Date().toISOString() }
+      : { updated_at: new Date().toISOString() }),
+  };
 }
 
 async function upsertPendingEmbedding(
@@ -349,5 +427,21 @@ function errorMessage(err: unknown): string {
 function assertSafeRecordTable(tableName: string): void {
   if (!/^fqcp_[A-Za-z0-9_]+$/.test(tableName)) {
     throw new Error(`Invalid record target table: ${tableName}`);
+  }
+}
+
+function assertSafeTargetTable(target: BackgroundEmbeddingTarget): void {
+  if (target.kind === 'document' && target.targetTable === TARGET_TABLES.document) return;
+  if (target.kind === 'memory' && target.targetTable === TARGET_TABLES.memory) return;
+  if (target.kind === 'record') {
+    assertSafeRecordTable(target.targetTable);
+    return;
+  }
+  throw new Error(`Invalid ${target.kind} target table: ${target.targetTable}`);
+}
+
+function assertSafeEmbeddingName(name: string): void {
+  if (!/^[a-z][a-z0-9_]*$/.test(name)) {
+    throw new Error(`Invalid embedding name: ${name}`);
   }
 }
