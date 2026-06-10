@@ -1,5 +1,39 @@
 import pg from 'pg';
 
+export interface VerifySchemaOptions {
+  instanceId: string;
+}
+
+export interface EmbeddingDimensionDrift {
+  entry: string;
+  table: string;
+  column: string;
+  configuredWidth: number;
+  actualWidth: number | null;
+}
+
+const CORE_EMBEDDING_TABLES = ['fqc_documents', 'fqc_memory'] as const;
+const EMBEDDING_IDENTIFIER_PATTERN = /^[a-z][a-z0-9_]*$/;
+
+function parseVectorWidth(formattedType: string | null | undefined): number | null {
+  if (!formattedType) return null;
+  const match = /^vector\((\d+)\)$/.exec(formattedType);
+  return match ? Number.parseInt(match[1], 10) : null;
+}
+
+function isVerifySchemaOptions(value: number | VerifySchemaOptions | undefined): value is VerifySchemaOptions {
+  return typeof value === 'object' && value !== null && 'instanceId' in value;
+}
+
+function validateEmbeddingSqlName(name: string): void {
+  if (!EMBEDDING_IDENTIFIER_PATTERN.test(name)) {
+    throw new Error(
+      `Embedding catalog entry '${name}' cannot be verified as a SQL identifier. ` +
+        'Names must start with a lowercase letter and contain only lowercase letters, numbers, and underscores.'
+    );
+  }
+}
+
 /**
  * Checks if a single table exists in the PostgreSQL database using to_regclass().
  *
@@ -82,6 +116,88 @@ export async function verifyEmbeddingDimensions(
   }
 }
 
+export async function getActiveEmbeddingDimensionDrift(
+  client: pg.Client,
+  instanceId: string
+): Promise<EmbeddingDimensionDrift[]> {
+  const catalog = await client.query(
+    `
+    SELECT name, dimensions
+    FROM fqc_embeddings
+    WHERE instance_id = $1
+      AND status = 'active'
+    ORDER BY name
+    `,
+    [instanceId]
+  );
+
+  const drifts: EmbeddingDimensionDrift[] = [];
+  for (const row of catalog.rows as Array<{ name: string; dimensions: number }>) {
+    validateEmbeddingSqlName(row.name);
+    const columnName = `embedding_${row.name}`;
+    const metadata = await client.query(
+      `
+      SELECT c.table_name, format_type(a.atttypid, a.atttypmod) AS formatted_type
+      FROM information_schema.columns c
+      JOIN pg_class cl
+        ON cl.relname = c.table_name
+      JOIN pg_namespace n
+        ON n.oid = cl.relnamespace
+       AND n.nspname = c.table_schema
+      JOIN pg_attribute a
+        ON a.attrelid = cl.oid
+       AND a.attname = c.column_name
+      WHERE c.table_schema = 'public'
+        AND c.table_name = ANY($1::text[])
+        AND c.column_name = $2
+      ORDER BY c.table_name
+      `,
+      [[...CORE_EMBEDDING_TABLES], columnName]
+    );
+    const typeByTable = new Map(
+      (metadata.rows as Array<{ table_name: string; formatted_type: string }>).map((typeRow) => [
+        typeRow.table_name,
+        typeRow.formatted_type,
+      ])
+    );
+
+    for (const table of CORE_EMBEDDING_TABLES) {
+      const actualWidth = parseVectorWidth(typeByTable.get(table));
+      if (actualWidth !== row.dimensions) {
+        drifts.push({
+          entry: row.name,
+          table,
+          column: columnName,
+          configuredWidth: row.dimensions,
+          actualWidth,
+        });
+      }
+    }
+  }
+
+  return drifts;
+}
+
+export async function verifyCatalogEmbeddingDimensions(
+  client: pg.Client,
+  instanceId: string
+): Promise<void> {
+  const drifts = await getActiveEmbeddingDimensionDrift(client, instanceId);
+  if (drifts.length === 0) return;
+
+  const details = drifts
+    .map((drift) => {
+      const actual = drift.actualWidth === null ? 'missing/non-vector' : String(drift.actualWidth);
+      return (
+        `entry ${drift.entry}: ${drift.table}.${drift.column} ` +
+        `configured width ${drift.configuredWidth}, actual width ${actual}`
+      );
+    })
+    .join('; ');
+
+  throw new Error(`Embedding catalog dimension drift detected: ${details}`);
+}
+
 /**
  * Verifies that all required FlashQuery tables exist in the database.
  *
@@ -106,7 +222,10 @@ export async function verifyEmbeddingDimensions(
  * @returns Resolves successfully if all tables exist
  * @throws Error listing missing tables if any table is not found
  */
-export async function verifySchema(client: pg.Client, expectedEmbeddingDimensions?: number): Promise<void> {
+export async function verifySchema(
+  client: pg.Client,
+  expectedEmbeddingDimensionsOrOptions?: number | VerifySchemaOptions
+): Promise<void> {
   const requiredTables = [
     'fqc_memory',
     'fqc_vault',
@@ -164,7 +283,9 @@ export async function verifySchema(client: pg.Client, expectedEmbeddingDimension
     throw new Error(`Missing required columns after DDL: [${missingColumns.join(', ')}]`);
   }
 
-  if (expectedEmbeddingDimensions !== undefined) {
-    await verifyEmbeddingDimensions(client, expectedEmbeddingDimensions);
+  if (isVerifySchemaOptions(expectedEmbeddingDimensionsOrOptions)) {
+    await verifyCatalogEmbeddingDimensions(client, expectedEmbeddingDimensionsOrOptions.instanceId);
+  } else if (expectedEmbeddingDimensionsOrOptions !== undefined) {
+    await verifyEmbeddingDimensions(client, expectedEmbeddingDimensionsOrOptions);
   }
 }

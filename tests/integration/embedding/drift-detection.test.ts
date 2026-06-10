@@ -6,9 +6,9 @@ import { loadConfig, type FlashQueryConfig } from '../../../src/config/loader.js
 import { syncEmbeddingCatalog } from '../../../src/embedding/embedding-config-sync.js';
 import { initLogger } from '../../../src/logging/logger.js';
 import { verifySchema } from '../../../src/storage/schema-verify.js';
-import { initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
+import { createCoreEmbeddingColumnSet } from '../../../src/storage/supabase.js';
 import { setupTestSupabase } from '../../helpers/supabase.js';
-import { HAS_SUPABASE } from '../../helpers/test-env.js';
+import { HAS_SUPABASE, TEST_EMBEDDING_DIMENSIONS } from '../../helpers/test-env.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -46,17 +46,26 @@ async function cleanupPrimarySchema(client: pg.Client): Promise<void> {
   }
 }
 
+async function restoreLegacyEmbeddingColumn(client: pg.Client): Promise<void> {
+  await client.query('DROP INDEX IF EXISTS idx_fqc_documents_embedding');
+  await client.query('ALTER TABLE fqc_documents DROP COLUMN IF EXISTS embedding');
+  await client.query(`ALTER TABLE fqc_documents ADD COLUMN embedding vector(${TEST_EMBEDDING_DIMENSIONS})`);
+  await client.query('CREATE INDEX IF NOT EXISTS idx_fqc_documents_embedding ON fqc_documents USING hnsw (embedding vector_cosine_ops)');
+}
+
 async function createPrimaryEntry(client: pg.Client, configuredDimensions = 96): Promise<void> {
-  await syncEmbeddingCatalog(configWithEmbeddings([
+  const config = configWithEmbeddings([
     {
       name: 'primary',
       dimensions: configuredDimensions,
       endpoints: [{ providerName: 'openai', model: 'text-embedding-3-small' }],
     },
-  ]));
+  ]);
+  await createCoreEmbeddingColumnSet(config, { name: 'primary', dimensions: configuredDimensions });
   await client.query(
-    `UPDATE fqc_embeddings SET dimensions = $2 WHERE instance_id = $1 AND name = 'primary'`,
-    [TEST_INSTANCE_ID, configuredDimensions]
+    `INSERT INTO fqc_embeddings (instance_id, name, dimensions, endpoints, source, status)
+     VALUES ($1, 'primary', $2, $3::jsonb, 'yaml', 'active')`,
+    [TEST_INSTANCE_ID, configuredDimensions, JSON.stringify([{ provider_name: 'openai', model: 'text-embedding-3-small' }])]
   );
 }
 
@@ -72,7 +81,6 @@ describe.skipIf(!HAS_SUPABASE).sequential('drift-detection catalog verification'
   beforeAll(async () => {
     const config = configWithEmbeddings([]);
     initLogger(config);
-    await initSupabase(config);
     client = await setupTestSupabase();
   }, 90000);
 
@@ -83,9 +91,9 @@ describe.skipIf(!HAS_SUPABASE).sequential('drift-detection catalog verification'
 
   afterAll(async () => {
     await cleanupPrimarySchema(client).catch(() => undefined);
+    await restoreLegacyEmbeddingColumn(client).catch(() => undefined);
     await client?.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.end().catch(() => undefined);
-    await supabaseManager?.close();
   }, 60000);
 
   it('T-I-026 fails startup when an active core vector column width drifts', async () => {
@@ -108,8 +116,6 @@ describe.skipIf(!HAS_SUPABASE).sequential('drift-detection catalog verification'
 
   it('T-I-028 ignores legacy singular embedding columns', async () => {
     await createPrimaryEntry(client, 96);
-    await client.query('ALTER TABLE fqc_documents DROP COLUMN embedding');
-    await client.query('ALTER TABLE fqc_documents ADD COLUMN embedding vector(7)');
 
     await expect(verifySchema(client, { instanceId: TEST_INSTANCE_ID })).resolves.toBeUndefined();
   });

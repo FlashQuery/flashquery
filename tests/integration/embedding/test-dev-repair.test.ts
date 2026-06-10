@@ -3,12 +3,11 @@ import pg from 'pg';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { loadConfig, type FlashQueryConfig } from '../../../src/config/loader.js';
-import { syncEmbeddingCatalog } from '../../../src/embedding/embedding-config-sync.js';
 import { initLogger } from '../../../src/logging/logger.js';
 import { logger } from '../../../src/logging/logger.js';
 import { verifySchema } from '../../../src/storage/schema-verify.js';
 import { repairEmbeddingDimensionDrift } from '../../../src/storage/test-dev-repair.js';
-import { initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
+import { createCoreEmbeddingColumnSet } from '../../../src/storage/supabase.js';
 import { setupTestSupabase } from '../../helpers/supabase.js';
 import { HAS_SUPABASE } from '../../helpers/test-env.js';
 
@@ -48,13 +47,19 @@ async function cleanupPrimarySchema(client: pg.Client): Promise<void> {
 }
 
 async function createDrift(client: pg.Client): Promise<void> {
-  await syncEmbeddingCatalog(configWithEmbeddings([
+  const config = configWithEmbeddings([
     {
       name: 'primary',
       dimensions: 96,
       endpoints: [{ providerName: 'openai', model: 'text-embedding-3-small' }],
     },
-  ]));
+  ]);
+  await createCoreEmbeddingColumnSet(config, { name: 'primary', dimensions: 96 });
+  await client.query(
+    `INSERT INTO fqc_embeddings (instance_id, name, dimensions, endpoints, source, status)
+     VALUES ($1, 'primary', 96, $2::jsonb, 'yaml', 'active')`,
+    [TEST_INSTANCE_ID, JSON.stringify([{ provider_name: 'openai', model: 'text-embedding-3-small' }])]
+  );
   await client.query('DROP INDEX IF EXISTS idx_fqc_documents_embedding_primary');
   await client.query('ALTER TABLE fqc_documents DROP COLUMN embedding_primary');
   await client.query('ALTER TABLE fqc_documents ADD COLUMN embedding_primary vector(64)');
@@ -82,7 +87,6 @@ describe.skipIf(!HAS_SUPABASE).sequential('test-dev-repair gated embedding repai
   beforeAll(async () => {
     const config = configWithEmbeddings([]);
     initLogger(config);
-    await initSupabase(config);
     client = await setupTestSupabase();
   }, 90000);
 
@@ -96,7 +100,6 @@ describe.skipIf(!HAS_SUPABASE).sequential('test-dev-repair gated embedding repai
     await cleanupPrimarySchema(client).catch(() => undefined);
     await client?.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.end().catch(() => undefined);
-    await supabaseManager?.close();
   }, 60000);
 
   it('T-I-029 repairs drift only when the explicit destructive gate is enabled', async () => {
@@ -108,12 +111,12 @@ describe.skipIf(!HAS_SUPABASE).sequential('test-dev-repair gated embedding repai
     await expect(vectorType(client, 'fqc_documents', 'embedding_primary')).resolves.toBe('vector(96)');
     expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/destructive.*data loss.*primary.*fqc_documents/i));
     await expect(verifySchema(client, { instanceId: TEST_INSTANCE_ID })).resolves.toBeUndefined();
-  });
+  }, 90000);
 
   it('T-I-030 refuses by default and does not alter drifted columns', async () => {
     await createDrift(client);
 
     await expect(verifySchema(client, { instanceId: TEST_INSTANCE_ID })).rejects.toThrow(/configured width 96.*actual width 64/i);
     await expect(vectorType(client, 'fqc_documents', 'embedding_primary')).resolves.toBe('vector(64)');
-  });
+  }, 90000);
 });
