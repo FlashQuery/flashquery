@@ -13,6 +13,24 @@ export interface EmbeddingProvider {
   getProviderInfo?(): { provider: string; model: string };
 }
 
+export function assertEmbeddingVectorDimensions(input: {
+  vector: number[];
+  expectedDimensions: number;
+  provider: string;
+  model: string;
+}): void {
+  const actualDimensions = input.vector.length;
+  if (actualDimensions === input.expectedDimensions) {
+    return;
+  }
+
+  throw new Error(
+    `Embedding error: ${input.provider} model "${input.model}" returned wrong vector width: ` +
+    `expected ${input.expectedDimensions} dimensions, actual ${actualDimensions}. ` +
+    `Change dimensions: to ${actualDimensions} for the model's native width, or wait for the deferred dimensions-reduction feature.`
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // OpenAICompatibleProvider (handles OpenAI and OpenRouter)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -23,22 +41,19 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
   private apiKey: string;
   private dimensions: number;
   private providerName: string;
-  private includeDimensions: boolean;
 
   constructor(
     baseUrl: string,
     model: string,
     apiKey: string,
     dimensions: number,
-    providerName: string,
-    includeDimensions = false
+    providerName: string
   ) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.model = model;
     this.apiKey = apiKey;
     this.dimensions = dimensions;
     this.providerName = providerName;
-    this.includeDimensions = includeDimensions;
   }
 
   async embed(text: string): Promise<number[]> {
@@ -54,7 +69,6 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
         body: JSON.stringify({
           model: this.model,
           input: text,
-          ...(this.includeDimensions ? { dimensions: this.dimensions } : {}),
         }),
       });
     } catch {
@@ -78,9 +92,16 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
     }
 
     const data = (await response.json()) as { data: Array<{ embedding: number[] }> };
+    const vector = data.data[0].embedding;
+    assertEmbeddingVectorDimensions({
+      vector,
+      expectedDimensions: this.dimensions,
+      provider: this.providerName,
+      model: this.model,
+    });
     const duration = Math.round(performance.now() - startTime);
-    logger.debug(`Embedding: generated vector (${duration}ms) — semantic search enabled`);
-    return data.data[0].embedding;
+    logger?.debug?.(`Embedding: generated vector (${duration}ms) — semantic search enabled`);
+    return vector;
   }
 
   getDimensions(): number {
@@ -136,8 +157,14 @@ export class OllamaProvider implements EmbeddingProvider {
     }
 
     const data = (await response.json()) as { embedding: number[] };
+    assertEmbeddingVectorDimensions({
+      vector: data.embedding,
+      expectedDimensions: this.dimensions,
+      provider: 'Ollama',
+      model: this.model,
+    });
     const duration = Math.round(performance.now() - startTime);
-    logger.debug(`Embedding: generated vector (${duration}ms) — semantic search enabled`);
+    logger?.debug?.(`Embedding: generated vector (${duration}ms) — semantic search enabled`);
     return data.embedding;
   }
 
@@ -198,7 +225,7 @@ export class FallbackEmbeddingProvider implements EmbeddingProvider {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         failures.push(`${name}: ${message}`);
-        logger.warn(`Embedding: ${name} failed, trying next fallback: ${message}`);
+        logger?.warn?.(`Embedding: ${name} failed, trying next fallback: ${message}`);
       }
     }
     throw new Error(`Embedding error: all providers failed (${failures.join('; ')})`);
@@ -238,8 +265,7 @@ export function createEmbeddingProvider(config: NonNullable<FlashQueryConfig['em
         config.model,
         requireApiKey(config, 'openai'),
         config.dimensions,
-        'OpenAI',
-        config.dimensions !== 1536
+        'OpenAI'
       );
     case 'openrouter':
       return new OpenAICompatibleProvider(
@@ -247,8 +273,7 @@ export function createEmbeddingProvider(config: NonNullable<FlashQueryConfig['em
         config.model,
         requireApiKey(config, 'openrouter'),
         config.dimensions,
-        'OpenRouter',
-        config.dimensions !== 1536
+        'OpenRouter'
       );
     case 'ollama':
       return new OllamaProvider(
@@ -316,8 +341,7 @@ export function initEmbedding(config: FlashQueryConfig, llmClient?: LlmClient): 
         modelEntry.model,
         providerEntry.apiKey,
         dimensions,
-        providerEntry.name,
-        dimensions !== 1536
+        providerEntry.name
       );
     } else {
       logger.warn(
