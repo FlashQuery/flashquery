@@ -236,9 +236,19 @@ logging:
 # with llm.purposes[].templates. This keeps non-language purposes such as
 # embedding out of model-visible tool admission.  Otherwise, set the default_access
 # to "Permissive" that allows any model to access templates.
+#
+# Host template tools expose eligible vault templates directly on FlashQuery's
+# MCP tool surface as generated flashquery_<namespace>_<slug> tools. Leave
+# host_access permissive to expose all eligible templates marked with
+# fq_template: true and fq_expose_as_tool: true. Use restrictive mode with
+# host_templates to expose only selected template files to host MCP clients.
 
 templates:
   default_access: permissive
+  # host_access: permissive
+  # host_templates:
+  #   - "Templates/Research-Skill.md"
+  #   - "Templates/Source-Skill.md"
 
 
 # ─── LLM (optional) ─────────────────────────────────────────────────────────
