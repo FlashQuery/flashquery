@@ -145,7 +145,7 @@ describe('OpenAI embed()', () => {
       provider: 'openai',
       model: 'text-embedding-3-small',
       apiKey: 'sk-test',
-      dimensions: 1536,
+      dimensions: 3,
     });
     const result = await provider.embed('hello world');
 
@@ -169,7 +169,7 @@ describe('OpenAI embed()', () => {
       model: 'text-embedding-3-small',
       apiKey: 'sk-test',
       endpoint: 'https://custom.api.com',
-      dimensions: 1536,
+      dimensions: 1,
     });
     await provider.embed('hello');
 
@@ -234,7 +234,7 @@ describe('OpenRouter embed()', () => {
       provider: 'openrouter',
       model: 'text-embedding-3-small',
       apiKey: 'sk-or-test',
-      dimensions: 1536,
+      dimensions: 3,
     });
     const result = await provider.embed('hello world');
 
@@ -266,7 +266,7 @@ describe('Ollama embed()', () => {
     const provider = createEmbeddingProvider({
       provider: 'ollama',
       model: 'nomic-embed-text',
-      dimensions: 768,
+      dimensions: 3,
     });
     const result = await provider.embed('hello world');
 
@@ -290,7 +290,7 @@ describe('Ollama embed()', () => {
       provider: 'ollama',
       model: 'nomic-embed-text',
       endpoint: 'http://192.168.1.100:11434',
-      dimensions: 768,
+      dimensions: 1,
     });
     await provider.embed('hello');
 
