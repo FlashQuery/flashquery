@@ -483,6 +483,20 @@ CREATE INDEX IF NOT EXISTS idx_fqc_pending_embeds_retry
 CREATE INDEX IF NOT EXISTS idx_fqc_pending_embeds_target_lookup
   ON fqc_pending_embeds(instance_id, target_kind, target_id);
 
+-- Phase 165: Per-instance embedding catalog foundation (REQ-001)
+CREATE TABLE IF NOT EXISTS fqc_embeddings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  instance_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  dimensions INT NOT NULL,
+  endpoints JSONB NOT NULL,
+  source TEXT NOT NULL DEFAULT 'yaml',
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'deactivated')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(instance_id, name)
+);
+
 -- Phase 31: plugin_instance rename (PLUGIN-02)
 DO $$
 BEGIN
