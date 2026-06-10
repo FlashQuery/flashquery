@@ -545,6 +545,171 @@ describe('MCP tool registration metadata', () => {
     expect(sessionB.registered.get('flashquery_template_weekly_checklist')?.description).toBe('Weekly checklist v2');
   });
 
+  it('T-U-024 reports a rename hint when a path-stable template changes generated tool name', async () => {
+    const vaultRoot = await mkdtemp(join(tmpdir(), 'fq-host-template-rename-hint-'));
+    await mkdir(join(vaultRoot, 'Templates'), { recursive: true });
+    const templatePath = join(vaultRoot, 'Templates', 'Rename Hint.md');
+    await writeFile(
+      templatePath,
+      [
+        '---',
+        'fq_template: true',
+        'fq_expose_as_tool: true',
+        'fq_namespace: old',
+        'fq_desc: Rename hint',
+        '---',
+        '',
+        'Rename body',
+      ].join('\n'),
+      'utf8'
+    );
+    const registered = new Set<string>();
+    const server = {
+      registerTool: vi.fn((name: string) => {
+        registered.add(name);
+        return { remove: vi.fn(() => registered.delete(name)) };
+      }),
+      sendToolListChanged: vi.fn(async () => undefined),
+    } as unknown as McpServer;
+    const manager = new HostTemplateRegistryManager({ nativeToolCatalog: [] });
+    const config = {
+      ...mockConfig,
+      instance: {
+        id: 'host-template-rename-hint-test',
+        name: 'Host Template Rename Hint Test',
+        vault: { path: vaultRoot, markdownExtensions: ['.md'] },
+      },
+      templates: { defaultAccess: 'permissive', hostAccess: 'permissive', hostTemplates: [] },
+    } as FlashQueryConfig;
+    delete (config as Partial<FlashQueryConfig>).supabase;
+
+    await manager.refreshServer(server, config);
+    await writeFile(
+      templatePath,
+      [
+        '---',
+        'fq_template: true',
+        'fq_expose_as_tool: true',
+        'fq_namespace: new',
+        'fq_desc: Rename hint',
+        '---',
+        '',
+        'Rename body',
+      ].join('\n'),
+      'utf8'
+    );
+
+    const summary = await manager.refreshServer(server, config);
+
+    expect(summary.removed).toEqual([{ tool: 'flashquery_old_rename_hint', path: 'Templates/Rename Hint.md' }]);
+    expect(summary.added).toEqual([{ tool: 'flashquery_new_rename_hint', path: 'Templates/Rename Hint.md' }]);
+    expect(summary.renames).toEqual([
+      {
+        from: 'flashquery_old_rename_hint',
+        to: 'flashquery_new_rename_hint',
+        path: 'Templates/Rename Hint.md',
+      },
+    ]);
+    expect(registered.has('flashquery_old_rename_hint')).toBe(false);
+    expect(registered.has('flashquery_new_rename_hint')).toBe(true);
+  });
+
+  it('T-U-030 leaves native and brokered registrations untouched during host template refresh', async () => {
+    const vaultRoot = await mkdtemp(join(tmpdir(), 'fq-host-template-untouched-'));
+    await mkdir(join(vaultRoot, 'Templates'), { recursive: true });
+    const templatePath = join(vaultRoot, 'Templates', 'Host Only.md');
+    await writeFile(
+      templatePath,
+      [
+        '---',
+        'fq_template: true',
+        'fq_expose_as_tool: true',
+        'fq_desc: Host only v1',
+        '---',
+        '',
+        'Host only body',
+      ].join('\n'),
+      'utf8'
+    );
+    const nativeRemove = vi.fn();
+    const brokeredRemove = vi.fn();
+    const registered = new Map<string, { remove: ReturnType<typeof vi.fn> }>([
+      ['get_document', { remove: nativeRemove }],
+      ['basic__echo', { remove: brokeredRemove }],
+    ]);
+    const server = {
+      registerTool: vi.fn((name: string) => {
+        if (registered.has(name)) {
+          throw new Error(`Tool ${name} is already registered`);
+        }
+        const remove = vi.fn(() => registered.delete(name));
+        registered.set(name, { remove });
+        return { remove };
+      }),
+      sendToolListChanged: vi.fn(async () => undefined),
+    } as unknown as McpServer;
+    const manager = new HostTemplateRegistryManager({
+      nativeToolCatalog: [{ name: 'get_document', description: 'native get_document', handler: vi.fn() }],
+    });
+    const config = {
+      ...mockConfig,
+      instance: {
+        id: 'host-template-untouched-test',
+        name: 'Host Template Untouched Test',
+        vault: { path: vaultRoot, markdownExtensions: ['.md'] },
+      },
+      templates: { defaultAccess: 'permissive', hostAccess: 'permissive', hostTemplates: [] },
+    } as FlashQueryConfig;
+    delete (config as Partial<FlashQueryConfig>).supabase;
+
+    await manager.refreshServer(server, config);
+    await writeFile(
+      templatePath,
+      [
+        '---',
+        'fq_template: true',
+        'fq_expose_as_tool: true',
+        'fq_desc: Host only v2',
+        '---',
+        '',
+        'Host only body',
+      ].join('\n'),
+      'utf8'
+    );
+    await manager.refreshServer(server, config);
+    await writeFile(
+      templatePath,
+      [
+        '---',
+        'fq_template: true',
+        'fq_expose_as_tool: false',
+        'fq_desc: Host only v2',
+        '---',
+        '',
+        'Disabled',
+      ].join('\n'),
+      'utf8'
+    );
+    await manager.refreshServer(server, config);
+
+    expect(server.registerTool).toHaveBeenCalledTimes(2);
+    expect(server.registerTool).not.toHaveBeenCalledWith('get_document', expect.anything(), expect.anything());
+    expect(server.registerTool).not.toHaveBeenCalledWith('basic__echo', expect.anything(), expect.anything());
+    expect(nativeRemove).not.toHaveBeenCalled();
+    expect(brokeredRemove).not.toHaveBeenCalled();
+    expect(registered.has('get_document')).toBe(true);
+    expect(registered.has('basic__echo')).toBe(true);
+    expect(registered.has('flashquery_template_host_only')).toBe(false);
+  });
+
+  it('T-U-031 advertises tools.listChanged capability on the MCP server', () => {
+    const server = createMcpServer(mockConfig, 'unit-test');
+
+    expect((server as unknown as { server: { _capabilities?: unknown } }).server._capabilities).toMatchObject({
+      tools: { listChanged: true },
+    });
+  });
+
   it('reports description truncation as a warning while still registering the host template', async () => {
     const vaultRoot = await mkdtemp(join(tmpdir(), 'fq-host-template-warning-'));
     await mkdir(join(vaultRoot, 'Templates'), { recursive: true });
