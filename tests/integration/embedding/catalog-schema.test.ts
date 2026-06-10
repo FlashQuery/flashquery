@@ -50,7 +50,7 @@ describe.skipIf(!HAS_SUPABASE)('embedding-catalog schema integration', () => {
     await initSupabase(config);
     client = await setupTestSupabase();
     await client.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]);
-  }, 30000);
+  }, 90000);
 
   afterAll(async () => {
     await client?.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);

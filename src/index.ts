@@ -36,6 +36,7 @@ import { initSupabase } from './storage/supabase.js';
 import { initVault, cleanStaleTempFiles } from './storage/vault.js';
 import { initGit, GitManagerImpl } from './git/manager.js';
 import { initEmbedding, embeddingProvider, NullEmbeddingProvider } from './embedding/provider.js';
+import { syncEmbeddingCatalog } from './embedding/embedding-config-sync.js';
 import { initLlm, llmClient } from './llm/client.js';
 import { initPlugins, pluginManager } from './plugins/manager.js';
 import { initMCP } from './mcp/server.js';
@@ -74,6 +75,7 @@ export async function runScanCommand(configPath: string): Promise<void> {
     await initSupabase(config);
     await initVault(config);
     await assertLockingSessionCapability(config);
+    await syncEmbeddingCatalog(config);
     initEmbedding(config, undefined);  // scan path: no llmClient initialized; purpose path is skipped
     let folderMappings: Map<string, FolderMapping> = new Map();
     try {
@@ -260,6 +262,7 @@ if (isMain) {
         await cleanStaleTempFiles(config.instance.vault.path);
         await initSupabase(config);
         await assertLockingSessionCapability(config);
+        await syncEmbeddingCatalog(config);
         let folderMappings: Map<string, FolderMapping> = new Map();
         try {
           logger.info('Initializing plugin manifests...');

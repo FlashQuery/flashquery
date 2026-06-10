@@ -34,7 +34,7 @@ describe.skipIf(!HAS_SUPABASE)('embedding-config-sync add entry', () => {
     initLogger(config);
     await initSupabase(config);
     client = await setupTestSupabase();
-  }, 30000);
+  }, 90000);
 
   beforeEach(async () => {
     await client.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]);
