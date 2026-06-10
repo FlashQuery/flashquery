@@ -510,6 +510,29 @@ templates:
 | `permissive` | Purposes without an explicit `templates` list can see all discovered templates with `fq_expose_as_tool: true`. This is the default. |
 | `restrictive` | Purposes without an explicit `templates` list see no template tools. |
 
+### Host template tools
+
+Beyond the delegated `call_model` path, eligible vault templates can be exposed **directly on FlashQuery's host MCP tool surface** — they appear in the host `tools/list` as generated `flashquery_<namespace>_<slug>` tools that any connected MCP client can call without going through a purpose. Calling a host template tool renders the template body with the supplied arguments and returns the rendered content, the same way a delegated template tool does.
+
+A template is eligible for host exposure when it declares both `fq_template: true` and `fq_expose_as_tool: true`. Host exposure refreshes live as templates change: tools are added, updated, removed, and renamed on the next vault scan, and connected clients receive a `tools/list` change notification.
+
+```yaml
+templates:
+  default_access: permissive   # delegated (purpose) exposure default
+  host_access: permissive      # host MCP surface exposure
+  # host_templates:            # restrictive mode: expose only these template files
+  #   - "Templates/Research-Skill.md"
+  #   - "Templates/Source-Skill.md"
+```
+
+| Field | Behavior |
+|---|---|
+| `host_access: permissive` | Every eligible template (`fq_template: true` + `fq_expose_as_tool: true`) is exposed as a host MCP tool. This is the default when the block is present. |
+| `host_access: restrictive` | Only the template files listed in `host_templates` are exposed on the host surface. |
+| `host_templates` | The explicit allowlist of template paths to expose when `host_access` is `restrictive`. |
+
+Host template tools are independent of purpose bindings: `default_access` / `llm.purposes[].templates` govern what a delegated model sees, while `host_access` / `host_templates` govern what the host MCP client sees. A generated tool name that collides with a native FlashQuery tool is suppressed, and templates missing `fq_expose_as_tool: true` are skipped with a startup warning. Host template tools are also indexed by the host `search_tools` service after the template registry refreshes, so they can be discovered alongside native and brokered tools.
+
 Purpose-level template bindings live in `llm.purposes[].templates`:
 
 ```yaml

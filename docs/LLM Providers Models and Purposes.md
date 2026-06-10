@@ -443,6 +443,7 @@ Template access is covered in more detail in `Document Reference System.md`, but
 - Direct `{{ref:...}}` references can use any resolvable template; purpose bindings are not required.
 - `llm.purposes[].templates` controls which templates appear as callable tools to the delegated model during a managed purpose call.
 - Top-level `templates.default_access` controls whether purposes without an explicit template list get all exposed templates (`permissive`, the default) or none (`restrictive`).
+- Top-level `templates.host_access` / `templates.host_templates` control whether eligible templates are exposed directly on the host MCP tool surface (callable without a purpose). See "Host template tools" in `Document Reference System.md`.
 
 ## Embedding Purpose
 
@@ -551,6 +552,22 @@ If a value is not recognized in a strict section, FlashQuery reports a config er
 ```yaml
 templates:
   default_access: restrictive
+  host_access: restrictive
+  host_templates:
+    - Templates/host-status.md
+
+mcp_servers:
+  docs-helper:
+    transport: stdio
+    command: node
+    args: [/path/to/docs-helper/dist/index.js]
+    cost_per_call: 0
+    per_call_timeout_ms: 30000
+
+host:
+  mcp_servers:
+    - docs-helper
+  tool_search: enabled
 
 llm:
   providers:
@@ -616,6 +633,8 @@ llm:
         max_iterations: 4
       tools:
         - tier:read-only
+      mcp_servers:
+        - docs-helper
       tool_search: enabled
       templates:
         - Templates/document-review.md
@@ -625,7 +644,8 @@ This configuration gives callers:
 
 - `resolver: "model", name: "fast"` for exact model selection.
 - `resolver: "purpose", name: "general"` for routine calls with fallback.
-- `resolver: "purpose", name: "reviewer"` for a tool-enabled review workflow with a curated template and `search_tools` discovery available inside the managed loop.
+- `resolver: "purpose", name: "reviewer"` for a tool-enabled review workflow with a curated template, a brokered docs helper, and `search_tools` discovery available inside the managed loop.
+- A host MCP client can see the brokered `docs-helper` tools and the allowed host template tool when the host surface is enabled by the main MCP server.
 
 ## Practical Guidance
 

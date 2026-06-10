@@ -2,7 +2,7 @@
 
 All tools are called with the `mcp__flashquery__` prefix in clients that expose MCP tool names directly. Example: `mcp__flashquery__write_document`.
 
-This guide describes the current consolidated host MCP tool surface. The exact tools visible to a host can be filtered with `host_mcp_tools` in `flashquery.yml`; if `host_mcp_tools` is omitted, all current host-eligible final and transitional tools are registered. Removed legacy names are listed only as migration references near the end.
+This guide describes the current consolidated native host MCP tool surface. The exact native tools visible to a host can be filtered with `host_mcp_tools` in `flashquery.yml`; if `host_mcp_tools` is omitted, all current host-eligible final and transitional native tools are registered. Eligible vault templates may also appear as generated host template tools when template host exposure is enabled; those generated tools are described in [Document References and Templates](./Document%20Reference%20System.md#host-template-tools). Removed legacy names are listed only as migration references near the end.
 
 ## Response Conventions
 
@@ -853,7 +853,7 @@ mcp__flashquery__list_vault({
 
 **Related tools**
 
-Use `get_document` to read a file returned by `list_vault` and `manage_directory` to create or remove directories.
+Use `get_document` to read a file returned by `list_vault` and `manage_directory` to create, remove, rename, or move directories.
 
 ## Directories And Maintenance
 
@@ -862,19 +862,20 @@ Use `get_document` to read a file returned by `list_vault` and `manage_directory
 **Status:** final
 **Category:** doc-write
 **Tier:** read-write
-**Use when:** Creating vault folders or removing empty vault folders.
+**Use when:** Creating, removing, renaming, or moving vault folders.
 **Do not use when:** You need file/document lifecycle; use document tools.
 
 **Behavior**
 
-Processes directory paths in order. Create mode is recursive and idempotent: existing directories return `status: "unchanged"`. Remove mode removes only empty directories and returns per-path conflicts for non-empty directories. Paths are normalized, sanitized, validated to stay inside the vault, and locked per directory when locking is enabled. Partial successes stay in the ordered results array.
+Processes directory paths in order. Create mode is recursive and idempotent: existing directories return `status: "unchanged"`. Remove mode removes only empty directories and returns per-path conflicts for non-empty directories. Rename and move modes require `destinations` aligned positionally with `paths`, reject existing destinations, and lock source and destination directories together in stable order when locking is enabled. Paths are normalized, sanitized, and validated to stay inside the vault. Partial successes stay in the ordered results array.
 
 **Inputs**
 
 | Field | Type | Required | Default | Description |
 |---|---:|---:|---:|---|
-| `action` | `"create" \| "remove"` | yes | none | Directory operation. |
+| `action` | `"create" \| "remove" \| "rename" \| "move"` | yes | none | Directory operation. |
 | `paths` | `string[]` | yes | none | Vault-relative directory paths to process in order. Duplicate paths execute sequentially. |
+| `destinations` | `string[]` | rename/move | none | Vault-relative destination directories. Required for `rename` and `move`, and must have the same length/order as `paths`. |
 
 **Output**
 
@@ -904,7 +905,7 @@ mcp__flashquery__manage_directory({
 
 **Related tools**
 
-Use `write_document` to create files inside directories and `remove_document` to remove files.
+Use `write_document` to create files inside directories, `move_document` to move a single document while preserving its identity, and `remove_document` to remove files.
 
 ### `maintain_vault`
 
@@ -1472,7 +1473,7 @@ mcp__flashquery__call_model({
 
 **Related tools**
 
-See `docs/Document Reference System.md` for reference syntax and `docs/LLM Providers Models and Purposes.md` for configuration. Use `search_tools` for host or delegated tool discovery and `get_llm_usage` for usage reporting.
+See `docs/Document Reference System.md` for reference syntax and `docs/LLM Providers Models and Purposes.md` for configuration. Use `search_tools` for host or delegated tool discovery when tool search is enabled and `get_llm_usage` for usage reporting.
 
 ### `search_tools`
 
@@ -1484,7 +1485,7 @@ See `docs/Document Reference System.md` for reference syntax and `docs/LLM Provi
 
 **Behavior**
 
-Searches a BM25-style index of visible tools and returns ranked discovery results. As a host MCP tool, it indexes the host-visible native tool surface plus host-visible brokered MCP tools when `host.tool_search: enabled`. Inside a managed `call_model` purpose loop, `tool_search: enabled` exposes this discovery tool so the delegated model can search the purpose-visible native and brokered tool index before making direct calls. The search result is discovery metadata only; it does not execute the returned tool.
+Searches a BM25-style index of visible tools and returns ranked discovery results. As a host MCP tool, it searches the host-visible native tool surface, generated host template tools, and host-visible brokered MCP tools after the host tool-search index has been initialized; brokered host tools are indexed only when `host.tool_search: enabled`. Inside a managed `call_model` purpose loop, `tool_search: enabled` exposes this discovery tool so the delegated model can search the purpose-visible native, template, and brokered tool index before making direct calls. The search result is discovery metadata only; it does not execute the returned tool.
 
 **Inputs**
 

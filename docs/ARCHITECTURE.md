@@ -197,11 +197,11 @@ The optional `llm:` section uses a three-layer shape:
 
 - `providers:` name OpenAI-compatible or Ollama endpoints and their API key source.
 - `models:` define aliases, provider mapping, underlying model IDs, type, cost, optional context window, tags, and tool capability declarations.
-- `purposes:` define fallback chains and defaults. A purpose can also expose FlashQuery-managed native tools with `tools`, remove items from a tier with `excluded_tools`, and bind vault templates with `templates`.
+- `purposes:` define fallback chains and defaults. A purpose can also expose FlashQuery-managed native tools with `tools`, remove items from a tier with `excluded_tools`, bind vault templates with `templates`, expose configured external MCP servers with `mcp_servers`, and enable delegated `search_tools` discovery with `tool_search`.
 
 Purpose tool exposure supports `tier:read-only`, `tier:read-write`, and explicit native tool names. Hard-excluded tools such as `call_model`, `call_macro`, `register_plugin`, `unregister_plugin`, `get_plugin_info`, `clear_pending_reviews`, and `maintain_vault` are removed from delegated model-visible registries even if listed.
 
-Vault templates are ordinary documents with `fq_template: true` frontmatter. Purpose-bound templates can be exposed as generated provider-safe tools named `flashquery_<namespace>_<slug>`, or injected by host-authored references through `template_params`.
+Vault templates are ordinary documents with `fq_template: true` frontmatter. Templates can be exposed as generated tools named `flashquery_<namespace>_<slug>` in two ways: to a delegated model during a purpose call (purpose-bound, governed by `templates.default_access` and `llm.purposes[].templates`), or directly on the host MCP tool surface (governed by `templates.host_access` / `templates.host_templates`) so any connected client can call them without a purpose. Host exposure refreshes live as templates change. Templates can also be injected by host-authored references through `template_params`.
 
 ---
 
