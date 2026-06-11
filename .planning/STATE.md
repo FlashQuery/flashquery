@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Embedding Management & Multi-Provider Support
 status: in_progress
-last_updated: "2026-06-11T13:37:31.000Z"
+last_updated: "2026-06-11T14:18:40.000Z"
 last_activity: 2026-06-11
 progress:
   total_phases: 3
   completed_phases: 2
-  total_plans: 8
-  completed_plans: 8
+  total_plans: 9
+  completed_plans: 9
   percent: 67
 ---
 
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 
 Phase: 166 — Embedding Pipeline
 Plan: 167-03 — Lifecycle Operations and Validation
-Status: Phase 167 in progress; Plan 167-02 complete
-Last activity: 2026-06-11 — Phase 167 Plan 02 added durable lifecycle jobs, per-entry running-job locks, heartbeat recovery, pollable status, and abort dispatch through maintain_vault
+Status: Phase 167 in progress; Plan 167-03 complete
+Last activity: 2026-06-11 — Phase 167 Plan 03 added core document/memory backfill_embeddings and rebuild_embeddings processors, public maintain_vault dispatch, and D-104 through D-110 directed scenario coverage
 
-Progress: ███████░░░ 67% (2/3 milestone phases complete; 8/8 currently executed milestone plans complete)
+Progress: ███████░░░ 67% (2/3 milestone phases complete; 9/9 currently executed milestone plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 8 (this milestone)
+- Total plans completed: 9 (this milestone)
 - Average duration: ~35 min
-- Total execution time: ~4h 42m
+- Total execution time: ~5h 19m
 
 **By Phase:**
 
@@ -45,7 +45,7 @@ Progress: ███████░░░ 67% (2/3 milestone phases complete; 8/8
 |-------|-------|-------|----------|
 | 165 | 3 | ~1h 30m | ~30m |
 | 166 | 4/4 | ~3h 05m | ~46m |
-| 167 | 2/? | ~15m | ~8m |
+| 167 | 3/? | ~52m | ~17m |
 
 *Updated after each plan completion*
 
@@ -87,6 +87,10 @@ Progress: ███████░░░ 67% (2/3 milestone phases complete; 8/8
 - Phase 167 Plan 02 completed REQ-038 and REQ-039 foundation: `fqc_maintenance_jobs` now persists lifecycle status, heartbeat, abort, partial counts, failures, and errors; same-entry lifecycle actions are guarded by a partial unique running-job index; stale heartbeat recovery marks abandoned jobs failed; and `maintain_vault` status/abort routes through durable jobs while preserving legacy sync/repair status behavior.
 - Durable lifecycle helpers require `supabase.databaseUrl` and return an expected `invalid_input` configuration envelope before mutation when direct PostgreSQL access is unavailable.
 - `.env.test` loaded during Plan 167-02 verification, but direct PostgreSQL integration branches skipped because `HAS_DIRECT_DATABASE_URL` was false in the shared test helper; required targeted integration and typecheck commands still exited 0.
+- Phase 167 Plan 03 completed REQ-035 and REQ-036 for core documents and memories: `backfill_embeddings` fills only NULL per-entry vectors, `rebuild_embeddings` overwrites guarded rows with confirm/max_rows, stale-only and mismatched-width predicates use stamping columns, and both paths persist durable counts/failures/status through `maintain_vault`.
+- Core lifecycle processors require `supabase.databaseUrl` for row selection, max_rows counts, durable job invariants, and HNSW reindexing; vector/stamp writes still flow through `updateTargetEmbedding`.
+- Records-scope lifecycle remains intentionally deferred to later Phase 167 work; Plan 167-03 returns explicit `unsupported` for records scope instead of partially implementing it.
+- D-104 through D-110 directed scenarios passed using `.env.test` credentials and managed embedding-enabled servers.
 
 ### Todos
 
@@ -98,7 +102,7 @@ None
 
 ## Session Continuity
 
-**Last session:** 2026-06-11 — Phase 167 Plan 02 executed
+**Last session:** 2026-06-11 — Phase 167 Plan 03 executed
 **Next action:** Execute remaining Phase 167 lifecycle operations and validation plans
 **Context needed:** Phase 167 should build on `.planning/phases/166-embedding-pipeline/166-01-SUMMARY.md`, `166-02-SUMMARY.md`, `166-03-SUMMARY.md`, `166-04-SUMMARY.md`, plus the external source-of-truth requirements and test plan.
 
