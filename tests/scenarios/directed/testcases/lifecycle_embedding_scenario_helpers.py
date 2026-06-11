@@ -209,3 +209,160 @@ def lifecycle_context(args: argparse.Namespace, *, model: str | None = None) -> 
         require_embedding=True,
         extra_config=lifecycle_catalog_config(model=model),
     )
+
+
+def lifecycle_catalog_entries_config(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    mode = (os.environ.get("FQC_TEST_EMBEDDING_MODE") or "ollama_openai").lower().replace("-", "_")
+    provider = "openai-embeddings" if mode == "openai" else "local-ollama"
+    default_model = (
+        os.environ.get("OPENAI_EMBEDDING_MODEL")
+        if provider == "openai-embeddings"
+        else os.environ.get("OLLAMA_EMBEDDING_MODEL")
+    )
+    return {
+        "embeddings": [
+            {
+                "name": entry["name"],
+                "dimensions": int(entry.get("dimensions", os.environ.get("FQC_TEST_EMBEDDING_DIMENSIONS", "768"))),
+                "endpoints": [
+                    {
+                        "provider_name": provider,
+                        "model": entry.get("model", default_model or ("text-embedding-3-small" if provider == "openai-embeddings" else "nomic-embed-text")),
+                    }
+                ],
+            }
+            for entry in entries
+        ]
+    }
+
+
+def retire_test_context(args: argparse.Namespace, entries: list[dict[str, Any]]) -> TestContext:
+    port_range = tuple(args.port_range) if args.port_range else None
+    return TestContext(
+        fqc_dir=args.fqc_dir,
+        managed=True,
+        port_range=port_range,
+        require_embedding=True,
+        extra_config=lifecycle_catalog_entries_config(entries),
+    )
+
+
+def plugin_yaml(plugin_id: str, embedding: str | None = "*") -> str:
+    if embedding is None:
+        embedding_line = "embedding: null"
+    else:
+        embedding_line = f'embedding: "{embedding}"'
+    return f"""
+id: {plugin_id}
+name: {plugin_id}
+version: 1.0.0
+{embedding_line}
+tables:
+  - name: notes
+    embed_fields: [title]
+    columns:
+      - name: title
+        type: text
+      - name: body
+        type: text
+"""
+
+
+def register_plugin(ctx: TestContext, plugin_id: str, schema_yaml: str, embedding_name: str | None) -> Any:
+    kwargs: dict[str, Any] = {"schema_yaml": schema_yaml, "plugin_instance": "default"}
+    if embedding_name is not None:
+        kwargs["embedding_name"] = embedding_name
+    result = ctx.client.call_tool("register_plugin", **kwargs)
+    if result.ok:
+        ctx.cleanup.track_plugin_registration(plugin_id, "default")
+    return result
+
+
+def retire_metadata(ctx: TestContext, embedding_name: str, plugin_table: str | None = None) -> dict[str, Any]:
+    base = f"embedding_{embedding_name}"
+    tables = ["fqc_documents", "fqc_memory"]
+    if plugin_table:
+        tables.append(plugin_table)
+    function_names = [f"match_documents_{embedding_name}", f"match_memories_{embedding_name}"]
+    if plugin_table:
+        function_names.append(f"match_records_{plugin_table}_{embedding_name}"[:63])
+    with psycopg.connect(db_url(ctx)) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT count(*) FROM fqc_embeddings
+                WHERE instance_id = %s AND name = %s
+                """,
+                (ctx.server.instance_id, embedding_name),
+            )
+            catalog_rows = int(cur.fetchone()[0])
+            cur.execute(
+                """
+                SELECT table_name, column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = ANY(%s)
+                  AND column_name LIKE %s
+                ORDER BY table_name, column_name
+                """,
+                (tables, f"{base}%"),
+            )
+            columns = [f"{row[0]}.{row[1]}" for row in cur.fetchall()]
+            cur.execute(
+                """
+                SELECT indexname FROM pg_indexes
+                WHERE schemaname = 'public'
+                  AND indexname LIKE %s
+                ORDER BY indexname
+                """,
+                (f"idx_%_{base}",),
+            )
+            indexes = [row[0] for row in cur.fetchall()]
+            cur.execute(
+                """
+                SELECT p.proname
+                FROM pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname = 'public'
+                  AND (
+                    p.proname = ANY(%s)
+                    OR (p.proname LIKE 'match_records_%%' AND right(p.proname, length(%s)) = %s)
+                  )
+                ORDER BY p.proname
+                """,
+                (
+                    function_names,
+                    f"_{embedding_name}",
+                    f"_{embedding_name}",
+                ),
+            )
+            functions = [row[0] for row in cur.fetchall()]
+    return {
+        "catalog_rows": catalog_rows,
+        "columns": columns,
+        "indexes": indexes,
+        "functions": functions,
+    }
+
+
+def seed_deactivated_column_set(ctx: TestContext, name: str = "retired_entry") -> None:
+    dims = int(os.environ.get("FQC_TEST_EMBEDDING_DIMENSIONS", "768"))
+    with psycopg.connect(db_url(ctx)) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO fqc_embeddings(instance_id, name, dimensions, endpoints, source, status)
+                VALUES (%s, %s, %s, '[{"provider_name":"local-ollama","model":"retired-model"}]'::jsonb, 'yaml', 'deactivated')
+                ON CONFLICT(instance_id, name)
+                DO UPDATE SET status = 'deactivated', dimensions = EXCLUDED.dimensions, endpoints = EXCLUDED.endpoints
+                """,
+                (ctx.server.instance_id, name, dims),
+            )
+            for table in ("fqc_documents", "fqc_memory"):
+                cur.execute(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "embedding_{name}" vector({dims})')
+                cur.execute(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "embedding_{name}_model" TEXT')
+                cur.execute(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "embedding_{name}_dimensions" INT')
+                cur.execute(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "embedding_{name}_provider" TEXT')
+                cur.execute(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "embedding_{name}_truncated" BOOLEAN')
+                cur.execute(f'CREATE INDEX IF NOT EXISTS "idx_{table}_embedding_{name}" ON "{table}" USING hnsw ("embedding_{name}" vector_cosine_ops)')
+        conn.commit()
