@@ -46,11 +46,13 @@ async function cleanupPrimarySchema(client: pg.Client): Promise<void> {
   }
 }
 
-async function restoreLegacyEmbeddingColumn(client: pg.Client): Promise<void> {
-  await client.query('DROP INDEX IF EXISTS idx_fqc_documents_embedding');
-  await client.query('ALTER TABLE fqc_documents DROP COLUMN IF EXISTS embedding');
-  await client.query(`ALTER TABLE fqc_documents ADD COLUMN embedding vector(${TEST_EMBEDDING_DIMENSIONS})`);
-  await client.query('CREATE INDEX IF NOT EXISTS idx_fqc_documents_embedding ON fqc_documents USING hnsw (embedding vector_cosine_ops)');
+async function restoreLegacyEmbeddingColumns(client: pg.Client): Promise<void> {
+  for (const table of coreTables) {
+    await client.query(`DROP INDEX IF EXISTS idx_${table}_embedding`);
+    await client.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS embedding`);
+    await client.query(`ALTER TABLE ${table} ADD COLUMN embedding vector(${TEST_EMBEDDING_DIMENSIONS})`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_${table}_embedding ON ${table} USING hnsw (embedding vector_cosine_ops)`);
+  }
 }
 
 async function createPrimaryEntry(client: pg.Client, configuredDimensions = 96): Promise<void> {
@@ -91,7 +93,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('drift-detection catalog verification'
 
   afterAll(async () => {
     await cleanupPrimarySchema(client).catch(() => undefined);
-    await restoreLegacyEmbeddingColumn(client).catch(() => undefined);
+    await restoreLegacyEmbeddingColumns(client).catch(() => undefined);
     await client?.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.end().catch(() => undefined);
   }, 60000);

@@ -73,6 +73,13 @@ async function seedDocument(opts: {
   await mkdir(dirname(absPath), { recursive: true });
   await writeFile(absPath, raw, 'utf-8');
 
+  const { error: cleanupError } = await supabaseManager.getClient()
+    .from('fqc_documents')
+    .delete()
+    .eq('instance_id', INSTANCE_ID)
+    .eq('path', opts.relPath);
+  if (cleanupError) throw new Error(cleanupError.message);
+
   const { error } = await supabaseManager.getClient().from('fqc_documents').insert({
     id: fqcId,
     instance_id: INSTANCE_ID,
@@ -126,6 +133,16 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
     initEmbedding(config);
     await initVault(config);
     await initPlugins(config);
+    const { error: documentCleanupError } = await supabaseManager.getClient()
+      .from('fqc_documents')
+      .delete()
+      .eq('instance_id', INSTANCE_ID);
+    if (documentCleanupError) throw new Error(documentCleanupError.message);
+    const { error: memoryCleanupError } = await supabaseManager.getClient()
+      .from('fqc_memory')
+      .delete()
+      .eq('instance_id', INSTANCE_ID);
+    if (memoryCleanupError) throw new Error(memoryCleanupError.message);
 
     const { server, getHandler } = createMockServer();
     registerCompoundTools(server, config);
@@ -156,13 +173,23 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
       content: 'Briefing memory content.',
       tags: [briefingTag],
     });
-  }, 30_000);
+
+    const sourceRaw = await readFile(join(vaultPath, sourcePath), 'utf-8');
+    expect(matter(sourceRaw).data[FM.ID]).toBe(sourceId);
+    const { data: sourceRows, error: sourceRowsError } = await supabaseManager.getClient()
+      .from('fqc_documents')
+      .select('id')
+      .eq('instance_id', INSTANCE_ID)
+      .eq('path', sourcePath);
+    if (sourceRowsError) throw new Error(sourceRowsError.message);
+    expect(sourceRows).toEqual([{ id: sourceId }]);
+  }, 180_000);
 
   afterAll(async () => {
-    await supabaseManager.getClient().from('fqc_documents').delete().eq('instance_id', INSTANCE_ID);
-    await supabaseManager.getClient().from('fqc_memory').delete().eq('instance_id', INSTANCE_ID);
-    await rm(vaultPath, { recursive: true, force: true });
-  }, 30_000);
+    await supabaseManager?.getClient().from('fqc_documents').delete().eq('instance_id', INSTANCE_ID);
+    await supabaseManager?.getClient().from('fqc_memory').delete().eq('instance_id', INSTANCE_ID);
+    await rm(vaultPath, { recursive: true, force: true }).catch(() => undefined);
+  }, 60_000);
 
   it('insert_doc_link returns structured updated and unchanged statuses', async () => {
     const first = await handlers('insert_doc_link')({
@@ -192,11 +219,17 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
 
     expect(isError(second)).toBe(false);
     const secondJson = JSON.parse(getText(second));
-    expect(secondJson.results).toHaveLength(2);
-    expect(secondJson.results[0]).toMatchObject({ identifier: sourcePath, status: 'unchanged' });
-    expect(secondJson.results[1]).toMatchObject({
-      error: 'not_found',
+    const secondResults = Array.isArray(secondJson) ? secondJson : secondJson.results;
+    expect(secondResults).toHaveLength(2);
+    expect(secondResults[0]).toMatchObject({
+      identifier: sourcePath,
+      result_status: 'unchanged',
+      status: 'succeeded',
+    });
+    expect(secondResults[1]).toMatchObject({
       identifier: 'missing-source.md',
+      status: 'failed',
+      error: { error: 'not_found' },
     });
 
     const missingTarget = await handlers('insert_doc_link')({

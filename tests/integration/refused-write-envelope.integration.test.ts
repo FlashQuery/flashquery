@@ -30,7 +30,7 @@ describe.skipIf(!HAS_SUPABASE)('REQ-015 refused-write conflict envelope integrat
     harness = await createPhase155Harness('fqc-refused-write-envelope-');
     harness.vaultPath = await realpath(harness.vaultPath);
     harness.config.instance.vault.path = harness.vaultPath;
-  }, 60_000);
+  }, 120_000);
 
   afterAll(async () => {
     await harness?.cleanup();

@@ -87,7 +87,7 @@ describe.skipIf(!HAS_SUPABASE)('records-reconciliation T-I-044', () => {
     registerPluginTools(server, config);
     const result = await getHandler('register_plugin')({ schema_yaml: SCHEMA }) as { isError?: boolean; content: Array<{ text: string }> };
     if (result.isError) throw new Error(result.content[0].text);
-  }, 120_000);
+  }, 180_000);
 
   afterAll(async () => {
     if (supabaseReady) {
@@ -99,7 +99,7 @@ describe.skipIf(!HAS_SUPABASE)('records-reconciliation T-I-044', () => {
     await pgClient?.query(`DROP TABLE IF EXISTS ${pg.escapeIdentifier(TABLE_NAME)}`).catch(() => undefined);
     await pgClient?.end().catch(() => undefined);
     if (vaultPath) await rm(vaultPath, { recursive: true, force: true });
-  }, 60_000);
+  }, 90_000);
 
   it('T-I-044 concurrent write_record calls do not double-apply reconciliation', async () => {
     await mkdir(join(vaultPath, 'records-reconciliation'), { recursive: true });

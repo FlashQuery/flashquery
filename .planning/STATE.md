@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Embedding Management & Multi-Provider Support
 status: in_progress
-last_updated: "2026-06-10T00:00:00.000Z"
-last_activity: 2026-06-10
+last_updated: "2026-06-11T00:00:00.000Z"
+last_activity: 2026-06-11
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 3
+  total_plans: 7
   completed_plans: 3
-  percent: 100
+  percent: 43
 ---
 
 # FlashQuery Core — State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 ## Current Position
 
 Phase: 166 — Embedding Pipeline
-Plan: TBD — Write Path + Pending Queue
-Status: Ready to plan next phase
-Last activity: 2026-06-10 — Phase 165 Plan 03 completed: atomic stamping, provider length guard, and dimensions request heuristic removal
+Plan: 166-01 — Write Path: Best-Effort Per-Entry + Pending Queue
+Status: Planned; ready to execute Phase 166 Plan 01
+Last activity: 2026-06-11 — Phase 166 planned with four executable plans for write path, rate limiting, search/RRF, and plugin-table integration
 
-Progress: ██████████ 100% (3/3 Phase 165 plans)
+Progress: ████░░░░░░ 43% (3/7 milestone plans complete)
 
 ## Performance Metrics
 
@@ -44,7 +44,7 @@ Progress: ██████████ 100% (3/3 Phase 165 plans)
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 165 | 3 | ~1h 30m | ~30m |
-| 166 | ? | - | - |
+| 166 | 0/4 | - | - |
 | 167 | ? | - | - |
 
 *Updated after each plan completion*
@@ -74,7 +74,7 @@ Progress: ██████████ 100% (3/3 Phase 165 plans)
 
 ### Todos
 
-- Plan Phase 166 Embedding Pipeline next
+- Execute Phase 166 Plan 01: Write Path: Best-Effort Per-Entry + Pending Queue
 
 ### Blockers
 
@@ -82,9 +82,9 @@ None
 
 ## Session Continuity
 
-**Last session:** 2026-06-10 — Phase 165 Plan 03 completed
-**Next action:** Plan Phase 166 Embedding Pipeline
-**Context needed:** Phase 166 should build on `.planning/phases/165-foundation-infrastructure/165-01-SUMMARY.md`, `165-02-SUMMARY.md`, and `165-03-SUMMARY.md`, plus spec §8 Phase 2 sub-steps 2.1 through 2.4.
+**Last session:** 2026-06-11 — Phase 166 planned
+**Next action:** Execute `.planning/phases/166-embedding-pipeline/166-01-PLAN.md`
+**Context needed:** Phase 166 execution should build on `.planning/phases/166-embedding-pipeline/166-CONTEXT.md`, `.planning/phases/165-foundation-infrastructure/165-01-SUMMARY.md`, `165-02-SUMMARY.md`, and `165-03-SUMMARY.md`, plus the two external source-of-truth docs named in every Phase 166 plan.
 
 ## v4.0 Deferred Items
 

@@ -399,6 +399,9 @@ export async function targetedScan(
                 );
               }
             }
+            // A valid on-disk fq_id is the local-first identity for this file.
+            // Repair missing metadata around it, but do not replace it with a
+            // freshly generated UUID during the same write.
 
             if (lockedValidatedFqcId) {
               const { data: ownerRow } = await supabase
@@ -421,6 +424,11 @@ export async function targetedScan(
                 );
                 lockedValidatedFqcId = undefined;
               }
+            }
+
+            if (!lockedValidatedFqcId && resolved.fqcId && isValidUuid(resolved.fqcId)) {
+              lockedValidatedFqcId = resolved.fqcId;
+              lockedParsed.data[FM.ID] = resolved.fqcId;
             }
 
             if (!lockedValidatedFqcId) {
@@ -557,8 +565,9 @@ export async function targetedScan(
           `targetedScan: retry failed for "${resolved.relativePath}" — degrading gracefully: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`
         );
 
-        // Generate new UUID as final fallback
-        const fallbackId = uuidv4();
+        // Preserve the resolved identity when available; only mint an id if no
+        // trustworthy identity survived the degraded path.
+        const fallbackId = resolved.fqcId && isValidUuid(resolved.fqcId) ? resolved.fqcId : uuidv4();
         const now = new Date().toISOString();
         const snapshot: FrontmatterSnapshot = {
           fqcId: fallbackId,
@@ -579,7 +588,7 @@ export async function targetedScan(
         `targetedScan: non-transient error for "${resolved.relativePath}" — degrading gracefully: ${err instanceof Error ? err.message : String(err)}`
       );
 
-      const fallbackId = uuidv4();
+      const fallbackId = resolved.fqcId && isValidUuid(resolved.fqcId) ? resolved.fqcId : uuidv4();
       const now = new Date().toISOString();
       const snapshot: FrontmatterSnapshot = {
         fqcId: fallbackId,

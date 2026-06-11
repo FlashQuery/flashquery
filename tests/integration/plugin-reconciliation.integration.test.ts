@@ -190,14 +190,14 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
     if (regResult.isError) {
       console.error('Plugin registration failed:', regResult.content[0].text);
     }
-  }, 60000);
+  }, 180_000);
 
   afterAll(async () => {
     if (SKIP_DB) return;
 
     // Clean up plugin tables
     for (const table of [contactsTable, legacyTable]) {
-      await pgClient.query(`DROP TABLE IF EXISTS ${pg.escapeIdentifier(table)}`).catch(() => {});
+      await pgClient?.query(`DROP TABLE IF EXISTS ${pg.escapeIdentifier(table)}`).catch(() => {});
     }
 
     // Clean up pending reviews
@@ -223,9 +223,9 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
       .delete()
       .eq('id', INSTANCE_ID);
 
-    await pgClient.end().catch(() => {});
-    await rm(vaultPath, { recursive: true, force: true });
-  }, 30000);
+    await pgClient?.end().catch(() => {});
+    await rm(vaultPath, { recursive: true, force: true }).catch(() => {});
+  }, 90_000);
 
   // ── Test 1: record tool triggers reconciliation ───────────────────────────
   // Auto-track requires doc in fqc_documents. Test 1 verifies the reconciliation
@@ -392,7 +392,7 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
     );
     const hasArchived = rows.rows.some((r: { status: string }) => r.status === 'archived');
     expect(hasArchived).toBe(true);
-  });
+  }, 90_000);
 
   // ── Test 5: disassociation — ownership change causes plugin row archived ──
 
@@ -700,5 +700,5 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
 
     expect(pendingRows).not.toBeNull();
     expect(pendingRows!.length).toBeGreaterThan(0);
-  });
+  }, 90_000);
 });

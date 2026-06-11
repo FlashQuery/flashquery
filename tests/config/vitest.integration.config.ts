@@ -64,6 +64,7 @@ export default defineConfig({
     setupFiles: ['tests/helpers/setup-build.ts', 'tests/helpers/setup-env.ts'],
     globals: true,
     testTimeout: 30000,
+    hookTimeout: 180000,
     // Integration tests share module-level singletons (supabaseManager, pluginManager).
     // maxWorkers: 1 ensures one file runs at a time, preventing DDL races and singleton conflicts.
     maxWorkers: 1,

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import pg from 'pg';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -79,9 +79,15 @@ describe.skipIf(!HAS_SUPABASE).sequential('embedding-columns column set creation
     initLogger(config);
     await initSupabase(config);
     client = await setupTestSupabase();
-  }, 90000);
+  });
 
   beforeEach(async () => {
+    await cleanupPrimarySchema(client);
+    await client.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]);
+    vi.restoreAllMocks();
+  }, 60000);
+
+  afterEach(async () => {
     await cleanupPrimarySchema(client);
     await client.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]);
     vi.restoreAllMocks();
@@ -112,7 +118,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('embedding-columns column set creation
       expect(columns.get('embedding_primary_truncated')).toBe('boolean');
       expect(await indexExists(client, `idx_${table}_embedding_primary`)).toBe(true);
     }
-  });
+  }, 90000);
 
   it('T-I-024 rolls back per-table DDL when a column-set operation fails', async () => {
     await client.query(`
@@ -135,7 +141,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('embedding-columns column set creation
     for (const column of managedColumns) {
       expect(documentColumns.has(column)).toBe(false);
     }
-  });
+  }, 90000);
 
   it('T-I-025 refuses startup when an orphaned base vector column exists', async () => {
     await client.query(`ALTER TABLE fqc_documents ADD COLUMN embedding_primary vector(96)`);

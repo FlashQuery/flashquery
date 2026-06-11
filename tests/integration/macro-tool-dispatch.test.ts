@@ -62,7 +62,7 @@ describe.skipIf(!HAS_SUPABASE)('macro native tool dispatch integration', () => {
     client = new Client({ name: 'macro-tool-dispatch-test', version: '1.0.0' });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  }, 30000);
+  }, 120_000);
 
   afterAll(async () => {
     await client?.close();

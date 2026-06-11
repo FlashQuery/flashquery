@@ -126,7 +126,11 @@
   4. With two active entries, `mode: "semantic"` on `search` issues parallel per-entry RPC queries and returns RRF-fused results with `per_embedding_ranks` per result; tie-breaking is deterministic; `mode: "mixed"` with zero active entries returns filesystem-only results with `embedding_unavailable` warning; `mode: "semantic"` with zero active entries returns `unsupported`
   5. Plugin registration resolves the correct `embedding_name` per the Research §5.9.3 rules; the resolved value is stored and frozen; plugin tables receive only that entry's column set and RPC in a single DDL pass; `write_record` and `search_records` operate against the plugin's single choice; legacy registrations are migrated on first startup
   6. All deactivated-entry refusal paths are complete: write-skip (sub-step 2.1), search-exclude (sub-step 2.3), pending-worker-skip (sub-step 2.1), plugin-registration-refuse (sub-step 2.4)
-**Plans**: TBD
+**Plans**:
+- `166-01-PLAN.md` — Write Path: Best-Effort Per-Entry + Pending Queue
+- `166-02-PLAN.md` — Rate Limiting + 429 Backoff
+- `166-03-PLAN.md` — Search + RRF Fusion
+- `166-04-PLAN.md` — Plugin-Table Integration
 
 ### Phase 167: Lifecycle Operations and Validation
 **Goal**: Operators can backfill, rebuild, retire, and abort embedding operations via `maintain_vault`; concurrent actions on the same entry are mutually exclusive; the complete feature is validated end-to-end through the two operator recipes as directed and integration scenarios
@@ -169,7 +173,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 165. Foundation Infrastructure | 3/3 | Complete | 2026-06-10 |
-| 166. Embedding Pipeline | 0/? | Not started | - |
+| 166. Embedding Pipeline | 0/4 | Planned | - |
 | 167. Lifecycle Operations and Validation | 0/? | Not started | - |
 
 ## Archived Milestone Details

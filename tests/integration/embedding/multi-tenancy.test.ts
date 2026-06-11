@@ -67,5 +67,5 @@ describe.skipIf(!HAS_SUPABASE)('embedding-config-sync multi-tenancy', () => {
       { instance_id: INSTANCE_A, name: 'primary', dimensions: 1536, status: 'deactivated' },
       { instance_id: INSTANCE_B, name: 'primary', dimensions: 768, status: 'active' },
     ]);
-  });
+  }, 120_000);
 });

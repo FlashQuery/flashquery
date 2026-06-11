@@ -1192,6 +1192,7 @@ class SupabaseManagerImpl implements SupabaseManager {
   async initialize(config: FlashQueryConfig): Promise<void> {
     const { url: supabaseUrl, serviceRoleKey, skipDdl, databaseUrl } = config.supabase;
     const dimensions = getLegacyEmbeddingDimensions(config);
+    const shouldVerifyLegacyEmbeddingDimensions = config.embedding !== undefined && config.embedding.provider !== 'none';
 
     const hostname = new URL(supabaseUrl).hostname;
     logger.debug(`Supabase: connecting to ${hostname}...`);
@@ -1205,7 +1206,7 @@ class SupabaseManagerImpl implements SupabaseManager {
           const verifyClient = createPgClientIPv4(databaseUrl);
           await verifyClient.connect();
           try {
-            await verifySchema(verifyClient, dimensions);
+            await verifySchema(verifyClient, shouldVerifyLegacyEmbeddingDimensions ? dimensions : undefined);
             logger.debug('Schema verification: all tables present (skip_ddl: true)');
           } finally {
             await verifyClient.end();
@@ -1243,7 +1244,7 @@ class SupabaseManagerImpl implements SupabaseManager {
           const verifyClient = createPgClientIPv4(databaseUrl);
           await verifyClient.connect();
           try {
-            await verifySchema(verifyClient, dimensions);
+            await verifySchema(verifyClient, shouldVerifyLegacyEmbeddingDimensions ? dimensions : undefined);
           } finally {
             await verifyClient.end();
           }
