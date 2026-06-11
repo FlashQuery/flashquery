@@ -84,10 +84,15 @@ describe('embedding dimension policy', () => {
     expect(getLegacyEmbeddingDimensions(config)).toBe(768);
   });
 
-  it('falls back to 1536 when neither LLM model nor legacy dimensions are configured', () => {
-    const config = makeConfig({});
+  it('requires explicit legacy dimensions when legacy embedding is active', () => {
+    const config = makeConfig({
+      embedding: {
+        provider: 'openai',
+        model: 'text-embedding-3-small',
+      },
+    });
 
-    expect(getLegacyEmbeddingDimensions(config)).toBe(1536);
+    expect(() => getLegacyEmbeddingDimensions(config)).toThrow(/dimensions are required/i);
   });
 });
 

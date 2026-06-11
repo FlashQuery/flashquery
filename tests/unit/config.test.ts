@@ -589,6 +589,7 @@ supabase:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
 `);
     try {
       const config = loadConfig(tmpFile);
@@ -616,6 +617,7 @@ vault:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
 `);
     try {
       expect(() => loadConfig(tmpFile)).toThrow(/Top-level 'vault:' section removed in v1.7/);
@@ -640,6 +642,7 @@ supabase:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
 `);
     try {
       const config = loadConfig(tmpFile);
@@ -665,6 +668,7 @@ supabase:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
 `);
     try {
       const config = loadConfig(tmpFile);
@@ -690,6 +694,7 @@ supabase:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
 `);
     try {
       expect(() => loadConfig(tmpFile)).toThrow(/supabase\.database_url/);
@@ -713,6 +718,7 @@ supabase:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
 `);
     try {
       expect(() => loadConfig(tmpFile)).toThrow(/instance\.id/);
@@ -737,6 +743,7 @@ supabase:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
 `);
     try {
       expect(() => loadConfig(tmpFile)).toThrow(/instance\.vault\.path/);
@@ -781,6 +788,7 @@ supabase:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
 `);
     try {
       const config = loadConfig(tmpFile);
@@ -815,6 +823,7 @@ supabase:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
 future_section:
   some_setting: "ignored"
 `);
@@ -843,6 +852,7 @@ supabase:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
   api_key: "\${TEST_CONFIG_VAR}"
 `);
     try {
@@ -871,6 +881,7 @@ supabase:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
   api_key: "\${UNSET_TEST_VAR_FQC}"
 `);
     try {
@@ -897,6 +908,7 @@ supabase:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
 projects:
   areas:
     - name: "Work"
@@ -925,6 +937,7 @@ supabase:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
 `);
     try {
       const config = loadConfig(tmpFile);
@@ -949,6 +962,7 @@ supabase:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
 locking:
   ttl_seconds: 60
 `);
@@ -978,6 +992,7 @@ supabase:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
 mcp:
   auth_secret: "test-secret-value"
 `);
@@ -1003,6 +1018,7 @@ supabase:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
 `);
     try {
       const config = loadConfig(tmpFile);
@@ -1027,6 +1043,7 @@ supabase:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
 defaults:
   project: "General"
 `);
@@ -1078,6 +1095,7 @@ supabase:
 embedding:
   provider: openai
   model: text-embedding-3-small
+  dimensions: 1536
 ` + MINIMAL_LLM_YAML);
     try {
       const config = loadConfig(tmpFile);
@@ -1110,6 +1128,7 @@ embedding:
 embedding:
   provider: openai
   model: text-embedding-3-small
+  dimensions: 1536
 `);
     try {
       const config = loadConfig(tmpFile);

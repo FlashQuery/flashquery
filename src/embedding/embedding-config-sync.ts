@@ -45,6 +45,36 @@ function endpointsEqual(left: CatalogEndpointRow[], right: CatalogEndpointRow[])
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function describeEndpointChanges(existing: CatalogEndpointRow[], incoming: CatalogEndpointRow[]): string[] {
+  const changes = new Set<string>();
+  const max = Math.max(existing.length, incoming.length);
+  if (existing.length !== incoming.length) {
+    changes.add('endpoints.length');
+  }
+
+  for (let index = 0; index < max; index++) {
+    const oldEndpoint = existing[index];
+    const newEndpoint = incoming[index];
+    if (!oldEndpoint || !newEndpoint) continue;
+    const prefix = `endpoints[${index}]`;
+    if (oldEndpoint.provider_name !== newEndpoint.provider_name) changes.add(`${prefix}.provider_name`);
+    if (oldEndpoint.model !== newEndpoint.model) changes.add(`${prefix}.model`);
+    if (oldEndpoint.rate_limit?.min_delay_ms !== newEndpoint.rate_limit?.min_delay_ms) {
+      changes.add(`${prefix}.rate_limit.min_delay_ms`);
+    }
+    if (oldEndpoint.max_input_chars !== newEndpoint.max_input_chars) changes.add(`${prefix}.max_input_chars`);
+  }
+
+  if (
+    existing.length === incoming.length &&
+    existing.some((endpoint, index) => endpoint.provider_name !== incoming[index]?.provider_name)
+  ) {
+    changes.add('endpoints.order/provider_name');
+  }
+
+  return [...changes].sort();
+}
+
 function affectedTablesForEntry(_name: string): string[] {
   // Phase 165-01 owns core catalog sync. Plugin table ownership arrives with plugin
   // embedding registration in Phase 166, where this list can be extended.
@@ -186,7 +216,11 @@ export async function syncEmbeddingCatalog(config: FlashQueryConfig): Promise<Em
         result.updated++;
       }
       if (shouldUpdateEndpoints) {
-        logger.info(`Embedding catalog: applied changes to embedding entry '${incoming.name}'`);
+        const changedAttributes = describeEndpointChanges(existing.endpoints, endpoints);
+        logger.info(
+          `Embedding catalog: applied changes to embedding entry '${incoming.name}' ` +
+            `(changed attributes: ${changedAttributes.join(', ') || 'endpoints'})`
+        );
       }
     }
     await createCoreEmbeddingColumnSet(config, incoming);

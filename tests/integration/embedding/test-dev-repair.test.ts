@@ -8,6 +8,7 @@ import { logger } from '../../../src/logging/logger.js';
 import { verifySchema } from '../../../src/storage/schema-verify.js';
 import { repairEmbeddingDimensionDrift } from '../../../src/storage/test-dev-repair.js';
 import { createCoreEmbeddingColumnSet } from '../../../src/storage/supabase.js';
+import { verifyStartupEmbeddingCatalog } from '../../../src/embedding/startup-validation.js';
 import { setupTestSupabase } from '../../helpers/supabase.js';
 import { HAS_SUPABASE } from '../../helpers/test-env.js';
 
@@ -65,6 +66,18 @@ async function createDrift(client: pg.Client): Promise<void> {
   await client.query('ALTER TABLE fqc_documents ADD COLUMN embedding_primary vector(64)');
 }
 
+async function createStartupDrift(client: pg.Client): Promise<FlashQueryConfig> {
+  const config = configWithEmbeddings([
+    {
+      name: 'primary',
+      dimensions: 96,
+      endpoints: [{ providerName: 'openai', model: 'text-embedding-3-small' }],
+    },
+  ]);
+  await createDrift(client);
+  return config;
+}
+
 async function vectorType(client: pg.Client, table: string, column: string): Promise<string> {
   const result = await client.query(
     `
@@ -118,5 +131,33 @@ describe.skipIf(!HAS_SUPABASE).sequential('test-dev-repair gated embedding repai
 
     await expect(verifySchema(client, { instanceId: TEST_INSTANCE_ID })).rejects.toThrow(/configured width 96.*actual width 64/i);
     await expect(vectorType(client, 'fqc_documents', 'embedding_primary')).resolves.toBe('vector(64)');
+  }, 90000);
+
+  it('fails the integrated startup validation when drift exists and repair gate is unset', async () => {
+    const config = await createStartupDrift(client);
+    const originalGate = process.env.FQ_EMBEDDING_REPAIR;
+    delete process.env.FQ_EMBEDDING_REPAIR;
+    try {
+      await expect(verifyStartupEmbeddingCatalog(config)).rejects.toThrow(
+        /entry primary.*fqc_documents.*embedding_primary.*configured width 96.*actual width 64/i
+      );
+      await expect(vectorType(client, 'fqc_documents', 'embedding_primary')).resolves.toBe('vector(64)');
+    } finally {
+      if (originalGate === undefined) delete process.env.FQ_EMBEDDING_REPAIR;
+      else process.env.FQ_EMBEDDING_REPAIR = originalGate;
+    }
+  }, 90000);
+
+  it('repairs and continues integrated startup validation when the explicit repair gate is enabled', async () => {
+    const config = await createStartupDrift(client);
+    const originalGate = process.env.FQ_EMBEDDING_REPAIR;
+    process.env.FQ_EMBEDDING_REPAIR = '1';
+    try {
+      await expect(verifyStartupEmbeddingCatalog(config)).resolves.toBeUndefined();
+      await expect(vectorType(client, 'fqc_documents', 'embedding_primary')).resolves.toBe('vector(96)');
+    } finally {
+      if (originalGate === undefined) delete process.env.FQ_EMBEDDING_REPAIR;
+      else process.env.FQ_EMBEDDING_REPAIR = originalGate;
+    }
   }, 90000);
 });

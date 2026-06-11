@@ -257,6 +257,13 @@ function requireApiKey(
   return config.apiKey;
 }
 
+function requireDimensions(config: NonNullable<FlashQueryConfig['embedding']>): number {
+  if (config.dimensions === undefined) {
+    throw new Error('Embedding error: dimensions are required for active legacy embedding providers.');
+  }
+  return config.dimensions;
+}
+
 export function createEmbeddingProvider(config: NonNullable<FlashQueryConfig['embedding']>): EmbeddingProvider {
   switch (config.provider) {
     case 'openai':
@@ -264,7 +271,7 @@ export function createEmbeddingProvider(config: NonNullable<FlashQueryConfig['em
         config.endpoint ?? 'https://api.openai.com',
         config.model,
         requireApiKey(config, 'openai'),
-        config.dimensions,
+        requireDimensions(config),
         'OpenAI'
       );
     case 'openrouter':
@@ -272,14 +279,14 @@ export function createEmbeddingProvider(config: NonNullable<FlashQueryConfig['em
         config.endpoint ?? 'https://openrouter.ai/api',
         config.model,
         requireApiKey(config, 'openrouter'),
-        config.dimensions,
+        requireDimensions(config),
         'OpenRouter'
       );
     case 'ollama':
       return new OllamaProvider(
         config.endpoint ?? 'http://localhost:11434',
         config.model,
-        config.dimensions
+        requireDimensions(config)
       );
     default:
       throw new Error(

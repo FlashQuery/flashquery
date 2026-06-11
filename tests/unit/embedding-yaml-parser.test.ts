@@ -14,6 +14,14 @@ function writeConfig(extraYaml: string): string {
   return configPath;
 }
 
+function writeRawConfig(yaml: string): string {
+  const dir = mkdtempSync(join(tmpdir(), 'fqc-embedding-yaml-'));
+  tempDirs.push(dir);
+  const configPath = join(dir, 'flashquery.yml');
+  writeFileSync(configPath, yaml);
+  return configPath;
+}
+
 function baseConfigYaml(): string {
   return `
 instance:
@@ -140,5 +148,70 @@ embeddings:
       - provider_name: openai
         model: text-embedding-3-small
 `))).toThrow(/dimensions/i);
+  });
+
+  it('T-U-005 rejects an active legacy embedding config without explicit dimensions', () => {
+    const configPath = writeRawConfig(`
+instance:
+  name: "Embedding Catalog Test"
+  id: "embedding-catalog-test"
+  vault:
+    path: "./vault"
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "key"
+  database_url: "postgresql://localhost/db"
+embedding:
+  provider: "openai"
+  model: "text-embedding-3-small"
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com/v1
+  models: []
+  purposes: []
+`);
+
+    expect(() => loadConfig(configPath)).toThrow(/embedding\.dimensions.*required/i);
+  });
+
+  it.each(['Primary', 'my-embed', '1primary'])(
+    'rejects embedding catalog name %s before DDL',
+    (name) => {
+      expect(() => loadConfig(writeConfig(`
+embeddings:
+  - name: ${name}
+    dimensions: 1536
+    endpoints:
+      - provider_name: openai
+        model: text-embedding-3-small
+`))).toThrow(/embedding name.*lowercase/i);
+    }
+  );
+
+  it('rejects embeddings provider references when llm providers are absent', () => {
+    const configPath = writeRawConfig(`
+instance:
+  name: "Embedding Catalog Test"
+  id: "embedding-catalog-test"
+  vault:
+    path: "./vault"
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "key"
+  database_url: "postgresql://localhost/db"
+embedding:
+  provider: "none"
+  model: ""
+embeddings:
+  - name: primary
+    dimensions: 1536
+    endpoints:
+      - provider_name: openai
+        model: text-embedding-3-small
+`);
+
+    expect(() => loadConfig(configPath)).toThrow(/provider_name 'openai' references unknown llm provider/i);
   });
 });

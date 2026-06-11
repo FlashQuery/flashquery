@@ -234,7 +234,7 @@ const EmbeddingSchema = z
     model: z.string().default(''),
     api_key: z.string().optional(),
     endpoint: z.string().optional(),
-    dimensions: z.number().default(1536),
+    dimensions: z.number().int().positive().optional(),
   })
   .strip();
 
@@ -703,9 +703,15 @@ function validateEmbeddingCatalogConfig(config: RawBrokerConfig): void {
   if (embeddings.length === 0) return;
 
   const errors: string[] = [];
+  const safeSqlNamePattern = /^[a-z][a-z0-9_]*$/;
   const nameCounts = new Map<string, number>();
   for (const entry of embeddings) {
     nameCounts.set(entry.name, (nameCounts.get(entry.name) ?? 0) + 1);
+    if (!safeSqlNamePattern.test(entry.name)) {
+      errors.push(
+        `Config error: embedding name '${entry.name}' must start with a lowercase letter and contain only lowercase letters, numbers, and underscores`
+      );
+    }
   }
   for (const [name, count] of nameCounts) {
     if (count > 1) {
@@ -713,21 +719,28 @@ function validateEmbeddingCatalogConfig(config: RawBrokerConfig): void {
     }
   }
 
-  if (config.llm?.providers) {
-    const providerNames = new Set(config.llm.providers.map((provider) => provider.name));
-    for (const entry of embeddings) {
-      for (const endpoint of entry.endpoints) {
-        if (!providerNames.has(endpoint.provider_name)) {
-          errors.push(
-            `Config error: embedding '${entry.name}' endpoint provider_name '${endpoint.provider_name}' references unknown llm provider — defined providers: [${[...providerNames].join(', ') || '(none)'}]`
-          );
-        }
+  const providerNames = new Set((config.llm?.providers ?? []).map((provider) => provider.name));
+  for (const entry of embeddings) {
+    for (const endpoint of entry.endpoints) {
+      if (!providerNames.has(endpoint.provider_name)) {
+        errors.push(
+          `Config error: embedding '${entry.name}' endpoint provider_name '${endpoint.provider_name}' references unknown llm provider — defined providers: [${[...providerNames].join(', ') || '(none)'}]`
+        );
       }
     }
   }
 
   if (errors.length > 0) {
     throw new Error(errors.join('\n'));
+  }
+}
+
+function validateLegacyEmbeddingConfig(config: RawBrokerConfig): void {
+  if (!config.embedding || config.embedding.provider === 'none') return;
+  if (config.embedding.dimensions === undefined) {
+    throw new Error(
+      'Config error: embedding.dimensions is required when legacy embedding.provider is active; no default vector width is applied'
+    );
   }
 }
 
@@ -945,6 +958,7 @@ export function loadConfig(configPath: string): FlashQueryConfig {
     warnHardExcludedPurposeTools(result.data.llm);
   }
   validateEmbeddingCatalogConfig(result.data);
+  validateLegacyEmbeddingConfig(result.data);
 
   const hasLegacyLockTtl = result.data.locking.ttl_seconds !== undefined;
   delete result.data.locking.ttl_seconds;

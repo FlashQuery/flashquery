@@ -93,16 +93,22 @@ describe.skipIf(!HAS_SUPABASE)('embedding-config-sync in-place YAML refusal', ()
       },
     ]));
 
-    expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining("applied changes to embedding entry 'primary'"));
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/primary.*rate_limit\.min_delay_ms/i)
+    );
   });
 
   it('T-I-012 applies provider_name changes with same model', async () => {
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => undefined);
     await syncEmbeddingCatalog(configWithEmbeddings([
       { name: 'primary', dimensions: 1536, endpoints: [{ providerName: 'openrouter', model: 'text-embedding-3-small' }] },
     ]));
 
     const result = await client.query(`SELECT endpoints FROM fqc_embeddings WHERE instance_id = $1 AND name = 'primary'`, [TEST_INSTANCE_ID]);
     expect(result.rows[0].endpoints).toEqual([{ provider_name: 'openrouter', model: 'text-embedding-3-small' }]);
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/primary.*provider_name/i)
+    );
   });
 
   it('T-I-013 applies endpoint reorder when model set is unchanged', async () => {

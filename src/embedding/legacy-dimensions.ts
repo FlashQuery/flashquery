@@ -11,5 +11,13 @@ export function getLegacyEmbeddingDimensions(config: FlashQueryConfig): number {
     }
   }
 
-  return config.embedding?.dimensions ?? LEGACY_EMBEDDING_DIMENSIONS;
+  if (config.embedding?.dimensions !== undefined) {
+    return config.embedding.dimensions;
+  }
+
+  if (!config.embedding || config.embedding.provider === 'none') {
+    return LEGACY_EMBEDDING_DIMENSIONS;
+  }
+
+  throw new Error('Legacy embedding dimensions are required when legacy embedding is active');
 }

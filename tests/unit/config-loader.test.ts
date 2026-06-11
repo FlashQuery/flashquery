@@ -27,6 +27,7 @@ supabase:
 embedding:
   provider: "openai"
   model: "text-embedding-3-small"
+  dimensions: 1536
 ${locking}
 `;
 }

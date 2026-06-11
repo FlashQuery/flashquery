@@ -80,7 +80,7 @@ export interface FlashQueryConfig {
     model: string;
     apiKey?: string;
     endpoint?: string;
-    dimensions: number;
+    dimensions?: number;
   };
   logging: { level: 'debug' | 'info' | 'warn' | 'error'; output: 'stdout' | 'file'; file?: string };
 }
