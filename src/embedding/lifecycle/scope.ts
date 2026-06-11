@@ -89,7 +89,7 @@ export function resolveRebuildConfirmFromResolvedWorkUnits(
 
   if (distinctNames.length > 1) {
     return invalidInput(
-      'records scope resolves to multiple embedding names; narrow scope.plugin or scope.records.targets before rebuilding',
+      'pure records rebuild spans multiple embedding entries; narrow scope.plugin or scope.records.targets so one embedding entry is rebuilt per call',
       'scope',
       { resolved_embedding_names: distinctNames }
     );

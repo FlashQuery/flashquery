@@ -134,6 +134,16 @@ export interface MaintenanceLifecycleActionResult {
         catalog_rows_deleted: number;
       };
   failures?: Array<{ entity_type: string; identifier: string; message: string; error?: string }>;
+  plugin_breakdown?: Array<{
+    plugin_id: string;
+    plugin_instance: string;
+    table_name: string;
+    embedding_name: string | null;
+    rows_examined: number;
+    rows_embedded: number;
+    rows_failed: number;
+    rows_skipped_no_embedding: number;
+  }>;
   would_process?: number;
   estimated?: {
     input_tokens?: number;
