@@ -1246,6 +1246,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
     const retryResult = await processPendingEmbeddings({
       supabase,
       provider: embeddingProvider,
+      config,
       instanceId,
       databaseUrl: config.supabase.databaseUrl,
       logger,

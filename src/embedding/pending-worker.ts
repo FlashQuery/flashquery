@@ -1,5 +1,7 @@
 import type { EmbeddingProvider } from './provider.js';
+import { createEmbeddingProviderForCatalogEntry } from './provider.js';
 import {
+  type ActiveEmbeddingEntry,
   type BackgroundEmbeddingTarget,
   type BackgroundEmbeddingTargetKind,
   documentEmbeddingTarget,
@@ -8,10 +10,12 @@ import {
   updateTargetEmbedding,
 } from './background-embed.js';
 import { logger as defaultLogger } from '../logging/logger.js';
+import type { FlashQueryConfig } from '../config/types.js';
 
 export interface ProcessPendingEmbeddingsOptions {
   supabase: SupabaseLike;
-  provider: EmbeddingProvider;
+  provider?: EmbeddingProvider;
+  config?: FlashQueryConfig;
   instanceId: string;
   limit?: number;
   databaseUrl?: string;
@@ -20,6 +24,7 @@ export interface ProcessPendingEmbeddingsOptions {
   retryBackoffMs?: number;
   embeddingName?: string;
   truncated?: boolean;
+  providerFactory?: (entry: ActiveEmbeddingEntry) => EmbeddingProvider;
 }
 
 export interface ProcessPendingEmbeddingsResult {
@@ -38,6 +43,7 @@ interface PendingEmbedRow {
   target_label: string | null;
   embed_text: string | null;
   attempt_count: number | null;
+  embedding_name?: string | null;
 }
 
 interface StructuredLogger {
@@ -91,17 +97,40 @@ export async function processPendingEmbeddings(
     result.processed++;
     try {
       const target = targetFromPendingRow(row, options.instanceId);
+      const entry = await resolvePendingEmbeddingEntry(options.supabase, row, options.instanceId);
+      if (entry === 'retired') {
+        await clearPendingRow(options.supabase, row.id, options.instanceId);
+        result.processed--;
+        continue;
+      }
+      if (entry === 'deactivated') {
+        result.processed--;
+        continue;
+      }
       const embedText = await resolveEmbedText(options.supabase, row, target);
-      const vector = await options.provider.embed(embedText);
-      const providerInfo = options.provider.getProviderInfo?.();
+      const provider =
+        entry
+          ? (options.providerFactory ?? ((activeEntry: ActiveEmbeddingEntry) => {
+              if (!options.config) {
+                throw new Error('pending embedding retry requires config to build catalog provider');
+              }
+              return createEmbeddingProviderForCatalogEntry(options.config, activeEntry);
+            }))(entry)
+          : options.provider;
+      if (!provider) {
+        throw new Error('pending embedding retry has no provider');
+      }
+      const vector = await provider.embed(embedText);
+      const providerInfo = provider.getProviderInfo?.();
+      const embeddingName = entry?.name ?? row.embedding_name ?? options.embeddingName;
       await updateTargetEmbedding(
         target,
         vector,
         options.supabase,
         options.databaseUrl,
-        options.embeddingName
+        embeddingName
           ? {
-              embeddingName: options.embeddingName,
+              embeddingName,
               model: providerInfo?.model ?? 'unknown',
               provider: providerInfo?.provider ?? 'unknown',
               truncated: options.truncated ?? false,
@@ -135,7 +164,7 @@ async function selectEligiblePendingRows(
 ): Promise<PendingEmbedRow[]> {
   let query = (supabase.from('fqc_pending_embeds') as TableQuery)
     .select<PendingEmbedRow>(
-      'id, instance_id, target_kind, target_table, target_id, target_label, embed_text, attempt_count'
+      'id, instance_id, target_kind, target_table, target_id, embedding_name, target_label, embed_text, attempt_count'
     )
     .eq('instance_id', instanceId)
     .eq('status', 'pending');
@@ -156,6 +185,42 @@ async function selectEligiblePendingRows(
   }
   const rows = Array.isArray(data) ? data : data ? [data] : [];
   return rows.slice(0, limit);
+}
+
+async function resolvePendingEmbeddingEntry(
+  supabase: SupabaseLike,
+  row: PendingEmbedRow,
+  instanceId: string
+): Promise<ActiveEmbeddingEntry | 'deactivated' | 'retired' | null> {
+  if (!row.embedding_name) {
+    return null;
+  }
+
+  const { data, error } = await (supabase.from('fqc_embeddings') as TableQuery)
+    .select<{ name: string; dimensions: number; endpoints: unknown; status: 'active' | 'deactivated' }>(
+      'name, dimensions, endpoints, status'
+    )
+    .eq('instance_id', instanceId)
+    .eq('name', row.embedding_name);
+
+  if (error) {
+    throw new Error(`pending embedding catalog lookup failed: ${error.message}`);
+  }
+
+  const rows = Array.isArray(data) ? data : data ? [data] : [];
+  const entry = rows[0];
+  if (!entry) {
+    return 'retired';
+  }
+  if (entry.status === 'deactivated') {
+    return 'deactivated';
+  }
+  return {
+    name: entry.name,
+    dimensions: entry.dimensions,
+    endpoints: Array.isArray(entry.endpoints) ? entry.endpoints : [],
+    status: 'active',
+  };
 }
 
 function targetFromPendingRow(row: PendingEmbedRow, instanceId: string): BackgroundEmbeddingTarget {
