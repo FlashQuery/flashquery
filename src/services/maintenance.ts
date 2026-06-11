@@ -8,6 +8,7 @@ import {
 import type { LifecycleAction, LifecycleBaseInput, LifecycleScope } from '../embedding/lifecycle/types.js';
 import { isLifecycleAction, validateLifecycleActionParameters } from '../embedding/lifecycle/scope.js';
 import { runBackfillEmbeddings } from '../embedding/lifecycle/backfill.js';
+import { runRebuildEmbeddings } from '../embedding/lifecycle/rebuild.js';
 import { logger } from '../logging/logger.js';
 import type {
   ErrorEnvelope,
@@ -264,6 +265,10 @@ async function validateLifecycleDispatch(
     return await dispatchBackfillEmbeddings(config, input as LifecycleBaseInput & { action: 'backfill_embeddings' });
   }
 
+  if (input.action === 'rebuild_embeddings') {
+    return await dispatchRebuildEmbeddings(config, input as LifecycleBaseInput & { action: 'rebuild_embeddings' });
+  }
+
   return {
     ok: false,
     error: {
@@ -292,7 +297,9 @@ async function dispatchBackfillEmbeddings(
 
 async function dispatchBackgroundLifecycle(
   config: FlashQueryConfig,
-  input: LifecycleBaseInput & { action: 'backfill_embeddings' }
+  input:
+    | (LifecycleBaseInput & { action: 'backfill_embeddings' })
+    | (LifecycleBaseInput & { action: 'rebuild_embeddings' })
 ): Promise<MaintenanceResult<MaintenanceAcceptedPayload>> {
   if (!input.embedding_name) {
     return invalidInput('embedding_name is required for background lifecycle actions', 'embedding_name', {
@@ -306,7 +313,11 @@ async function dispatchBackgroundLifecycle(
   });
   if (!acquired.ok) return acquired;
 
-  void runBackfillEmbeddings(config, input, acquired.payload);
+  if (input.action === 'backfill_embeddings') {
+    void runBackfillEmbeddings(config, input, acquired.payload);
+  } else {
+    void runRebuildEmbeddings(config, input, acquired.payload);
+  }
 
   return {
     ok: true,
@@ -316,6 +327,18 @@ async function dispatchBackgroundLifecycle(
       started_at: acquired.payload.started_at,
     },
   };
+}
+
+async function dispatchRebuildEmbeddings(
+  config: FlashQueryConfig,
+  input: LifecycleBaseInput & { action: 'rebuild_embeddings' }
+): Promise<MaintenanceResult<MaintenanceSyncPayload | MaintenanceAcceptedPayload>> {
+  if (input.background === true) {
+    return await dispatchBackgroundLifecycle(config, input);
+  }
+  const result = await runRebuildEmbeddings(config, input);
+  if (!result.ok) return result;
+  return { ok: true, payload: { actions: [result.payload] } };
 }
 
 function validateModeOptions(actions: Array<'sync' | 'repair'>, input: MaintainVaultInput): MaintenanceResult<null> {
