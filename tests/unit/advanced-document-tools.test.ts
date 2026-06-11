@@ -54,6 +54,11 @@ vi.mock('../../src/embedding/provider.js', () => ({
     embed: vi.fn(),
     queue: vi.fn(),
   },
+  createEmbeddingProviderForCatalogEntry: vi.fn(() => ({
+    embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3, 0.4]),
+    getDimensions: () => 4,
+    getProviderInfo: () => ({ provider: 'openai', model: 'text-embedding-3-small' }),
+  })),
 }));
 
 vi.mock('../../src/mcp/utils/resolve-document.js', () => ({
@@ -591,8 +596,12 @@ Other content`,
     const mockEmbed = vi.mocked(embeddingProvider.embed);
     mockEmbed.mockResolvedValue([0.1, 0.2, 0.3, 0.4]);
 
-    const mockSupabase = {
-      from: vi.fn().mockReturnValue({
+    const embeddingCatalogQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      then: (resolve: (value: unknown) => void) => resolve({ data: [], error: null }),
+    };
+    const updateQuery = {
         update: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
@@ -602,7 +611,9 @@ Other content`,
             }),
           }),
         }),
-      }),
+    };
+    const mockSupabase = {
+      from: vi.fn((table: string) => (table === 'fqc_embeddings' ? embeddingCatalogQuery : updateQuery)),
     };
 
     vi.mocked(supabaseManager.getClient).mockReturnValue(mockSupabase as unknown as ReturnType<typeof supabaseManager.getClient>);
@@ -643,8 +654,12 @@ Other content`,
     const mockEmbed = vi.mocked(embeddingProvider.embed);
     mockEmbed.mockResolvedValue([0.1, 0.2, 0.3, 0.4]);
 
-    const mockSupabase = {
-      from: vi.fn().mockReturnValue({
+    const embeddingCatalogQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      then: (resolve: (value: unknown) => void) => resolve({ data: [], error: null }),
+    };
+    const updateQuery = {
         update: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
@@ -654,7 +669,9 @@ Other content`,
             }),
           }),
         }),
-      }),
+    };
+    const mockSupabase = {
+      from: vi.fn((table: string) => (table === 'fqc_embeddings' ? embeddingCatalogQuery : updateQuery)),
     };
 
     vi.mocked(supabaseManager.getClient).mockReturnValue(mockSupabase as unknown as ReturnType<typeof supabaseManager.getClient>);

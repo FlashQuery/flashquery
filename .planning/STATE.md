@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Embedding Management & Multi-Provider Support
 status: in_progress
-last_updated: "2026-06-11T15:47:43.000Z"
+last_updated: "2026-06-11T16:00:00.000Z"
 last_activity: 2026-06-11
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 9
   completed_plans: 9
-  percent: 67
+  percent: 100
 ---
 
 # FlashQuery Core — State
@@ -25,19 +25,19 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 ## Current Position
 
 Phase: 167 — Lifecycle Operations and Validation
-Plan: 167-06 — Lifecycle Operations and Validation
-Status: Phase 167 in progress; Plan 167-06 complete
-Last activity: 2026-06-11 — Phase 167 Plan 06 added public directed scenarios for lifecycle lock conflicts, stale heartbeat recovery, background abort partial status, and abort expected-error envelopes
+Plan: 167-07 — Lifecycle Operations and Validation
+Status: Phase 167 complete; all lifecycle and operator recipe plans complete
+Last activity: 2026-06-11 — Phase 167 Plan 07 added operator recipe coverage, first-time enablement and legacy reset directed scenarios, IS-50 YAML integration coverage, and final embedding catalog example guidance
 
-Progress: ███████░░░ 67% (2/3 milestone phases complete; 12/12 currently executed milestone plans complete)
+Progress: ██████████ 100% (3/3 milestone phases complete; 13/13 milestone plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 12 (this milestone)
+- Total plans completed: 13 (this milestone)
 - Average duration: ~43 min
-- Total execution time: ~8h 35m
+- Total execution time: ~9h 00m
 
 **By Phase:**
 
@@ -45,7 +45,7 @@ Progress: ███████░░░ 67% (2/3 milestone phases complete; 12/
 |-------|-------|-------|----------|
 | 165 | 3 | ~1h 30m | ~30m |
 | 166 | 4/4 | ~3h 05m | ~46m |
-| 167 | 6/? | ~4h 08m | ~41m |
+| 167 | 7/7 | ~4h 33m | ~39m |
 
 *Updated after each plan completion*
 
@@ -99,10 +99,13 @@ Progress: ███████░░░ 67% (2/3 milestone phases complete; 12/
 - D-118 and D-119 directed scenarios passed using `.env.test` credentials and managed embedding-enabled servers.
 - Phase 167 Plan 06 added D-114 through D-117 directed scenarios for public lifecycle lock, heartbeat, and abort behavior: same-entry conflict envelopes, different-entry parallelism, stale heartbeat takeover, background abort partial counts, preserved completed rows, lock release, and unknown/completed/already-aborted abort envelopes.
 - D-114 through D-117 directed scenarios passed using `.env.test` credentials and managed embedding-enabled servers.
+- Phase 167 Plan 07 completed REQ-042 and REQ-043 recipe validation: D-120 first-time enablement directed scenario, D-121 managed legacy reset directed scenario, IS-50 YAML integration search scenario, D-104 through D-121 directed coverage rows, IS-50 integration coverage row, and `flashquery.example.yml` top-level embedding catalog guidance.
+- During D-121 development, a managed reset briefly removed shared legacy singular vector columns that current startup/write paths still expect; the columns were restored in the shared test database and the scenario now restores them after recording reset evidence so later tests are not poisoned.
+- Phase 167 is complete; all assigned lifecycle requirements REQ-035 through REQ-043 have passing directed, integration, unit, or build verification evidence.
 
 ### Todos
 
-- Execute remaining Phase 167 lifecycle processor and operator recipe plans.
+- Run final phase verification / validation and prepare commit.
 
 ### Blockers
 
@@ -110,8 +113,8 @@ None
 
 ## Session Continuity
 
-**Last session:** 2026-06-11 — Phase 167 Plan 06 executed
-**Next action:** Execute remaining Phase 167 lifecycle operations and validation plans
+**Last session:** 2026-06-11 — Phase 167 Plan 07 executed
+**Next action:** Run final Phase 167 verification / validation and commit
 **Context needed:** Phase 167 should build on `.planning/phases/166-embedding-pipeline/166-01-SUMMARY.md`, `166-02-SUMMARY.md`, `166-03-SUMMARY.md`, `166-04-SUMMARY.md`, plus the external source-of-truth requirements and test plan.
 
 ## v4.0 Deferred Items

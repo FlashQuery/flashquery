@@ -196,11 +196,15 @@ def run_test(args: argparse.Namespace):
             confirm="primary",
             max_rows=20,
             scope={"entity_types": ["documents", "memory"]},
+            background=True,
         )
         follow_payload = parse_payload(follow_up)
+        follow_job_id = str(follow_payload.get("job_id") or "")
+        if follow_job_id:
+            ctx.client.call_tool("maintain_vault", action="abort", job_id=follow_job_id)
         run.step(
             "follow-up lifecycle action acquires lock after abort",
-            passed=follow_up.ok and first_action(follow_payload).get("action") == "rebuild_embeddings",
+            passed=follow_up.ok and follow_payload.get("accepted") is True and bool(follow_job_id),
             detail=expectation_detail(follow_up) or follow_up.error or json.dumps(follow_payload, sort_keys=True),
             timing_ms=follow_up.timing_ms,
             tool_result=follow_up,

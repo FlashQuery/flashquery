@@ -416,8 +416,16 @@ llm:
 
 
 # ─── Embedding Catalog ──────────────────────────────────────────────────────
-# Native-width embedding entries. `dimensions` sizes local pgvector columns; it
-# is never sent to provider APIs as a dimensions-reduction request parameter.
+# Native-width embedding entries used by semantic search and lifecycle
+# maintenance actions:
+#   maintain_vault({ action: "backfill_embeddings", embedding_name: "primary", ... })
+#   maintain_vault({ action: "rebuild_embeddings", embedding_name: "primary", ... })
+#   maintain_vault({ action: "retire_embedding", embedding_name: "primary", confirm: "primary" })
+#
+# `dimensions` sizes per-entry pgvector columns such as `embedding_primary`.
+# It is never sent to provider APIs as a dimensions-reduction request parameter.
+# Use this top-level catalog for new installs; do not create or depend on legacy
+# singular `embedding` vector columns.
 
 embeddings:
   - name: primary

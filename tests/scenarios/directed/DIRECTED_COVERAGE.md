@@ -2088,5 +2088,14 @@ Behaviors verifying the `call_model` and `get_llm_usage` MCP tools introduced in
 | D-108 | T-S-009 / REQ-036: `rebuild_embeddings` with `stale_only: true` regenerates rows stamped with non-current models. | test_rebuild_embeddings_stale_only | 2026-06-11 | 2026-06-11 |
 | D-109 | T-S-010 / REQ-036: `rebuild_embeddings` with mismatched `confirm` returns `invalid_input` with expected and received values. | test_rebuild_embeddings_confirm_mismatch | 2026-06-11 | 2026-06-11 |
 | D-110 | T-S-011 / REQ-036: `rebuild_embeddings` without `max_rows` returns `invalid_input` naming the required cap. | test_rebuild_embeddings_max_rows_required | 2026-06-11 | 2026-06-11 |
+| D-111 | T-S-012 / REQ-037: `retire_embedding` transactionally drops core and stale plugin embedding artifacts plus the catalog row. | test_retire_embedding_transactional | 2026-06-11 | 2026-06-11 |
+| D-112 | T-S-013 / REQ-037: `retire_embedding` refuses active plugin conflicts and reports affected plugin IDs before destructive DDL. | test_retire_embedding_plugin_conflict | 2026-06-11 | 2026-06-11 |
+| D-113 | T-S-014 / REQ-037: `retire_embedding` works for deactivated catalog entries while preserving invalid-parameter refusals. | test_retire_embedding_deactivated_entry | 2026-06-11 | 2026-06-11 |
+| D-114 | T-S-015 / REQ-038: lifecycle jobs conflict only on the same embedding entry and expose in-flight job metadata. | test_lifecycle_lock_per_entry | 2026-06-11 | 2026-06-11 |
+| D-115 | T-S-016 / REQ-038: stale lifecycle heartbeats are recovered and a new public caller can acquire the entry lock. | test_lifecycle_lock_heartbeat | 2026-06-11 | 2026-06-11 |
+| D-116 | T-S-017 / REQ-039: aborting a background lifecycle job preserves partial status/counts and releases the entry lock. | test_abort_background_job | 2026-06-11 | 2026-06-11 |
+| D-117 | T-S-018 / REQ-039: lifecycle abort returns expected envelopes for unknown, completed, already-aborted, and invalid-parameter calls. | test_abort_unknown_job | 2026-06-11 | 2026-06-11 |
 | D-118 | T-S-019 / REQ-041: pure records lifecycle scope rejects top-level `embedding_name`, uses frozen plugin choices, and skips opted-out plugin rows. | test_records_scope_embedding_resolution | 2026-06-11 | 2026-06-11 |
 | D-119 | T-S-020 / REQ-041: mixed lifecycle scope applies top-level `embedding_name` to core rows while records use frozen plugin choices; pure-records rebuild derives/refuses confirm deterministically. | test_records_scope_mixed | 2026-06-11 | 2026-06-11 |
+| D-120 | T-S-021 / REQ-042: first-time enablement recipe backfills a configured embedding catalog and verifies semantic document/memory search. | test_first_time_enablement | 2026-06-11 | 2026-06-11 |
+| D-121 | T-S-022 / REQ-043: legacy schema reset recipe removes singular embedding artifacts, backfills the new catalog, and verifies semantic search. | test_legacy_schema_reset | 2026-06-11 | 2026-06-11 |

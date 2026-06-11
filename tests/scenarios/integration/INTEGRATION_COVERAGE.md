@@ -125,6 +125,7 @@ Note: Test Plan §4.10.6 reserved `IS-09`, `IS-10`, `IS-11`, and `IA-09`; the li
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
 | IS-15 | T-Y-001: pooled record vector SQL supports concurrent `write_record` embed_fields writes and semantic `search_records` results with scores. | record_embed_pool_concurrency | 2026-06-03   | 2026-06-03   |
+| IS-50 | T-Y-001 / REQ-042: first-time embedding enablement recipe leaves documents and memories discoverable through semantic search. | embedding_first_time_enablement_search | 2026-06-11   | 2026-06-11   |
 
 ## Phase 160 Vault Write Coherency Folder Locks
 

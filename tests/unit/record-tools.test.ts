@@ -40,6 +40,11 @@ vi.mock('../../src/embedding/provider.js', () => ({
   embeddingProvider: {
     embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
   },
+  createEmbeddingProviderForCatalogEntry: vi.fn(() => ({
+    embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
+    getDimensions: () => 3,
+    getProviderInfo: () => ({ provider: 'openai', model: 'text-embedding-3-small' }),
+  })),
 }));
 
 vi.mock('../../src/utils/pg-client.js', () => ({
@@ -97,7 +102,7 @@ function makeServer(): {
   };
 }
 
-function setTableSpec(embedFields: string[] = []): void {
+function setTableSpec(embedFields: string[] = [], embeddingName: string | null = null): void {
   vi.mocked(pluginManager.getTableSpec).mockReturnValue({
     tableSpec: {
       name: 'contacts',
@@ -110,8 +115,10 @@ function setTableSpec(embedFields: string[] = []): void {
       table_prefix: 'fqcp_crm_unit_',
       schema: {
         plugin: { id: 'crm', name: 'CRM', version: '1.0.0' },
+        embedding: embeddingName,
         tables: [],
       },
+      embedding_name: embeddingName,
     },
   });
 }
@@ -122,8 +129,21 @@ function makeSupabaseLimitResult(result: { data: unknown[] | null; error: { mess
     eq: vi.fn().mockReturnThis(),
     limit: vi.fn().mockResolvedValue(result),
   };
+  const catalogQuery = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: {
+        name: 'primary',
+        dimensions: 3,
+        endpoints: [{ provider: 'openai', model: 'text-embedding-3-small' }],
+        status: 'active',
+      },
+      error: null,
+    }),
+  };
   vi.mocked(supabaseManager.getClient).mockReturnValue({
-    from: vi.fn(() => query),
+    from: vi.fn((table: string) => (table === 'fqc_embeddings' ? catalogQuery : query)),
   } as unknown as ReturnType<typeof supabaseManager.getClient>);
 }
 
@@ -133,8 +153,21 @@ function makeSupabaseLimitRejection(error: Error): void {
     eq: vi.fn().mockReturnThis(),
     limit: vi.fn().mockRejectedValue(error),
   };
+  const catalogQuery = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: {
+        name: 'primary',
+        dimensions: 3,
+        endpoints: [{ provider: 'openai', model: 'text-embedding-3-small' }],
+        status: 'active',
+      },
+      error: null,
+    }),
+  };
   vi.mocked(supabaseManager.getClient).mockReturnValue({
-    from: vi.fn(() => query),
+    from: vi.fn((table: string) => (table === 'fqc_embeddings' ? catalogQuery : query)),
   } as unknown as ReturnType<typeof supabaseManager.getClient>);
 }
 
@@ -398,7 +431,7 @@ describe('record tools final surface', () => {
   });
 
   it('T-U-024: semantic search_records logs safe timing metadata on success', async () => {
-    setTableSpec(['name']);
+    setTableSpec(['name'], 'primary');
     vi.mocked(queryPgPool).mockResolvedValue({
       rows: [{ id: 'row-1', name: 'Ada', embedding: [0.99, 0.01] }],
     } as Awaited<ReturnType<typeof queryPgPool>>);
@@ -423,7 +456,7 @@ describe('record tools final surface', () => {
   });
 
   it('T-U-024: semantic search_records logs safe timing metadata on failure', async () => {
-    setTableSpec(['name']);
+    setTableSpec(['name'], 'primary');
     vi.mocked(queryPgPool).mockRejectedValue(new Error('pg unavailable'));
     const { server, getHandler } = makeServer();
     registerRecordTools(server, makeConfig());

@@ -153,6 +153,7 @@ tables:
 
 const PARSED_SCHEMA_MOCK = {
   plugin: { id: 'crm', name: 'CRM Plugin', version: '1' },
+  embedding: null,
   tables: [
     {
       name: 'contacts',
@@ -168,14 +169,20 @@ function makeDefaultSupabaseMock() {
   const mockEq2 = vi.fn().mockReturnValue({ eq: mockEq3 });
   const mockEq1 = vi.fn().mockReturnValue({ eq: mockEq2 });
   const mockSelect = vi.fn().mockReturnValue({ eq: mockEq1 });
+  const mockCatalogEq = vi.fn().mockResolvedValue({
+    data: [{ name: 'primary', dimensions: 1536, status: 'active' }],
+    error: null,
+  });
+  const mockCatalogSelect = vi.fn().mockReturnValue({ eq: mockCatalogEq });
   const mockInsert = vi.fn().mockResolvedValue({ data: [{ id: 'new-id' }], error: null });
   const mockUpdate = vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) });
 
-  const mockFrom = vi.fn().mockReturnValue({
+  const mockFrom = vi.fn((table: string) => ({
     select: mockSelect,
+    ...(table === 'fqc_embeddings' ? { select: mockCatalogSelect } : {}),
     insert: mockInsert,
     update: mockUpdate,
-  });
+  }));
 
   vi.mocked(supabaseManager.getClient).mockReturnValue({
     from: mockFrom,
@@ -358,8 +365,15 @@ describe('register_plugin', () => {
     const mockEq2 = vi.fn().mockReturnValue({ eq: mockEq3 });
     const mockEq1 = vi.fn().mockReturnValue({ eq: mockEq2 });
     const mockSelect = vi.fn().mockReturnValue({ eq: mockEq1 });
+    const mockCatalogEq = vi.fn().mockResolvedValue({
+      data: [{ name: 'primary', dimensions: 1536, status: 'active' }],
+      error: null,
+    });
+    const mockCatalogSelect = vi.fn().mockReturnValue({ eq: mockCatalogEq });
     vi.mocked(supabaseManager.getClient).mockReturnValue({
-      from: vi.fn().mockReturnValue({ select: mockSelect }),
+      from: vi.fn((table: string) => ({
+        select: table === 'fqc_embeddings' ? mockCatalogSelect : mockSelect,
+      })),
     } as unknown as ReturnType<typeof supabaseManager.getClient>);
 
     const result = await getHandler('register_plugin')({ schema_yaml: VALID_SCHEMA_YAML }) as {

@@ -177,7 +177,7 @@ tables: []
 describe('buildPluginTableDDL', () => {
   it('includes implicit columns (id, instance_id, status, created_at, updated_at, last_seen_updated_at)', () => {
     const schema = parsePluginSchema(SCHEMA_NO_EMBED);
-    const ddl = buildPluginTableDDL('fqcp_crm_default_businesses', schema.tables[0], 1536);
+    const ddl = buildPluginTableDDL('fqcp_crm_default_businesses', schema.tables[0], null);
 
     expect(ddl).toContain('id UUID PRIMARY KEY DEFAULT gen_random_uuid()');
     expect(ddl).toContain('instance_id TEXT NOT NULL');
@@ -189,7 +189,7 @@ describe('buildPluginTableDDL', () => {
 
   it('escapes table name with pg.escapeIdentifier', () => {
     const schema = parsePluginSchema(SCHEMA_NO_EMBED);
-    const ddl = buildPluginTableDDL('fqcp_crm_default_businesses', schema.tables[0], 1536);
+    const ddl = buildPluginTableDDL('fqcp_crm_default_businesses', schema.tables[0], null);
 
     // Mock wraps in double quotes
     expect(ddl).toContain('"fqcp_crm_default_businesses"');
@@ -197,7 +197,7 @@ describe('buildPluginTableDDL', () => {
 
   it('escapes column names with pg.escapeIdentifier', () => {
     const schema = parsePluginSchema(SCHEMA_NO_EMBED);
-    const ddl = buildPluginTableDDL('fqcp_crm_default_businesses', schema.tables[0], 1536);
+    const ddl = buildPluginTableDDL('fqcp_crm_default_businesses', schema.tables[0], null);
 
     expect(ddl).toContain('"company_name"');
     expect(ddl).toContain('"employee_count"');
@@ -205,36 +205,40 @@ describe('buildPluginTableDDL', () => {
 
   it('adds NOT NULL for required columns', () => {
     const schema = parsePluginSchema(SCHEMA_NO_EMBED);
-    const ddl = buildPluginTableDDL('fqcp_crm_default_businesses', schema.tables[0], 1536);
+    const ddl = buildPluginTableDDL('fqcp_crm_default_businesses', schema.tables[0], null);
 
     expect(ddl).toMatch(/"company_name".*NOT NULL/);
   });
 
   it('adds embedding columns when embed_fields is present', () => {
     const schema = parsePluginSchema(VALID_SCHEMA_YAML);
-    const ddl = buildPluginTableDDL('fqcp_crm_default_contacts', schema.tables[0], 1536);
+    const ddl = buildPluginTableDDL('fqcp_crm_default_contacts', schema.tables[0], {
+      name: 'primary',
+      dimensions: 1536,
+    });
 
-    expect(ddl).toContain('embedding vector(1536)');
+    expect(ddl).toContain('"embedding_primary" vector(1536)');
+    expect(ddl).toContain('"embedding_primary_model" TEXT');
     expect(ddl).toContain('embedding_updated_at TIMESTAMPTZ');
   });
 
   it('omits embedding columns when no embed_fields', () => {
     const schema = parsePluginSchema(SCHEMA_NO_EMBED);
-    const ddl = buildPluginTableDDL('fqcp_crm_default_businesses', schema.tables[0], 1536);
+    const ddl = buildPluginTableDDL('fqcp_crm_default_businesses', schema.tables[0], null);
 
     expect(ddl).not.toContain('embedding');
   });
 
   it('uses CREATE TABLE IF NOT EXISTS', () => {
     const schema = parsePluginSchema(SCHEMA_NO_EMBED);
-    const ddl = buildPluginTableDDL('fqcp_crm_default_businesses', schema.tables[0], 1536);
+    const ddl = buildPluginTableDDL('fqcp_crm_default_businesses', schema.tables[0], null);
 
     expect(ddl).toContain('CREATE TABLE IF NOT EXISTS');
   });
 
   it('includes integer DEFAULT without quotes', () => {
     const schema = parsePluginSchema(SCHEMA_NO_EMBED);
-    const ddl = buildPluginTableDDL('fqcp_crm_default_businesses', schema.tables[0], 1536);
+    const ddl = buildPluginTableDDL('fqcp_crm_default_businesses', schema.tables[0], null);
 
     // Integer default should render as raw number, not quoted
     expect(ddl).toMatch(/"employee_count" INTEGER DEFAULT 0/);
@@ -367,10 +371,14 @@ describe('initPlugins', () => {
       },
     ];
 
-    const mockEq2 = vi.fn().mockResolvedValue({ data: mockData, error: null });
-    const mockEq1 = vi.fn().mockReturnValue({ eq: mockEq2 });
-    const mockSelect = vi.fn().mockReturnValue({ eq: mockEq1 });
-    const mockFrom = vi.fn().mockReturnValue({ select: mockSelect });
+    const mockRegistryEq2 = vi.fn().mockResolvedValue({ data: mockData, error: null });
+    const mockRegistryEq1 = vi.fn().mockReturnValue({ eq: mockRegistryEq2 });
+    const mockRegistrySelect = vi.fn().mockReturnValue({ eq: mockRegistryEq1 });
+    const mockCatalogEq = vi.fn().mockResolvedValue({ data: [], error: null });
+    const mockCatalogSelect = vi.fn().mockReturnValue({ eq: mockCatalogEq });
+    const mockFrom = vi.fn((table: string) => ({
+      select: table === 'fqc_embeddings' ? mockCatalogSelect : mockRegistrySelect,
+    }));
 
     vi.mocked(supabaseManager.getClient).mockReturnValue({
       from: mockFrom,
@@ -380,7 +388,8 @@ describe('initPlugins', () => {
     await initPlugins(config);
 
     expect(mockFrom).toHaveBeenCalledWith('fqc_plugin_registry');
-    expect(mockSelect).toHaveBeenCalledWith('plugin_id, plugin_instance, table_prefix, schema_yaml');
+    expect(mockCatalogSelect).toHaveBeenCalledWith('name, dimensions, status');
+    expect(mockRegistrySelect).toHaveBeenCalledWith('id, plugin_id, plugin_instance, table_prefix, schema_yaml, embedding_name, embedding_resolved_at');
   });
 
   it('warns and starts with empty registry when supabase query fails', async () => {

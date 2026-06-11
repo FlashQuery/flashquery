@@ -142,13 +142,14 @@ describe('background embedding helper', () => {
         target_kind: 'document',
         target_table: 'fqc_documents',
         target_id: 'doc-1',
+        embedding_name: 'legacy',
         target_label: 'Doc One',
         embed_text: 'retry this text',
         attempt_count: 1,
         last_error: 'provider down',
         status: 'pending',
       }),
-      { onConflict: 'instance_id,target_kind,target_table,target_id' }
+      { onConflict: 'instance_id,target_kind,target_table,target_id,embedding_name' }
     );
     expect(logger.error).toHaveBeenCalledWith(
       'Failed to embed document "Doc One" with the configured embedding model after sending 15 characters. The embedding provider said: provider down. The document was saved and embedding will be retried later.',
@@ -213,10 +214,11 @@ describe('background embedding helper', () => {
         target_kind: 'memory',
         target_table: 'fqc_memory',
         target_id: 'mem-1',
+        embedding_name: 'legacy',
         attempt_count: 3,
         last_error: 'update rejected',
       }),
-      { onConflict: 'instance_id,target_kind,target_table,target_id' }
+      { onConflict: 'instance_id,target_kind,target_table,target_id,embedding_name' }
     );
   });
 

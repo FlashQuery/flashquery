@@ -202,7 +202,7 @@ describe('pure-records rebuild confirm contract', () => {
       error: {
         error: 'invalid_input',
         message:
-          'records scope resolves to multiple embedding names; narrow scope.plugin or scope.records.targets before rebuilding',
+          'pure records rebuild spans multiple embedding entries; narrow scope.plugin or scope.records.targets so one embedding entry is rebuilt per call',
         identifier: 'scope',
         details: { resolved_embedding_names: ['analysis', 'primary'] },
       },

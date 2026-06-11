@@ -9,6 +9,11 @@ vi.mock('../../src/storage/supabase.js', () => ({
 
 vi.mock('../../src/embedding/provider.js', () => ({
   embeddingProvider: { embed: vi.fn().mockResolvedValue([0.1]) },
+  createEmbeddingProviderForCatalogEntry: vi.fn(() => ({
+    embed: vi.fn().mockResolvedValue([0.1]),
+    getDimensions: () => 1,
+    getProviderInfo: () => ({ provider: 'openai', model: 'text-embedding-3-small' }),
+  })),
   NullEmbeddingProvider: class NullEmbeddingProvider {},
 }));
 
@@ -56,6 +61,14 @@ function makeThenableChain(finalResult: unknown) {
   (chain.single as ReturnType<typeof vi.fn>).mockResolvedValue(finalResult);
   chain.then = (resolve: (value: unknown) => void) => resolve(finalResult);
   return chain;
+}
+
+function makeEmptyEmbeddingCatalogChain() {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    then: (resolve: (value: unknown) => void) => resolve({ data: [], error: null }),
+  };
 }
 
 describe('write_memory', () => {
@@ -109,7 +122,8 @@ describe('write_memory', () => {
       capturedInsert = row;
       return insertChain;
     });
-    (supabaseManager.getClient as ReturnType<typeof vi.fn>).mockReturnValue({ from: vi.fn().mockReturnValue(insertChain) });
+    const from = vi.fn((table: string) => (table === 'fqc_embeddings' ? makeEmptyEmbeddingCatalogChain() : insertChain));
+    (supabaseManager.getClient as ReturnType<typeof vi.fn>).mockReturnValue({ from });
 
     const result = await getHandler('write_memory')({ mode: 'create', content: 'User prefers JSON', tags: ['preference'], include: ['content'] });
     const payload = parseResult(result);
@@ -298,8 +312,7 @@ describe('write_memory', () => {
       },
       error: null,
     });
-    const from = vi.fn()
-      .mockReturnValueOnce(fetchChain);
+    const from = vi.fn((table: string) => (table === 'fqc_embeddings' ? makeEmptyEmbeddingCatalogChain() : fetchChain));
     (supabaseManager.getClient as ReturnType<typeof vi.fn>).mockReturnValue({ from, rpc });
 
     const result = await getHandler('write_memory')({ mode: 'update', memory_id: 'mem-1', content: 'new', tags: ['new'] });

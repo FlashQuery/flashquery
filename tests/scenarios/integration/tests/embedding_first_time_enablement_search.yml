@@ -1,0 +1,35 @@
+name: embedding_first_time_enablement_search
+description: >
+  First-time embedding enablement recipe: write document and memory content,
+  let the managed embedding catalog populate vectors, and verify semantic search
+  returns both entity types.
+coverage: [IS-50]
+deps: [embeddings]
+server_modes: [managed]
+
+steps:
+  - label: "Write first-time enablement document"
+    action: vault.write
+    name: enablement_doc
+    path: "embedding/first-time-enable.md"
+    title: "First Time Embedding Enablement"
+    content: "Calypso enablement recipe document for semantic retrieval."
+    tags: [embedding-enable]
+
+  - label: "Write first-time enablement memory"
+    action: memory.write
+    name: enablement_memory
+    content: "Calypso enablement recipe memory for semantic retrieval."
+    tags: [embedding-enable]
+
+  - sleep: 3
+    label: "Wait for managed embedding worker"
+
+  - label: "Search returns enabled document and memory semantically"
+    assert:
+      op: search
+      args:
+        query: "Calypso enablement recipe semantic retrieval"
+        entity_types: [documents, memories]
+      expect_path: "embedding/first-time-enable.md"
+      expect_contains: "Calypso enablement recipe memory"

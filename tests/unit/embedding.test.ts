@@ -34,6 +34,7 @@ function mockFetchError(status: number): ReturnType<typeof vi.fn> {
     ok: false,
     status,
     json: async () => ({}),
+    text: async () => '',
   } as unknown as Response);
 }
 
