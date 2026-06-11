@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Embedding Management & Multi-Provider Support
 status: in_progress
-last_updated: "2026-06-11T10:20:00.000Z"
+last_updated: "2026-06-11T13:27:25.000Z"
 last_activity: 2026-06-11
 progress:
   total_phases: 3
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 ## Current Position
 
 Phase: 166 — Embedding Pipeline
-Plan: 167-01 — Lifecycle Operations and Validation
-Status: Phase 166 complete; ready to plan/execute Phase 167
-Last activity: 2026-06-11 — Phase 166 Plan 04 completed plugin manifest embedding parsing, register_plugin override/resolution, frozen plugin registration storage, plugin-table per-entry column/RPC creation, write_record/search_records single-entry routing, re-registration switching, and legacy registration migration
+Plan: 167-02 — Lifecycle Operations and Validation
+Status: Phase 167 in progress; Plan 167-01 complete
+Last activity: 2026-06-11 — Phase 167 Plan 01 completed the public maintain_vault lifecycle input contract, max_rows validation foundation, lifecycle action-array refusal, and pure-records rebuild confirm contract
 
 Progress: ███████░░░ 67% (2/3 milestone phases complete; 7/7 currently planned phase plans complete)
 
@@ -82,10 +82,12 @@ Progress: ███████░░░ 67% (2/3 milestone phases complete; 7/7
 - Phase 166 Plan 04 completed REQ-028 through REQ-034 and finished REQ-008/REQ-021 for plugin tables: plugin manifests parse `embedding`, `register_plugin` resolves and freezes choices, plugin tables receive only one resolved entry column set/RPC, plugin record writes/searches use that single entry or fall back, re-registration switches entries non-destructively, and legacy registrations migrate on startup without touching singular `embedding` columns.
 - Phase 166 is now complete; all assigned embedding-pipeline requirements are complete.
 - `gsd-sdk query state.load` again produced no output during Plan 166-04 execution, so state/roadmap/requirements tracking was updated manually.
+- Phase 167 Plan 01 completed the lifecycle contract foundation: `maintain_vault` accepts lifecycle action names and parameters, lifecycle actions are rejected inside action arrays before work, `max_rows` pure validation covers T-U-036 through T-U-040, and pure-records rebuild confirm derivation is explicit for later processors.
+- `gsd-sdk` was unavailable on PATH during Plan 167-01 execution, so SUMMARY and STATE were updated manually. ROADMAP.md was intentionally not updated per execution instruction.
 
 ### Todos
 
-- Plan/execute Phase 167: Lifecycle Operations and Validation
+- Execute remaining Phase 167 lifecycle processor and operator recipe plans.
 
 ### Blockers
 
@@ -93,8 +95,8 @@ None
 
 ## Session Continuity
 
-**Last session:** 2026-06-11 — Phase 166 Plan 04 executed
-**Next action:** Plan/execute Phase 167 lifecycle operations and validation
+**Last session:** 2026-06-11 — Phase 167 Plan 01 executed
+**Next action:** Execute remaining Phase 167 lifecycle operations and validation plans
 **Context needed:** Phase 167 should build on `.planning/phases/166-embedding-pipeline/166-01-SUMMARY.md`, `166-02-SUMMARY.md`, `166-03-SUMMARY.md`, `166-04-SUMMARY.md`, plus the external source-of-truth requirements and test plan.
 
 ## v4.0 Deferred Items
