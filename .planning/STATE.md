@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Embedding Management & Multi-Provider Support
 status: in_progress
-last_updated: "2026-06-11T00:00:00.000Z"
+last_updated: "2026-06-11T10:20:00.000Z"
 last_activity: 2026-06-11
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 7
   completed_plans: 7
-  percent: 100
+  percent: 67
 ---
 
 # FlashQuery Core — State
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-10)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** v4.0 Embedding Management & Multi-Provider Support — Phase 166: Embedding Pipeline
+**Current focus:** v4.0 Embedding Management & Multi-Provider Support — Phase 167: Lifecycle Operations and Validation
 
 ## Current Position
 
@@ -29,7 +29,7 @@ Plan: 167-01 — Lifecycle Operations and Validation
 Status: Phase 166 complete; ready to plan/execute Phase 167
 Last activity: 2026-06-11 — Phase 166 Plan 04 completed plugin manifest embedding parsing, register_plugin override/resolution, frozen plugin registration storage, plugin-table per-entry column/RPC creation, write_record/search_records single-entry routing, re-registration switching, and legacy registration migration
 
-Progress: ██████████ 100% (7/7 currently planned milestone plans complete)
+Progress: ███████░░░ 67% (2/3 milestone phases complete; 7/7 currently planned phase plans complete)
 
 ## Performance Metrics
 
