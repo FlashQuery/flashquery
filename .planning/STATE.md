@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Embedding Management & Multi-Provider Support
 status: in_progress
-last_updated: "2026-06-11T14:18:40.000Z"
+last_updated: "2026-06-11T14:56:47.000Z"
 last_activity: 2026-06-11
 progress:
   total_phases: 3
@@ -24,20 +24,20 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 
 ## Current Position
 
-Phase: 166 — Embedding Pipeline
-Plan: 167-03 — Lifecycle Operations and Validation
-Status: Phase 167 in progress; Plan 167-03 complete
-Last activity: 2026-06-11 — Phase 167 Plan 03 added core document/memory backfill_embeddings and rebuild_embeddings processors, public maintain_vault dispatch, and D-104 through D-110 directed scenario coverage
+Phase: 167 — Lifecycle Operations and Validation
+Plan: 167-04 — Lifecycle Operations and Validation
+Status: Phase 167 in progress; Plan 167-04 complete
+Last activity: 2026-06-11 — Phase 167 Plan 04 added transactional retire_embedding, plugin conflict refusal, public maintain_vault dispatch, and D-111 through D-113 directed scenario coverage
 
-Progress: ███████░░░ 67% (2/3 milestone phases complete; 9/9 currently executed milestone plans complete)
+Progress: ███████░░░ 67% (2/3 milestone phases complete; 10/10 currently executed milestone plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 9 (this milestone)
-- Average duration: ~35 min
-- Total execution time: ~5h 19m
+- Total plans completed: 10 (this milestone)
+- Average duration: ~41 min
+- Total execution time: ~6h 59m
 
 **By Phase:**
 
@@ -45,7 +45,7 @@ Progress: ███████░░░ 67% (2/3 milestone phases complete; 9/9
 |-------|-------|-------|----------|
 | 165 | 3 | ~1h 30m | ~30m |
 | 166 | 4/4 | ~3h 05m | ~46m |
-| 167 | 3/? | ~52m | ~17m |
+| 167 | 4/? | ~2h 32m | ~38m |
 
 *Updated after each plan completion*
 
@@ -91,6 +91,9 @@ Progress: ███████░░░ 67% (2/3 milestone phases complete; 9/9
 - Core lifecycle processors require `supabase.databaseUrl` for row selection, max_rows counts, durable job invariants, and HNSW reindexing; vector/stamp writes still flow through `updateTargetEmbedding`.
 - Records-scope lifecycle remains intentionally deferred to later Phase 167 work; Plan 167-03 returns explicit `unsupported` for records scope instead of partially implementing it.
 - D-104 through D-110 directed scenarios passed using `.env.test` credentials and managed embedding-enabled servers.
+- Phase 167 Plan 04 completed REQ-037 for retire_embedding: retire validates confirm/invalid parameters before lock acquisition, refuses active plugin conflicts with `details.affected_plugins`, supports deactivated entries, drops core and stale plugin RPC/index/column artifacts plus the catalog row in one PostgreSQL transaction, and dispatches through public `maintain_vault`.
+- Retire artifact inventory handles PostgreSQL-truncated plugin index/RPC names by discovering indexed columns and deriving truncated `match_records_<table>_<entry>` identifiers from plugin tables that still carry the retired vector column.
+- D-111 through D-113 directed scenarios passed using `.env.test` credentials and managed embedding-enabled servers.
 
 ### Todos
 
@@ -102,7 +105,7 @@ None
 
 ## Session Continuity
 
-**Last session:** 2026-06-11 — Phase 167 Plan 03 executed
+**Last session:** 2026-06-11 — Phase 167 Plan 04 executed
 **Next action:** Execute remaining Phase 167 lifecycle operations and validation plans
 **Context needed:** Phase 167 should build on `.planning/phases/166-embedding-pipeline/166-01-SUMMARY.md`, `166-02-SUMMARY.md`, `166-03-SUMMARY.md`, `166-04-SUMMARY.md`, plus the external source-of-truth requirements and test plan.
 

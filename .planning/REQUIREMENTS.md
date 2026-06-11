@@ -107,7 +107,7 @@ All 43 requirements are committed scope for v4.0. Each maps to exactly one phase
 
 - [ ] **REQ-035**: `backfill_embeddings` action — embed NULL rows in scope, idempotent, dry-run + background, ends with HNSW reindex (§6.6.1)
 - [ ] **REQ-036**: `rebuild_embeddings` action — overwrite in-scope vectors; requires `confirm` + `max_rows`; `stale_only` / `mismatched_width_only` narrowing (§6.6.2)
-- [ ] **REQ-037**: `retire_embedding` action — single-transaction drop of columns/indexes/RPCs/catalog row; refuses on plugin conflict (§6.6.3)
+- [x] **REQ-037**: `retire_embedding` action — single-transaction drop of columns/indexes/RPCs/catalog row; refuses on plugin conflict (§6.6.3)
 - [ ] **REQ-038**: Per-entry concurrency lock keyed on `(instance_id, embedding_name)` with heartbeat crash safety; independent across entries (§6.6.4)
 - [ ] **REQ-039**: Background job `abort` action — stop at checkpoint, keep embedded rows, release lock, status `aborted` (§6.6.5)
 - [ ] **REQ-040**: `max_rows` contract — hard ceiling (refuse before work), `0` = unlimited, backfill-optional / rebuild-required / retire-invalid (§6.6.6)
@@ -199,7 +199,7 @@ Each requirement maps to exactly one roadmap phase. For incrementally-built REQs
 | REQ-034 | Phase 166 | Complete |
 | REQ-035 | Phase 167 | Pending |
 | REQ-036 | Phase 167 | Pending |
-| REQ-037 | Phase 167 | Pending |
+| REQ-037 | Phase 167 | Complete |
 | REQ-038 | Phase 167 | Pending |
 | REQ-039 | Phase 167 | Pending |
 | REQ-040 | Phase 167 | Pending |
@@ -214,4 +214,4 @@ Each requirement maps to exactly one roadmap phase. For incrementally-built REQs
 
 ---
 *Requirements defined: 2026-06-10*
-*Last updated: 2026-06-11 — Phase 166 completed plugin-table integration and all assigned embedding-pipeline requirements*
+*Last updated: 2026-06-11 — Phase 167 Plan 04 completed REQ-037 retire_embedding lifecycle behavior*
