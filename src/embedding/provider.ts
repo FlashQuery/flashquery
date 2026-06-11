@@ -25,10 +25,25 @@ export interface EmbeddingCatalogEndpoint {
   model: string;
   max_input_chars?: number;
   maxInputChars?: number;
-  rate_limit?: { min_delay_ms?: number };
+  rate_limit?: {
+    min_delay_ms?: number;
+    max_backoff_retries?: number;
+    backoff_base_ms?: number;
+  };
+  rateLimit?: {
+    minDelayMs?: number;
+    maxBackoffRetries?: number;
+    backoffBaseMs?: number;
+  };
 }
 
 export const DEFAULT_MAX_INPUT_CHARS = 24_000;
+
+interface EndpointRateLimit {
+  minDelayMs?: number;
+  maxBackoffRetries?: number;
+  backoffBaseMs?: number;
+}
 
 export function truncateEmbeddingInput(
   text: string,
@@ -59,6 +74,30 @@ export function truncateEmbeddingInput(
 function isProviderOverLimitError(status: number, body: string): boolean {
   if (status === 413) return true;
   return /input length exceeds|context length|maximum context|too many tokens|token limit|too long/i.test(body);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalizeEndpointRateLimit(endpoint: EmbeddingCatalogEndpoint): EndpointRateLimit | undefined {
+  const rateLimit = endpoint.rateLimit ?? (
+    endpoint.rate_limit
+      ? {
+          minDelayMs: endpoint.rate_limit.min_delay_ms,
+          maxBackoffRetries: endpoint.rate_limit.max_backoff_retries,
+          backoffBaseMs: endpoint.rate_limit.backoff_base_ms,
+        }
+      : undefined
+  );
+  if (!rateLimit) return undefined;
+  return {
+    ...(rateLimit.minDelayMs !== undefined ? { minDelayMs: rateLimit.minDelayMs } : {}),
+    ...(rateLimit.maxBackoffRetries !== undefined
+      ? { maxBackoffRetries: rateLimit.maxBackoffRetries }
+      : {}),
+    ...(rateLimit.backoffBaseMs !== undefined ? { backoffBaseMs: rateLimit.backoffBaseMs } : {}),
+  };
 }
 
 export interface EmbeddingCatalogProviderEntry {
@@ -96,6 +135,8 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
   private dimensions: number;
   private providerName: string;
   private maxInputChars: number;
+  private rateLimit?: EndpointRateLimit;
+  private lastRequestAt?: number;
   private lastMetadata: EmbeddingCallMetadata = { truncated: false, warnings: [] };
 
   constructor(
@@ -104,7 +145,8 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
     apiKey: string,
     dimensions: number,
     providerName: string,
-    maxInputChars = DEFAULT_MAX_INPUT_CHARS
+    maxInputChars = DEFAULT_MAX_INPUT_CHARS,
+    rateLimit?: EndpointRateLimit
   ) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.model = model;
@@ -112,6 +154,7 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
     this.dimensions = dimensions;
     this.providerName = providerName;
     this.maxInputChars = maxInputChars;
+    this.rateLimit = rateLimit;
   }
 
   async embed(text: string): Promise<number[]> {
@@ -154,6 +197,7 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
   }
 
   private async postEmbedding(input: string): Promise<Response> {
+    await this.throttleBeforeRequest();
     try {
       return await fetch(`${this.baseUrl}/v1/embeddings`, {
         method: 'POST',
@@ -171,6 +215,21 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
         `Embedding error: Could not reach ${this.providerName} API. Check your internet connection.`
       );
     }
+  }
+
+  private async throttleBeforeRequest(): Promise<void> {
+    const minDelayMs = this.rateLimit?.minDelayMs;
+    if (!minDelayMs) {
+      return;
+    }
+    const now = Date.now();
+    if (this.lastRequestAt !== undefined) {
+      const waitMs = minDelayMs - (now - this.lastRequestAt);
+      if (waitMs > 0) {
+        await sleep(waitMs);
+      }
+    }
+    this.lastRequestAt = Date.now();
   }
 
   private errorForResponse(status: number, body: string): Error {
@@ -210,13 +269,22 @@ export class OllamaProvider implements EmbeddingProvider {
   private model: string;
   private dimensions: number;
   private maxInputChars: number;
+  private rateLimit?: EndpointRateLimit;
+  private lastRequestAt?: number;
   private lastMetadata: EmbeddingCallMetadata = { truncated: false, warnings: [] };
 
-  constructor(baseUrl: string, model: string, dimensions: number, maxInputChars = DEFAULT_MAX_INPUT_CHARS) {
+  constructor(
+    baseUrl: string,
+    model: string,
+    dimensions: number,
+    maxInputChars = DEFAULT_MAX_INPUT_CHARS,
+    rateLimit?: EndpointRateLimit
+  ) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.model = model;
     this.dimensions = dimensions;
     this.maxInputChars = maxInputChars;
+    this.rateLimit = rateLimit;
   }
 
   async embed(text: string): Promise<number[]> {
@@ -258,6 +326,7 @@ export class OllamaProvider implements EmbeddingProvider {
   }
 
   private async postEmbedding(prompt: string): Promise<Response> {
+    await this.throttleBeforeRequest();
     try {
       return await fetch(`${this.baseUrl}/api/embeddings`, {
         method: 'POST',
@@ -271,6 +340,21 @@ export class OllamaProvider implements EmbeddingProvider {
         'Embedding error: Could not reach Ollama API. Check your internet connection.'
       );
     }
+  }
+
+  private async throttleBeforeRequest(): Promise<void> {
+    const minDelayMs = this.rateLimit?.minDelayMs;
+    if (!minDelayMs) {
+      return;
+    }
+    const now = Date.now();
+    if (this.lastRequestAt !== undefined) {
+      const waitMs = minDelayMs - (now - this.lastRequestAt);
+      if (waitMs > 0) {
+        await sleep(waitMs);
+      }
+    }
+    this.lastRequestAt = Date.now();
   }
 
   getDimensions(): number {
@@ -392,7 +476,8 @@ export function createEmbeddingProviderForCatalogEntry(
           providerConfig.endpoint,
           endpoint.model,
           entry.dimensions,
-          endpoint.max_input_chars ?? endpoint.maxInputChars ?? DEFAULT_MAX_INPUT_CHARS
+          endpoint.max_input_chars ?? endpoint.maxInputChars ?? DEFAULT_MAX_INPUT_CHARS,
+          normalizeEndpointRateLimit(endpoint)
         ),
       };
     }
@@ -412,7 +497,8 @@ export function createEmbeddingProviderForCatalogEntry(
         providerConfig.apiKey,
         entry.dimensions,
         providerName,
-        endpoint.max_input_chars ?? endpoint.maxInputChars ?? DEFAULT_MAX_INPUT_CHARS
+        endpoint.max_input_chars ?? endpoint.maxInputChars ?? DEFAULT_MAX_INPUT_CHARS,
+        normalizeEndpointRateLimit(endpoint)
       ),
     };
   });
