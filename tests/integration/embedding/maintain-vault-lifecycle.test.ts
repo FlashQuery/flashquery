@@ -8,6 +8,7 @@ import {
   requestLifecycleAbort,
 } from '../../../src/embedding/lifecycle/jobs.js';
 import { initLogger } from '../../../src/logging/logger.js';
+import { maintainVault } from '../../../src/services/maintenance.js';
 import { buildSchemaDDL, initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
 import {
   HAS_DIRECT_DATABASE_URL,
@@ -64,6 +65,39 @@ describe('durable lifecycle job DDL', () => {
         error: 'invalid_input',
         identifier: 'supabase.databaseUrl',
         details: expect.objectContaining({ reason: 'direct_postgresql_required' }),
+      }),
+    });
+  });
+
+  it('REQ-039 wires maintain_vault abort to durable jobs after validation', async () => {
+    const result = await maintainVault(makeConfig({ databaseUrl: undefined }), {
+      action: 'abort',
+      job_id: '00000000-0000-4000-8000-000000000167',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        error: 'invalid_input',
+        identifier: 'supabase.databaseUrl',
+        details: expect.objectContaining({ reason: 'direct_postgresql_required' }),
+      }),
+    });
+  });
+
+  it('REQ-039 rejects abort embedding-specific parameters before job lookup', async () => {
+    const result = await maintainVault(makeConfig({ databaseUrl: undefined }), {
+      action: 'abort',
+      job_id: '00000000-0000-4000-8000-000000000167',
+      embedding_name: 'primary',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        error: 'invalid_input',
+        identifier: 'embedding_name',
+        details: expect.objectContaining({ parameter: 'embedding_name' }),
       }),
     });
   });
@@ -240,6 +274,50 @@ describe.skipIf(!HAS_SUPABASE || !HAS_DIRECT_DATABASE_URL)(
         error: expect.objectContaining({
           error: 'unsupported',
           details: expect.objectContaining({ status: 'completed' }),
+        }),
+      });
+    });
+
+    it('REQ-039 routes maintain_vault status and abort through durable lifecycle jobs', async () => {
+      const config = makeConfig();
+      const running = await acquireLifecycleJob(config, {
+        action: 'rebuild_embeddings',
+        embedding_name: 'service_abortable',
+        counts: { rows_examined: 3, rows_embedded: 1, rows_failed: 0 },
+      });
+      expect(running.ok).toBe(true);
+      if (!running.ok) throw new Error(running.error.message);
+
+      await expect(
+        maintainVault(config, { action: 'status', job_id: running.payload.job_id })
+      ).resolves.toEqual({
+        ok: true,
+        payload: expect.objectContaining({
+          job_id: running.payload.job_id,
+          status: 'running',
+          actions: [
+            expect.objectContaining({
+              action: 'rebuild_embeddings',
+              embedding_name: 'service_abortable',
+              counts: expect.objectContaining({ rows_examined: 3, rows_embedded: 1, rows_failed: 0 }),
+            }),
+          ],
+        }),
+      });
+
+      await expect(
+        maintainVault(config, { action: 'abort', job_id: running.payload.job_id })
+      ).resolves.toEqual({
+        ok: true,
+        payload: expect.objectContaining({
+          job_id: running.payload.job_id,
+          status: 'aborted',
+          actions: [
+            expect.objectContaining({
+              action: 'rebuild_embeddings',
+              counts: expect.objectContaining({ rows_examined: 3, rows_embedded: 1, rows_failed: 0 }),
+            }),
+          ],
         }),
       });
     });
