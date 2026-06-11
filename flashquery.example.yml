@@ -270,10 +270,11 @@ templates:
 # Naming rules: lowercase a-z 0-9 _ -, must start with [a-z0-9].
 # Names are auto-lowercased at load time, so "Nano" and "nano" collide.
 #
-# NOTE: The 'embedding' purpose below is required for FlashQuery's semantic
-# search. Assign it a model of type: embedding with a dimensions: value that
-# matches your chosen embedding model. Omit the entire llm: section to disable
-# all LLM features including semantic search.
+# NOTE: Embeddings for semantic search are defined in the top-level
+# `embeddings:` catalog further down this file — NOT via an LLM purpose. 
+# The `llm:` section below is for language / reasoning models used by call_model 
+# and delegated purposes; omit it entirely to disable those features 
+# (semantic search still works from the `embeddings:` catalog).
 
 llm:
   # Providers are API endpoints/accounts. Use one provider per endpoint or
@@ -296,18 +297,6 @@ llm:
   # resolver=model, and purposes use them in fallback chains. The `model`
   # field is the provider's real model ID.
   models:
-    - name: embeddings
-      provider_name: local-ollama
-      model: nomic-embed-text
-      type: embedding
-      # Embedding vector dimensions — must match the model:
-      #   text-embedding-3-small: 1536 | text-embedding-3-large: 3072
-      #   nomic-embed-text: 768
-      dimensions: 768
-      cost_per_million:
-        input: 0.00
-        output: 0.00
-
     - name: fast
       provider_name: local-ollama
       model: granite4
@@ -341,14 +330,6 @@ llm:
   # workflows: purposes provide fallback, defaults, intent-based usage
   # reporting, and a controlled tool/template surface.
   purposes:
-    - name: embedding
-      description: |
-        Generates vector embeddings for all vault content to enable semantic
-        search. Must be assigned a model of type: embedding. This purpose
-        must be functional for FlashQuery's core search to work.
-      models:
-        - embeddings
-
     - name: general
       description: |
         General-purpose language model for tasks that do not have a
