@@ -97,7 +97,7 @@ export interface DirectoryResult {
   timestamp: string;
 }
 
-export interface MaintenanceActionResult {
+export interface MaintenanceLegacyActionResult {
   action: 'sync' | 'repair';
   started_at: string;
   finished_at: string;
@@ -112,6 +112,38 @@ export interface MaintenanceActionResult {
   warnings?: WarningCode[];
   host_template_refresh?: HostTemplateRefreshSummary;
 }
+
+export interface MaintenanceLifecycleActionResult {
+  action: 'backfill_embeddings' | 'rebuild_embeddings' | 'retire_embedding' | 'abort';
+  started_at: string;
+  finished_at: string;
+  dry_run: boolean;
+  embedding_name?: string;
+  counts:
+    | {
+        rows_examined: number;
+        rows_embedded: number;
+        rows_failed: number;
+        rows_skipped_already_present?: number;
+        rows_skipped_no_embedding?: number;
+      }
+    | {
+        tables_affected: number;
+        columns_dropped: number;
+        indexes_dropped: number;
+        catalog_rows_deleted: number;
+      };
+  failures?: Array<{ entity_type: string; identifier: string; message: string }>;
+  would_process?: number;
+  estimated?: {
+    input_tokens?: number;
+    cost_usd?: number;
+    wall_time_seconds?: number;
+  };
+  warnings?: WarningCode[];
+}
+
+export type MaintenanceActionResult = MaintenanceLegacyActionResult | MaintenanceLifecycleActionResult;
 
 export interface HostTemplateRefreshSummary {
   attempted: boolean;
@@ -339,6 +371,10 @@ export function directoryResult(input: DirectoryResult): DirectoryResult {
 }
 
 export function maintenanceActionResult(input: MaintenanceActionResult): MaintenanceActionResult {
+  if (input.action !== 'sync' && input.action !== 'repair') {
+    return input;
+  }
+
   return {
     action: input.action,
     started_at: input.started_at,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import {
   resolveRebuildConfirmFromResolvedWorkUnits,
@@ -6,6 +6,20 @@ import {
   validateMaxRows,
 } from '../../src/embedding/lifecycle/scope.js';
 import { maintainVault } from '../../src/services/maintenance.js';
+
+const scannerMocks = vi.hoisted(() => ({
+  runScanOnce: vi.fn(),
+  reconcileTrackedDocuments: vi.fn(),
+}));
+
+vi.mock('../../src/services/scanner.js', () => ({
+  runScanOnce: scannerMocks.runScanOnce,
+  reconcileTrackedDocuments: scannerMocks.reconcileTrackedDocuments,
+}));
+
+vi.mock('../../src/services/plugin-reconciliation.js', () => ({
+  invalidateReconciliationCache: vi.fn(),
+}));
 
 function makeConfig(): FlashQueryConfig {
   return {
@@ -33,6 +47,24 @@ function makeConfig(): FlashQueryConfig {
     logging: { level: 'info', output: 'stdout' },
   } as unknown as FlashQueryConfig;
 }
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  scannerMocks.runScanOnce.mockResolvedValue({
+    hashMismatches: 0,
+    statusMismatches: 0,
+    newFiles: 0,
+    movedFiles: 0,
+    deletedFiles: 0,
+    embeddingStatus: 'complete',
+    embedsAwaited: 0,
+  });
+  scannerMocks.reconcileTrackedDocuments.mockResolvedValue({
+    scanned: 0,
+    updated: 0,
+    archived: 0,
+  });
+});
 
 describe('max_rows lifecycle contract', () => {
   it('T-U-036 refuses when rows_in_scope exceeds max_rows', () => {

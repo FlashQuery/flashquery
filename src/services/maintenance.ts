@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { FlashQueryConfig } from '../config/loader.js';
+import type { LifecycleAction, LifecycleBaseInput, LifecycleScope } from '../embedding/lifecycle/types.js';
+import { isLifecycleAction, validateLifecycleActionParameters } from '../embedding/lifecycle/scope.js';
 import { logger } from '../logging/logger.js';
-import type { ErrorEnvelope, HostTemplateRefreshSummary, MaintenanceActionResult } from '../mcp/utils/response-formats.js';
+import type {
+  ErrorEnvelope,
+  HostTemplateRefreshSummary,
+  MaintenanceActionResult,
+  MaintenanceLegacyActionResult,
+} from '../mcp/utils/response-formats.js';
 import { maintenanceActionResult } from '../mcp/utils/response-formats.js';
 import { getIsShuttingDown } from '../server/shutdown-state.js';
 import { invalidateReconciliationCache } from './plugin-reconciliation.js';
@@ -12,8 +19,8 @@ import {
   type ScanResult,
 } from './scanner.js';
 
-export type MaintenanceAction = 'sync' | 'repair' | 'status';
-export type MaintenanceRequestedAction = MaintenanceAction | Array<'sync' | 'repair'>;
+export type MaintenanceAction = 'sync' | 'repair' | 'status' | LifecycleAction;
+export type MaintenanceRequestedAction = MaintenanceAction | MaintenanceAction[];
 export type MaintenanceJobStatus = 'running' | 'completed' | 'failed' | 'aborted';
 
 export interface MaintainVaultInput {
@@ -21,6 +28,13 @@ export interface MaintainVaultInput {
   dry_run?: boolean;
   background?: boolean;
   job_id?: string;
+  embedding_name?: string;
+  scope?: LifecycleScope;
+  max_rows?: number;
+  confirm?: string;
+  stale_only?: boolean;
+  mismatched_width_only?: boolean;
+  drop_stamping_columns?: boolean;
 }
 
 export interface MaintenanceAcceptedPayload {
@@ -81,6 +95,10 @@ export async function maintainVault(
       });
     }
     return getMaintenanceJobStatus(input.job_id ?? '');
+  }
+
+  if (isLifecycleAction(input.action)) {
+    return validateLifecycleDispatch(input);
   }
 
   const normalized = normalizeMaintenanceActions(input.action);
@@ -164,11 +182,26 @@ function normalizeMaintenanceActions(
         parameter: 'action',
       });
     }
+    if ([...unique].some((item) => isLifecycleAction(item))) {
+      return invalidInput(
+        'Lifecycle actions cannot be combined in action arrays; use one of backfill_embeddings, rebuild_embeddings, retire_embedding, or abort as a single action',
+        'maintain_vault',
+        {
+          parameter: 'action',
+          action,
+        }
+      );
+    }
+
     for (const item of unique) {
       if (item !== 'sync' && item !== 'repair') {
-        return invalidInput('action must be sync, repair, status, or ["repair","sync"]', 'maintain_vault', {
-          parameter: 'action',
-        });
+        return invalidInput(
+          'action must be sync, repair, status, backfill_embeddings, rebuild_embeddings, retire_embedding, abort, or ["repair","sync"]',
+          'maintain_vault',
+          {
+            parameter: 'action',
+          }
+        );
       }
     }
     const ordered: Array<'sync' | 'repair'> = [];
@@ -184,6 +217,26 @@ function normalizeMaintenanceActions(
   return invalidInput('action must be sync, repair, status, or ["repair","sync"]', 'maintain_vault', {
     parameter: 'action',
   });
+}
+
+function validateLifecycleDispatch(input: MaintainVaultInput): MaintenanceResult<never> {
+  const validation = validateLifecycleActionParameters(input as LifecycleBaseInput);
+  if (!validation.ok) {
+    return { ok: false, error: validation.error };
+  }
+
+  return {
+    ok: false,
+    error: {
+      error: 'unsupported',
+      message: `${input.action} validation is available, but execution is not implemented until the lifecycle processor plans`,
+      identifier: String(input.action),
+      details: {
+        action: input.action,
+        reason: 'lifecycle_processor_not_implemented',
+      },
+    },
+  };
 }
 
 function validateModeOptions(actions: Array<'sync' | 'repair'>, input: MaintainVaultInput): MaintenanceResult<null> {
@@ -300,7 +353,7 @@ async function runBackgroundJob(config: FlashQueryConfig, jobId: string): Promis
   }
 }
 
-function scanCounts(result: ScanResult): MaintenanceActionResult['counts'] {
+function scanCounts(result: ScanResult): MaintenanceLegacyActionResult['counts'] {
   return {
     scanned:
       result.hashMismatches +
@@ -326,7 +379,7 @@ function scanWarnings(result: ScanResult): MaintenanceActionResult['warnings'] {
   return warnings.length > 0 ? warnings : undefined;
 }
 
-function repairCounts(result: DocumentReconciliationResult): MaintenanceActionResult['counts'] {
+function repairCounts(result: DocumentReconciliationResult): MaintenanceLegacyActionResult['counts'] {
   return {
     scanned: result.scanned,
     added: 0,
