@@ -242,7 +242,7 @@ function unsupportedZeroActiveSemantic(): ErrorEnvelope {
   };
 }
 
-function searchPrefetchSize(limit: number): number {
+export function searchPrefetchSize(limit: number): number {
   return Math.min(Math.max(limit * 2, 20), 100);
 }
 
@@ -256,6 +256,60 @@ function semanticIdentifier(result: SearchResultItem): string {
   return result.entity_type === 'document'
     ? (result.path ?? result.identifier)
     : (result.memory_id ?? result.identifier);
+}
+
+export interface RrfRetrieverHits {
+  embeddingName: string;
+  hits: Array<SearchResultItem & { rank: number }>;
+}
+
+export type RrfFusedSearchResult = SearchResultItem & {
+  fused_score: number;
+  rank_sum: number;
+  per_embedding_ranks: Record<string, number>;
+};
+
+export function fuseRrfSearchResults(retrievers: RrfRetrieverHits[], limit: number): RrfFusedSearchResult[] {
+  const byKey = new Map<string, RrfFusedSearchResult>();
+
+  for (const retriever of retrievers) {
+    for (const hit of retriever.hits) {
+      const key = semanticResultKey(hit);
+      const contribution = 1 / (RRF_K + hit.rank);
+      const existing = byKey.get(key);
+      if (!existing) {
+        const { rank: _rank, ...base } = hit;
+        byKey.set(key, {
+          ...base,
+          fused_score: contribution,
+          rank_sum: hit.rank,
+          per_embedding_ranks: { [retriever.embeddingName]: hit.rank },
+        });
+        continue;
+      }
+
+      const matchSource = [...new Set([...(existing.match_source ?? []), ...(hit.match_source ?? [])])];
+      existing.fused_score += contribution;
+      existing.rank_sum += hit.rank;
+      existing.per_embedding_ranks[retriever.embeddingName] = hit.rank;
+      if ((hit.score ?? 0) > (existing.score ?? 0)) {
+        existing.score = hit.score;
+      }
+      if (matchSource.length > 0) {
+        existing.match_source = matchSource;
+      }
+    }
+  }
+
+  return [...byKey.values()]
+    .sort((left, right) => {
+      const fusedDelta = right.fused_score - left.fused_score;
+      if (fusedDelta !== 0) return fusedDelta;
+      const rankSumDelta = left.rank_sum - right.rank_sum;
+      if (rankSumDelta !== 0) return rankSumDelta;
+      return semanticIdentifier(left).localeCompare(semanticIdentifier(right));
+    })
+    .slice(0, limit);
 }
 
 async function searchDocumentsForEmbedding(input: {
@@ -1428,9 +1482,21 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                   warnings.push(`partial_retriever_failure:${failedResult.entry.name}`);
                 }
                 embeddingsQueried = successful.map((result) => result.entry.name);
-                allResults.push(...successful.flatMap((result) =>
-                  result.hits.map(({ embeddingName: _embeddingName, rank: _rank, ...hit }) => hit)
-                ));
+                if (successful.length > 1) {
+                  catalogFusion = 'rrf';
+                  catalogFusionK = RRF_K;
+                  allResults.push(...fuseRrfSearchResults(
+                    successful.map((result) => ({
+                      embeddingName: result.entry.name,
+                      hits: result.hits,
+                    })),
+                    intent.limit
+                  ));
+                } else {
+                  allResults.push(...successful.flatMap((result) =>
+                    result.hits.map(({ embeddingName: _embeddingName, rank: _rank, ...hit }) => hit)
+                  ));
+                }
               }
             }
           }
@@ -1592,7 +1658,28 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           }
         }
 
-        const results = mergeSearchResults(allResults, intent.limit);
+        const results = catalogFusion === 'rrf'
+          ? [...allResults].sort((left, right) => {
+            const leftRecord = left as unknown as Record<string, unknown>;
+            const rightRecord = right as unknown as Record<string, unknown>;
+            const leftFused = typeof leftRecord.fused_score === 'number'
+              ? leftRecord.fused_score
+              : 0;
+            const rightFused = typeof rightRecord.fused_score === 'number'
+              ? rightRecord.fused_score
+              : 0;
+            const fusedDelta = rightFused - leftFused;
+            if (fusedDelta !== 0) return fusedDelta;
+            const leftRankSum = typeof leftRecord.rank_sum === 'number'
+              ? leftRecord.rank_sum
+              : Number.MAX_SAFE_INTEGER;
+            const rightRankSum = typeof rightRecord.rank_sum === 'number'
+              ? rightRecord.rank_sum
+              : Number.MAX_SAFE_INTEGER;
+            if (leftRankSum !== rightRankSum) return leftRankSum - rightRankSum;
+            return semanticIdentifier(left).localeCompare(semanticIdentifier(right));
+          }).slice(0, intent.limit)
+          : mergeSearchResults(allResults, intent.limit);
         return jsonToolResult({
           query: intent.query,
           entity_types: intent.entity_types,

@@ -9,6 +9,7 @@ import {
 import { HAS_SUPABASE } from '../../helpers/test-env.js';
 
 const ENTRY_PRIMARY = 's166_matrix_primary';
+const ENTRY_ANALYSIS = 's166_matrix_analysis';
 
 describe.skipIf(!HAS_SUPABASE).sequential('embedding search mode matrix', () => {
   let harness: EmbeddingSearchHarness;
@@ -23,7 +24,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('embedding search mode matrix', () => 
   afterEach(async () => {
     vi.restoreAllMocks();
     if (harness) {
-      await destroyEmbeddingSearchHarness(harness, [ENTRY_PRIMARY]);
+      await destroyEmbeddingSearchHarness(harness, [ENTRY_PRIMARY, ENTRY_ANALYSIS]);
     }
   });
 
@@ -106,5 +107,43 @@ describe.skipIf(!HAS_SUPABASE).sequential('embedding search mode matrix', () => 
       match_source: ['semantic'],
     });
     expect(payload.results[0]!.score).toBeGreaterThan(0.99);
+  }, 90_000);
+
+  it('T-I-049 fuses two active semantic retrievers with RRF metadata', async () => {
+    harness = await createEmbeddingSearchHarness({
+      instanceId: 'phase-166-search-two-active',
+      entries: [{ name: ENTRY_PRIMARY }, { name: ENTRY_ANALYSIS }],
+    });
+    await addSearchDocument({
+      harness,
+      path: 'rrf-alpha.md',
+      title: 'RRF Alpha',
+      vectorByEntry: {
+        [ENTRY_PRIMARY]: [1, 0, 0],
+        [ENTRY_ANALYSIS]: [1, 0, 0],
+      },
+    });
+
+    const result = await harness.server.search({
+      query: 'alpha',
+      mode: 'semantic',
+      entity_types: ['documents'],
+      limit: 5,
+    });
+    const payload = parseToolJson<{
+      embeddings_queried: string[];
+      fusion: string;
+      fusion_k: number;
+      results: Array<{ fused_score: number; rank_sum: number; per_embedding_ranks: Record<string, number> }>;
+    }>(result);
+
+    expect(payload.embeddings_queried).toEqual([ENTRY_PRIMARY, ENTRY_ANALYSIS]);
+    expect(payload.fusion).toBe('rrf');
+    expect(payload.fusion_k).toBe(60);
+    expect(payload.results[0]).toMatchObject({
+      rank_sum: 2,
+      per_embedding_ranks: { [ENTRY_PRIMARY]: 1, [ENTRY_ANALYSIS]: 1 },
+    });
+    expect(payload.results[0]!.fused_score).toBeCloseTo(2 / 61, 12);
   }, 90_000);
 });
