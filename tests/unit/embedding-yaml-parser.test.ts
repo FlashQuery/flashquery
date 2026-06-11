@@ -77,6 +77,8 @@ embeddings:
         model: text-embedding-3-small
         rate_limit:
           min_delay_ms: 25
+          max_backoff_retries: 3
+          backoff_base_ms: 1000
         max_input_chars: 12000
       - provider_name: local
         model: nomic-embed-text
@@ -90,7 +92,7 @@ embeddings:
           {
             providerName: 'openai',
             model: 'text-embedding-3-small',
-            rateLimit: { minDelayMs: 25 },
+            rateLimit: { minDelayMs: 25, maxBackoffRetries: 3, backoffBaseMs: 1000 },
             maxInputChars: 12000,
           },
           {
