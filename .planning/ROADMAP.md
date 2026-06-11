@@ -173,7 +173,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 165. Foundation Infrastructure | 3/3 | Complete | 2026-06-10 |
-| 166. Embedding Pipeline | 2/4 | In Progress | - |
+| 166. Embedding Pipeline | 3/4 | In Progress | - |
 | 167. Lifecycle Operations and Validation | 0/? | Not started | - |
 
 ## Archived Milestone Details

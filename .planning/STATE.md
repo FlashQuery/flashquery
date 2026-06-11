@@ -9,8 +9,8 @@ progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 7
-  completed_plans: 5
-  percent: 71
+  completed_plans: 6
+  percent: 86
 ---
 
 # FlashQuery Core — State
@@ -25,26 +25,26 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 ## Current Position
 
 Phase: 166 — Embedding Pipeline
-Plan: 166-03 — Search + RRF Fusion
-Status: Phase 166 Plan 02 complete; ready to execute Phase 166 Plan 03
-Last activity: 2026-06-11 — Phase 166 Plan 02 completed endpoint rate_limit parsing, proactive min_delay_ms throttling, same-endpoint 429 backoff, and non-429 immediate failover preservation
+Plan: 166-04 — Plugin-Table Integration
+Status: Phase 166 Plan 03 complete; ready to execute Phase 166 Plan 04
+Last activity: 2026-06-11 — Phase 166 Plan 03 completed catalog-aware search mode selection, embedding_names validation, k=60 RRF fusion, zero-active semantic/mixed behavior, deactivated-entry search refusal/exclusion, and partial retriever failure handling
 
-Progress: ███████░░░ 71% (5/7 milestone plans complete)
+Progress: ████████░░ 86% (6/7 milestone plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 5 (this milestone)
-- Average duration: ~25 min
-- Total execution time: ~2h 05m
+- Total plans completed: 6 (this milestone)
+- Average duration: ~36 min
+- Total execution time: ~3h 40m
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 165 | 3 | ~1h 30m | ~30m |
-| 166 | 2/4 | 35m | ~18m |
+| 166 | 3/4 | ~2h 10m | ~43m |
 | 167 | ? | - | - |
 
 *Updated after each plan completion*
@@ -76,10 +76,13 @@ Progress: ███████░░░ 71% (5/7 milestone plans complete)
 - `gsd-sdk` was unavailable on PATH during Plan 166-01 execution, so state/roadmap tracking was updated manually.
 - Phase 166 Plan 02 completed REQ-017: endpoint `rate_limit` settings are parsed/preserved, OpenAI-compatible and Ollama leaf providers enforce in-process `min_delay_ms`, HTTP 429 retries on the same endpoint with exponential backoff before failover, and non-429 failures still fail over immediately.
 - `gsd-sdk` remained unavailable on PATH during Plan 166-02 execution, so state/roadmap/requirements tracking was updated manually.
+- Phase 166 Plan 03 completed REQ-020, REQ-022, REQ-023, REQ-024, REQ-025, REQ-026, and REQ-027: unified `search` is catalog-aware, validates `embedding_names`, uses app-side RRF with k=60 for multi-entry searches, applies deterministic tie breaks, handles zero-active semantic/mixed modes, and continues on partial retriever failure.
+- REQ-006 deactivated-entry search behavior is complete: catalog defaults exclude deactivated entries, and explicit deactivated `embedding_names` return `unsupported`.
+- `gsd-sdk query state.load` produced no output during Plan 166-03 execution, so state/roadmap/requirements tracking was updated manually.
 
 ### Todos
 
-- Execute Phase 166 Plan 03: Search + RRF Fusion
+- Execute Phase 166 Plan 04: Plugin-Table Integration
 
 ### Blockers
 
@@ -87,8 +90,8 @@ None
 
 ## Session Continuity
 
-**Last session:** 2026-06-11 — Phase 166 Plan 02 executed
-**Next action:** Execute `.planning/phases/166-embedding-pipeline/166-03-PLAN.md`
+**Last session:** 2026-06-11 — Phase 166 Plan 03 executed
+**Next action:** Execute `.planning/phases/166-embedding-pipeline/166-04-PLAN.md`
 **Context needed:** Phase 166 execution should build on `.planning/phases/166-embedding-pipeline/166-CONTEXT.md`, `.planning/phases/165-foundation-infrastructure/165-01-SUMMARY.md`, `165-02-SUMMARY.md`, and `165-03-SUMMARY.md`, plus the two external source-of-truth docs named in every Phase 166 plan.
 
 ## v4.0 Deferred Items

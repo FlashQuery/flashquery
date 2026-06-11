@@ -61,7 +61,7 @@ All 43 requirements are committed scope for v4.0. Each maps to exactly one phase
 - [ ] **REQ-003**: Config-sync inserts newly-declared YAML entries and adds their per-entry column sets + HNSW indexes (§6.1.3)
 - [ ] **REQ-004**: Config-sync refuses startup on in-place vector-space identity changes; benign changes apply silently with audit log (§6.1.4)
 - [ ] **REQ-005**: Removing an entry's YAML block deactivates it in place (status → deactivated); columns/data preserved; ERROR log per restart (§6.1.5)
-- [ ] **REQ-006**: All operations against deactivated entries are refused except `retire_embedding` (write-skip, search-exclude, backfill-refuse, registration-refuse) (§6.1.6)
+- [x] **REQ-006**: All operations against deactivated entries are refused except `retire_embedding` (write-skip, search-exclude, backfill-refuse, registration-refuse) (§6.1.6)
 - [ ] **REQ-007**: Per-instance multi-tenancy isolation — every catalog op scoped by `instance_id` (§6.1.7)
 
 ### Per-Entry Columns, Stamping & Drift Detection
@@ -84,14 +84,14 @@ All 43 requirements are committed scope for v4.0. Each maps to exactly one phase
 
 ### Search & RRF Fusion
 
-- [ ] **REQ-020**: Catalog-state-derived default search behaviour (0 / 1 / 2+ active entries × mode) (§6.4.1)
+- [x] **REQ-020**: Catalog-state-derived default search behaviour (0 / 1 / 2+ active entries × mode) (§6.4.1)
 - [ ] **REQ-021**: Per-entry semantic RPCs (`match_memories_<X>`, `match_documents_<X>`, `match_records_<table>_<X>`) generated/dropped with the column set (§6.4.2)
-- [ ] **REQ-022**: `embedding_names: string[]` parameter on `search` to select a subset of entries (§6.4.3)
-- [ ] **REQ-023**: RRF fusion across multiple active entries (k=60, app-side scoring, parallel per-entry query embedding) (§6.4.4)
-- [ ] **REQ-024**: Deterministic result ordering & tie-breaking (`fused_score DESC, rank_sum ASC, identifier ASC`) (§6.4.5)
-- [ ] **REQ-025**: `mode: "semantic"` with zero active entries → `unsupported` error with remediation hint (§6.4.6)
-- [ ] **REQ-026**: `mode: "mixed"` with zero active entries → filesystem-only results + `embedding_unavailable` warning (§6.4.7)
-- [ ] **REQ-027**: Partial retriever failure under fusion → continue with survivors + `partial_retriever_failure:<name>` warning (§6.4.8)
+- [x] **REQ-022**: `embedding_names: string[]` parameter on `search` to select a subset of entries (§6.4.3)
+- [x] **REQ-023**: RRF fusion across multiple active entries (k=60, app-side scoring, parallel per-entry query embedding) (§6.4.4)
+- [x] **REQ-024**: Deterministic result ordering & tie-breaking (`fused_score DESC, rank_sum ASC, identifier ASC`) (§6.4.5)
+- [x] **REQ-025**: `mode: "semantic"` with zero active entries → `unsupported` error with remediation hint (§6.4.6)
+- [x] **REQ-026**: `mode: "mixed"` with zero active entries → filesystem-only results + `embedding_unavailable` warning (§6.4.7)
+- [x] **REQ-027**: Partial retriever failure under fusion → continue with survivors + `partial_retriever_failure:<name>` warning (§6.4.8)
 
 ### Plugin-Table Embedding
 
@@ -168,7 +168,7 @@ Each requirement maps to exactly one roadmap phase. For incrementally-built REQs
 | REQ-003 | Phase 165 | Pending |
 | REQ-004 | Phase 165 | Pending |
 | REQ-005 | Phase 165 | Pending |
-| REQ-006 | Phase 166 | Pending |
+| REQ-006 | Phase 166 | Complete |
 | REQ-007 | Phase 165 | Pending |
 | REQ-008 | Phase 166 | Pending |
 | REQ-009 | Phase 165 | Complete |
@@ -182,14 +182,14 @@ Each requirement maps to exactly one roadmap phase. For incrementally-built REQs
 | REQ-017 | Phase 166 | Complete |
 | REQ-018 | Phase 165 | Complete |
 | REQ-019 | Phase 165 | Complete |
-| REQ-020 | Phase 166 | Pending |
+| REQ-020 | Phase 166 | Complete |
 | REQ-021 | Phase 166 | Pending |
-| REQ-022 | Phase 166 | Pending |
-| REQ-023 | Phase 166 | Pending |
-| REQ-024 | Phase 166 | Pending |
-| REQ-025 | Phase 166 | Pending |
-| REQ-026 | Phase 166 | Pending |
-| REQ-027 | Phase 166 | Pending |
+| REQ-022 | Phase 166 | Complete |
+| REQ-023 | Phase 166 | Complete |
+| REQ-024 | Phase 166 | Complete |
+| REQ-025 | Phase 166 | Complete |
+| REQ-026 | Phase 166 | Complete |
+| REQ-027 | Phase 166 | Complete |
 | REQ-028 | Phase 166 | Pending |
 | REQ-029 | Phase 166 | Pending |
 | REQ-030 | Phase 166 | Pending |
