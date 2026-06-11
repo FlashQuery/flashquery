@@ -7,10 +7,10 @@ last_updated: "2026-06-11T00:00:00.000Z"
 last_activity: 2026-06-11
 progress:
   total_phases: 3
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 7
-  completed_plans: 6
-  percent: 86
+  completed_plans: 7
+  percent: 100
 ---
 
 # FlashQuery Core — State
@@ -25,26 +25,26 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 ## Current Position
 
 Phase: 166 — Embedding Pipeline
-Plan: 166-04 — Plugin-Table Integration
-Status: Phase 166 Plan 03 complete; ready to execute Phase 166 Plan 04
-Last activity: 2026-06-11 — Phase 166 Plan 03 completed catalog-aware search mode selection, embedding_names validation, k=60 RRF fusion, zero-active semantic/mixed behavior, deactivated-entry search refusal/exclusion, and partial retriever failure handling
+Plan: 167-01 — Lifecycle Operations and Validation
+Status: Phase 166 complete; ready to plan/execute Phase 167
+Last activity: 2026-06-11 — Phase 166 Plan 04 completed plugin manifest embedding parsing, register_plugin override/resolution, frozen plugin registration storage, plugin-table per-entry column/RPC creation, write_record/search_records single-entry routing, re-registration switching, and legacy registration migration
 
-Progress: ████████░░ 86% (6/7 milestone plans complete)
+Progress: ██████████ 100% (7/7 currently planned milestone plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 6 (this milestone)
-- Average duration: ~36 min
-- Total execution time: ~3h 40m
+- Total plans completed: 7 (this milestone)
+- Average duration: ~39 min
+- Total execution time: ~4h 35m
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 165 | 3 | ~1h 30m | ~30m |
-| 166 | 3/4 | ~2h 10m | ~43m |
+| 166 | 4/4 | ~3h 05m | ~46m |
 | 167 | ? | - | - |
 
 *Updated after each plan completion*
@@ -79,10 +79,13 @@ Progress: ████████░░ 86% (6/7 milestone plans complete)
 - Phase 166 Plan 03 completed REQ-020, REQ-022, REQ-023, REQ-024, REQ-025, REQ-026, and REQ-027: unified `search` is catalog-aware, validates `embedding_names`, uses app-side RRF with k=60 for multi-entry searches, applies deterministic tie breaks, handles zero-active semantic/mixed modes, and continues on partial retriever failure.
 - REQ-006 deactivated-entry search behavior is complete: catalog defaults exclude deactivated entries, and explicit deactivated `embedding_names` return `unsupported`.
 - `gsd-sdk query state.load` produced no output during Plan 166-03 execution, so state/roadmap/requirements tracking was updated manually.
+- Phase 166 Plan 04 completed REQ-028 through REQ-034 and finished REQ-008/REQ-021 for plugin tables: plugin manifests parse `embedding`, `register_plugin` resolves and freezes choices, plugin tables receive only one resolved entry column set/RPC, plugin record writes/searches use that single entry or fall back, re-registration switches entries non-destructively, and legacy registrations migrate on startup without touching singular `embedding` columns.
+- Phase 166 is now complete; all assigned embedding-pipeline requirements are complete.
+- `gsd-sdk query state.load` again produced no output during Plan 166-04 execution, so state/roadmap/requirements tracking was updated manually.
 
 ### Todos
 
-- Execute Phase 166 Plan 04: Plugin-Table Integration
+- Plan/execute Phase 167: Lifecycle Operations and Validation
 
 ### Blockers
 
@@ -90,9 +93,9 @@ None
 
 ## Session Continuity
 
-**Last session:** 2026-06-11 — Phase 166 Plan 03 executed
-**Next action:** Execute `.planning/phases/166-embedding-pipeline/166-04-PLAN.md`
-**Context needed:** Phase 166 execution should build on `.planning/phases/166-embedding-pipeline/166-CONTEXT.md`, `.planning/phases/165-foundation-infrastructure/165-01-SUMMARY.md`, `165-02-SUMMARY.md`, and `165-03-SUMMARY.md`, plus the two external source-of-truth docs named in every Phase 166 plan.
+**Last session:** 2026-06-11 — Phase 166 Plan 04 executed
+**Next action:** Plan/execute Phase 167 lifecycle operations and validation
+**Context needed:** Phase 167 should build on `.planning/phases/166-embedding-pipeline/166-01-SUMMARY.md`, `166-02-SUMMARY.md`, `166-03-SUMMARY.md`, `166-04-SUMMARY.md`, plus the external source-of-truth requirements and test plan.
 
 ## v4.0 Deferred Items
 

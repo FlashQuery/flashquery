@@ -66,7 +66,7 @@ All 43 requirements are committed scope for v4.0. Each maps to exactly one phase
 
 ### Per-Entry Columns, Stamping & Drift Detection
 
-- [ ] **REQ-008**: Per-entry column set creation (`embedding_<X>` + 4 stamping columns + HNSW index) transactionally per table, with orphaned-column pre-flight check (§6.2.1)
+- [x] **REQ-008**: Per-entry column set creation (`embedding_<X>` + 4 stamping columns + HNSW index) transactionally per table, with orphaned-column pre-flight check (§6.2.1)
 - [x] **REQ-009**: Per-row model-version stamping on write (model/dimensions/provider/truncated written atomically with the vector) (§6.2.2)
 - [x] **REQ-010**: Dimension drift detection in `verifySchema` per catalog entry's columns; mismatch fails startup loudly (§6.2.3)
 - [x] **REQ-011**: Gated test/dev destructive repair path (drop + recreate column at configured width); never runs in production by default (§6.2.4)
@@ -85,7 +85,7 @@ All 43 requirements are committed scope for v4.0. Each maps to exactly one phase
 ### Search & RRF Fusion
 
 - [x] **REQ-020**: Catalog-state-derived default search behaviour (0 / 1 / 2+ active entries × mode) (§6.4.1)
-- [ ] **REQ-021**: Per-entry semantic RPCs (`match_memories_<X>`, `match_documents_<X>`, `match_records_<table>_<X>`) generated/dropped with the column set (§6.4.2)
+- [x] **REQ-021**: Per-entry semantic RPCs (`match_memories_<X>`, `match_documents_<X>`, `match_records_<table>_<X>`) generated/dropped with the column set (§6.4.2)
 - [x] **REQ-022**: `embedding_names: string[]` parameter on `search` to select a subset of entries (§6.4.3)
 - [x] **REQ-023**: RRF fusion across multiple active entries (k=60, app-side scoring, parallel per-entry query embedding) (§6.4.4)
 - [x] **REQ-024**: Deterministic result ordering & tie-breaking (`fused_score DESC, rank_sum ASC, identifier ASC`) (§6.4.5)
@@ -95,13 +95,13 @@ All 43 requirements are committed scope for v4.0. Each maps to exactly one phase
 
 ### Plugin-Table Embedding
 
-- [ ] **REQ-028**: Plugin manifest `embedding:` values (`null` / `"*"` / specific name) parsed and validated (§6.5.1)
-- [ ] **REQ-029**: `register_plugin` optional `embedding_name` override (`string | null`; `"*"` rejected) (§6.5.2)
-- [ ] **REQ-030**: Registration resolution rules with canonical refusals (`not_found`, `unsupported`, `ambiguous_identifier`); resolved value frozen (§6.5.3)
-- [ ] **REQ-031**: Plugin tables get only the resolved entry's column set (or none if `null`); no auto-grow on catalog change (§6.5.4)
-- [ ] **REQ-032**: `write_record` embeds against the plugin's single registered entry; `search_records` queries that column (§6.5.5)
-- [ ] **REQ-033**: Plugin re-registration switches entries; new column set added alongside; old persists until manual drop (§6.5.6)
-- [ ] **REQ-034**: First-startup migration of legacy plugin registrations (implicit `"*"`, resolution applied, legacy `embedding` column untouched) (§6.5.7)
+- [x] **REQ-028**: Plugin manifest `embedding:` values (`null` / `"*"` / specific name) parsed and validated (§6.5.1)
+- [x] **REQ-029**: `register_plugin` optional `embedding_name` override (`string | null`; `"*"` rejected) (§6.5.2)
+- [x] **REQ-030**: Registration resolution rules with canonical refusals (`not_found`, `unsupported`, `ambiguous_identifier`); resolved value frozen (§6.5.3)
+- [x] **REQ-031**: Plugin tables get only the resolved entry's column set (or none if `null`); no auto-grow on catalog change (§6.5.4)
+- [x] **REQ-032**: `write_record` embeds against the plugin's single registered entry; `search_records` queries that column (§6.5.5)
+- [x] **REQ-033**: Plugin re-registration switches entries; new column set added alongside; old persists until manual drop (§6.5.6)
+- [x] **REQ-034**: First-startup migration of legacy plugin registrations (implicit `"*"`, resolution applied, legacy `embedding` column untouched) (§6.5.7)
 
 ### `maintain_vault` Lifecycle Actions & Concurrency
 
@@ -170,7 +170,7 @@ Each requirement maps to exactly one roadmap phase. For incrementally-built REQs
 | REQ-005 | Phase 165 | Pending |
 | REQ-006 | Phase 166 | Complete |
 | REQ-007 | Phase 165 | Pending |
-| REQ-008 | Phase 166 | Pending |
+| REQ-008 | Phase 166 | Complete |
 | REQ-009 | Phase 165 | Complete |
 | REQ-010 | Phase 165 | Complete |
 | REQ-011 | Phase 165 | Complete |
@@ -183,20 +183,20 @@ Each requirement maps to exactly one roadmap phase. For incrementally-built REQs
 | REQ-018 | Phase 165 | Complete |
 | REQ-019 | Phase 165 | Complete |
 | REQ-020 | Phase 166 | Complete |
-| REQ-021 | Phase 166 | Pending |
+| REQ-021 | Phase 166 | Complete |
 | REQ-022 | Phase 166 | Complete |
 | REQ-023 | Phase 166 | Complete |
 | REQ-024 | Phase 166 | Complete |
 | REQ-025 | Phase 166 | Complete |
 | REQ-026 | Phase 166 | Complete |
 | REQ-027 | Phase 166 | Complete |
-| REQ-028 | Phase 166 | Pending |
-| REQ-029 | Phase 166 | Pending |
-| REQ-030 | Phase 166 | Pending |
-| REQ-031 | Phase 166 | Pending |
-| REQ-032 | Phase 166 | Pending |
-| REQ-033 | Phase 166 | Pending |
-| REQ-034 | Phase 166 | Pending |
+| REQ-028 | Phase 166 | Complete |
+| REQ-029 | Phase 166 | Complete |
+| REQ-030 | Phase 166 | Complete |
+| REQ-031 | Phase 166 | Complete |
+| REQ-032 | Phase 166 | Complete |
+| REQ-033 | Phase 166 | Complete |
+| REQ-034 | Phase 166 | Complete |
 | REQ-035 | Phase 167 | Pending |
 | REQ-036 | Phase 167 | Pending |
 | REQ-037 | Phase 167 | Pending |
@@ -214,4 +214,4 @@ Each requirement maps to exactly one roadmap phase. For incrementally-built REQs
 
 ---
 *Requirements defined: 2026-06-10*
-*Last updated: 2026-06-10 — traceability revised to 3-phase mapping (165/166/167)*
+*Last updated: 2026-06-11 — Phase 166 completed plugin-table integration and all assigned embedding-pipeline requirements*
