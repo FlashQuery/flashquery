@@ -44,6 +44,7 @@ export interface TypeRegistryEntry {
 
 export interface ParsedPluginSchema {
   plugin: { id: string; name: string; version: string; description?: string };
+  embedding: string | null;
   tables: PluginTableSpec[];
   documents?: {
     types: DocumentTypePolicy[];
@@ -55,6 +56,7 @@ export interface RegistryEntry {
   plugin_instance: string;
   table_prefix: string; // "fqcp_{plugin_id}_{plugin_instance}_"
   schema: ParsedPluginSchema;
+  embedding_name: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -152,6 +154,18 @@ export function parsePluginSchema(yamlString: string): ParsedPluginSchema {
     plugin.description !== undefined
       ? `${plugin.description as string | number | boolean}`
       : undefined;
+
+  const rawEmbedding = raw.embedding ?? plugin.embedding;
+  let embedding: string | null = null;
+  if (rawEmbedding !== undefined && rawEmbedding !== null) {
+    if (typeof rawEmbedding !== 'string') {
+      throw new Error('Invalid plugin YAML: embedding must be null, "*", or a catalog entry name');
+    }
+    if (rawEmbedding.length === 0) {
+      throw new Error('Invalid plugin YAML: embedding must be null, "*", or a non-empty catalog entry name');
+    }
+    embedding = rawEmbedding;
+  }
 
   const rawTables = (tablesSource.tables ?? []) as Array<Record<string, unknown>>;
   const tables: PluginTableSpec[] = rawTables.map((t) => {
@@ -296,6 +310,7 @@ export function parsePluginSchema(yamlString: string): ParsedPluginSchema {
       version: pluginVersion,
       description: pluginDescription,
     },
+    embedding,
     tables,
     documents,
   };
@@ -329,7 +344,7 @@ function formatDefault(value: unknown, type: string): string {
 export function buildPluginTableDDL(
   tableName: string,
   tableSpec: PluginTableSpec,
-  dimensions: number
+  embedding?: { name: string; dimensions: number } | null
 ): string {
   const escapedTable = pg.escapeIdentifier(tableName);
 
@@ -375,8 +390,13 @@ export function buildPluginTableDDL(
 
   // Embedding columns (D-05) — only when embed_fields present
   const embeddingCols: string[] = [];
-  if (tableSpec.embed_fields && tableSpec.embed_fields.length > 0) {
-    embeddingCols.push(`embedding vector(${dimensions})`);
+  if (embedding && tableSpec.embed_fields && tableSpec.embed_fields.length > 0) {
+    const baseColumn = `embedding_${embedding.name}`;
+    embeddingCols.push(`${pg.escapeIdentifier(baseColumn)} vector(${embedding.dimensions})`);
+    embeddingCols.push(`${pg.escapeIdentifier(`${baseColumn}_model`)} TEXT`);
+    embeddingCols.push(`${pg.escapeIdentifier(`${baseColumn}_dimensions`)} INT`);
+    embeddingCols.push(`${pg.escapeIdentifier(`${baseColumn}_provider`)} TEXT`);
+    embeddingCols.push(`${pg.escapeIdentifier(`${baseColumn}_truncated`)} BOOLEAN`);
     embeddingCols.push(`embedding_updated_at TIMESTAMPTZ`);
   }
 
@@ -530,12 +550,13 @@ export async function initPlugins(config: FlashQueryConfig): Promise<void> {
 
   for (const row of data ?? []) {
     const schema = parsePluginSchema(row.schema_yaml);
-    manager.loadEntry({
-      plugin_id: row.plugin_id,
-      plugin_instance: row.plugin_instance ?? 'default',
-      table_prefix: row.table_prefix,
-      schema,
-    });
+      manager.loadEntry({
+        plugin_id: row.plugin_id,
+        plugin_instance: row.plugin_instance ?? 'default',
+        table_prefix: row.table_prefix,
+        schema,
+        embedding_name: null,
+      });
   }
 
   pluginManager = manager;

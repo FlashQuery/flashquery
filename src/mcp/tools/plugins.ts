@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { readFileSync } from 'node:fs';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { supabaseManager } from '../../storage/supabase.js';
+import { buildPluginEmbeddingColumnSetDDL } from '../../storage/supabase.js';
 import {
   pluginManager,
   parsePluginSchema,
@@ -13,7 +14,6 @@ import {
 import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
-import { getLegacyEmbeddingDimensions } from '../../embedding/legacy-dimensions.js';
 import { createPgClientIPv4 } from '../../utils/pg-client.js';
 import { compareSchemaVersions, analyzeSchemaChanges } from '../../utils/schema-migration.js';
 import { reloadManifests } from '../../services/manifest-loader.js';
@@ -27,6 +27,140 @@ import {
   withWarnings,
 } from '../utils/response-formats.js';
 
+export const registerPluginInputSchema = {
+  schema_path: z.string().optional().describe('Path to YAML schema file on disk'),
+  schema_yaml: z.string().optional().describe('Inline YAML schema string'),
+  plugin_instance: z.string().optional().describe('Plugin instance identifier. Omit for single-instance plugins.'),
+  embedding_name: z.string().nullable().optional().describe('Resolved embedding catalog entry override. Omit to use the plugin manifest; null opts out.'),
+};
+
+export function validateRegisterPluginEmbeddingOverride(
+  embeddingName: string | null | undefined
+): { ok: true } | { ok: false; message: string } {
+  if (embeddingName === '*') {
+    return { ok: false, message: 'register_plugin embedding_name override cannot be "*"; choose a specific catalog entry name or null' };
+  }
+  return { ok: true };
+}
+
+interface CatalogEmbeddingEntry {
+  name: string;
+  dimensions: number;
+  status: 'active' | 'deactivated';
+}
+
+type PluginEmbeddingResolution = {
+  ok: true;
+  embeddingName: string | null;
+  entry: CatalogEmbeddingEntry | null;
+  warnings: string[];
+} | {
+  ok: false;
+  error: ReturnType<typeof jsonExpectedError>;
+};
+
+function activeNames(entries: CatalogEmbeddingEntry[]): string[] {
+  return entries.filter((entry) => entry.status === 'active').map((entry) => entry.name).sort();
+}
+
+export function resolvePluginEmbeddingChoice(input: {
+  manifestEmbedding: string | null;
+  overrideEmbeddingName?: string | null;
+  catalogEntries: CatalogEmbeddingEntry[];
+}): PluginEmbeddingResolution {
+  const overrideValidation = validateRegisterPluginEmbeddingOverride(input.overrideEmbeddingName);
+  if (!overrideValidation.ok) {
+    return {
+      ok: false,
+      error: jsonExpectedError({
+        error: 'invalid_input',
+        message: overrideValidation.message,
+        identifier: 'embedding_name',
+        details: { field: 'embedding_name' },
+      }),
+    };
+  }
+
+  const available = activeNames(input.catalogEntries);
+  const target =
+    input.overrideEmbeddingName !== undefined
+      ? input.overrideEmbeddingName
+      : input.manifestEmbedding;
+
+  if (target === null) {
+    return { ok: true, embeddingName: null, entry: null, warnings: [] };
+  }
+
+  if (target === '*') {
+    if (available.length === 0) {
+      return {
+        ok: true,
+        embeddingName: null,
+        entry: null,
+        warnings: ['plugin_embedding_unavailable'],
+      };
+    }
+    if (available.length === 1) {
+      const entry = input.catalogEntries.find((candidate) => candidate.name === available[0]) ?? null;
+      return { ok: true, embeddingName: available[0], entry, warnings: [] };
+    }
+    return {
+      ok: false,
+      error: jsonExpectedError({
+        error: 'ambiguous_identifier',
+        message: 'Plugin manifest embedding "*" is ambiguous because multiple active embeddings are configured; re-run register_plugin with embedding_name set to one available entry.',
+        identifier: 'embedding_name',
+        details: { available_embedding_names: available },
+      }),
+    };
+  }
+
+  const namedEntry = input.catalogEntries.find((entry) => entry.name === target);
+  if (!namedEntry) {
+    return {
+      ok: false,
+      error: jsonExpectedError({
+        error: 'not_found',
+        message: `Embedding entry '${target}' was not found in this instance catalog.`,
+        identifier: target,
+        details: { available_embedding_names: available },
+      }),
+    };
+  }
+  if (namedEntry.status === 'deactivated') {
+    return {
+      ok: false,
+      error: jsonExpectedError({
+        error: 'unsupported',
+        message: `Embedding entry '${target}' is deactivated; re-add it to flashquery.yml to reactivate or retire it to clean up.`,
+        identifier: target,
+        details: {
+          embedding_name: target,
+          available_embedding_names: available,
+          remediation: 'Re-add the embedding entry to flashquery.yml to reactivate, or retire it to clean up.',
+        },
+      }),
+    };
+  }
+
+  return { ok: true, embeddingName: target, entry: namedEntry, warnings: [] };
+}
+
+async function fetchCatalogEmbeddingEntries(instanceId: string): Promise<CatalogEmbeddingEntry[]> {
+  const { data, error } = await supabaseManager.getClient()
+    .from('fqc_embeddings')
+    .select('name, dimensions, status')
+    .eq('instance_id', instanceId);
+  if (error) {
+    throw new Error(`Error loading embedding catalog: ${error.message}`);
+  }
+  return (data ?? []).map((row) => ({
+    name: String((row as { name: unknown }).name),
+    dimensions: Number((row as { dimensions: unknown }).dimensions),
+    status: ((row as { status: unknown }).status === 'deactivated' ? 'deactivated' : 'active') as 'active' | 'deactivated',
+  }));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // registerPluginTools — registers register_plugin and get_plugin_info
 // ─────────────────────────────────────────────────────────────────────────────
@@ -39,12 +173,10 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
     {
       description: 'Register or update a plugin from a YAML schema definition. Creates plugin tables in the database on first registration. On re-registration with a new schema version, automatically applies safe additive changes (new tables, new columns) and rejects unsafe changes (removed tables, removed columns, type changes) with specific guidance. Use this when setting up a new plugin or when a plugin\'s schema has been updated.',
       inputSchema: {
-        schema_path: z.string().optional().describe('Path to YAML schema file on disk'),
-        schema_yaml: z.string().optional().describe('Inline YAML schema string'),
-        plugin_instance: z.string().optional().describe('Plugin instance identifier. Omit for single-instance plugins.'),
+        ...registerPluginInputSchema,
       },
     },
-    async ({ schema_path, schema_yaml, plugin_instance }) => {
+    async ({ schema_path, schema_yaml, plugin_instance, embedding_name }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
@@ -72,6 +204,16 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
         // Step 3: parse schema
         const schema = parsePluginSchema(rawYaml);
         const tablePrefix = `fqcp_${schema.plugin.id}_${instanceName}_`;
+        const catalogEntries = await fetchCatalogEmbeddingEntries(config.instance.id);
+        const embeddingResolution = resolvePluginEmbeddingChoice({
+          manifestEmbedding: schema.embedding,
+          overrideEmbeddingName: embedding_name,
+          catalogEntries,
+        });
+        if (!embeddingResolution.ok) {
+          return embeddingResolution.error;
+        }
+        const resolvedEmbedding = embeddingResolution.entry;
 
         // Step 4: check for existing registry entry
         const supabase = supabaseManager.getClient();
@@ -171,8 +313,11 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
                     const newTable = schema.tables.find((t) => t.name === change.table);
                     if (newTable) {
                       const fullTableName = resolveTableName(schema.plugin.id, instanceName, newTable.name);
-                      const ddl = buildPluginTableDDL(fullTableName, newTable, getLegacyEmbeddingDimensions(config));
+                      const ddl = buildPluginTableDDL(fullTableName, newTable, resolvedEmbedding);
                       await pgClient.query(ddl);
+                      if (resolvedEmbedding && newTable.embed_fields && newTable.embed_fields.length > 0) {
+                        await pgClient.query(buildPluginEmbeddingColumnSetDDL(fullTableName, resolvedEmbedding));
+                      }
                     }
                   } else if (change.type === 'column_added') {
                     const table = schema.tables.find((t) => t.name === change.table);
@@ -216,6 +361,8 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
             .update({
               schema_version: schema.plugin.version,
               schema_yaml: rawYaml,
+              embedding_name: embeddingResolution.embeddingName,
+              embedding_resolved_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             })
             .eq('id', existing.id);
@@ -226,6 +373,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
             plugin_instance: instanceName,
             table_prefix: tablePrefix,
             schema,
+            embedding_name: embeddingResolution.embeddingName,
           });
 
           // Phase 84: Rebuild global type registry after re-registration
@@ -242,6 +390,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
             was_new: false,
             schema_version: schema.plugin.version,
             safe_change_count: safeChangeCount,
+            embedding_name: embeddingResolution.embeddingName,
           });
         }
 
@@ -250,17 +399,27 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
         const pgClient = createPgClientIPv4(config.supabase.databaseUrl);
         try {
           await pgClient.connect();
+          await pgClient.query('BEGIN');
           for (const table of schema.tables) {
             const fullTableName = resolveTableName(schema.plugin.id, instanceName, table.name);
-            const ddl = buildPluginTableDDL(fullTableName, table, getLegacyEmbeddingDimensions(config));
+            const ddl = buildPluginTableDDL(fullTableName, table, resolvedEmbedding);
             await pgClient.query(ddl);
+            if (resolvedEmbedding && table.embed_fields && table.embed_fields.length > 0) {
+              await pgClient.query(buildPluginEmbeddingColumnSetDDL(fullTableName, resolvedEmbedding));
+            }
             createdTables.push(table.name);
           }
+          await pgClient.query('COMMIT');
           // Notify PostgREST to reload schema cache so new tables are immediately accessible.
           // Brief wait for PostgREST to process the async reload notification.
           await pgClient.query(`SELECT pg_notify('pgrst', 'reload schema')`);
           await new Promise((resolve) => setTimeout(resolve, 300));
         } finally {
+          try {
+            await pgClient.query('ROLLBACK');
+          } catch {
+            // no active transaction
+          }
           await pgClient.end();
         }
 
@@ -271,6 +430,8 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
             .from('fqc_plugin_registry')
             .update({
               schema_yaml: rawYaml,
+              embedding_name: embeddingResolution.embeddingName,
+              embedding_resolved_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             })
             .eq('id', existing.id);
@@ -283,6 +444,8 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
             schema_version: schema.plugin.version,
             schema_yaml: rawYaml,
             table_prefix: tablePrefix,
+            embedding_name: embeddingResolution.embeddingName,
+            embedding_resolved_at: new Date().toISOString(),
             status: 'active',
           });
           if (insertError) {
@@ -296,6 +459,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           plugin_instance: instanceName,
           table_prefix: tablePrefix,
           schema,
+          embedding_name: embeddingResolution.embeddingName,
         });
 
         // Phase 84: Rebuild global type registry after registration
@@ -313,7 +477,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           `register_plugin: registered '${schema.plugin.id}' instance '${instanceName}' — ${createdTables.length} table(s)`
         );
 
-        return jsonToolResult({
+        return jsonToolResult(withWarnings({
           ...pluginIdentification({
             plugin_id: schema.plugin.id,
             name: schema.plugin.name,
@@ -324,7 +488,8 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           was_new: !existing,
           plugin_instance: instanceName,
           schema_version: schema.plugin.version,
-        });
+          embedding_name: embeddingResolution.embeddingName,
+        }, embeddingResolution.warnings));
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`register_plugin failed: ${msg}`);

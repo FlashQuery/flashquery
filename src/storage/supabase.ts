@@ -343,6 +343,8 @@ CREATE TABLE IF NOT EXISTS fqc_plugin_registry (
   schema_version TEXT DEFAULT '1.0.0',
   schema_yaml TEXT,
   table_prefix TEXT,
+  embedding_name TEXT,
+  embedding_resolved_at TIMESTAMPTZ,
   vault_path TEXT,
   status TEXT DEFAULT 'active',
   created_at TIMESTAMPTZ DEFAULT now(),
@@ -513,6 +515,10 @@ BEGIN
     ALTER TABLE IF EXISTS fqc_plugin_registry RENAME COLUMN instance_name TO plugin_instance;
   END IF;
 END$$;
+
+-- Phase 166: frozen per-plugin embedding choice
+ALTER TABLE IF EXISTS fqc_plugin_registry ADD COLUMN IF NOT EXISTS embedding_name TEXT;
+ALTER TABLE IF EXISTS fqc_plugin_registry ADD COLUMN IF NOT EXISTS embedding_resolved_at TIMESTAMPTZ;
 
 -- Phase 40: schema_version type change from INTEGER to TEXT (PLUGIN-04)
 -- Support semantic versioning like "0.1.0" instead of integer version numbers
@@ -1144,6 +1150,84 @@ CREATE INDEX IF NOT EXISTS ${quoteIdentifier(`idx_${table}_${baseColumn}`)}
   ddl.push(buildDocumentMatchRpc(entry));
   ddl.push('COMMIT;');
   return ddl.join('\n');
+}
+
+function buildRecordMatchRpc(tableName: string, entry: CoreEmbeddingColumnSetEntry): string {
+  const functionName = quoteIdentifier(`match_records_${tableName}_${entry.name}`);
+  const escapedTable = quoteIdentifier(tableName);
+  const embeddingColumn = quoteIdentifier(`embedding_${entry.name}`);
+  return `
+DROP FUNCTION IF EXISTS ${functionName}(vector, double precision, integer, text) CASCADE;
+CREATE OR REPLACE FUNCTION ${functionName}(
+  query_embedding vector(${entry.dimensions}),
+  match_threshold float DEFAULT 0.7,
+  match_count int DEFAULT 10,
+  filter_instance_id text DEFAULT NULL
+)
+RETURNS SETOF ${escapedTable}
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT r.*
+  FROM ${escapedTable} r
+  WHERE r.status = 'active'
+    AND r.${embeddingColumn} IS NOT NULL
+    AND 1 - (r.${embeddingColumn} <=> query_embedding) > match_threshold
+    AND (filter_instance_id IS NULL OR r.instance_id = filter_instance_id)
+  ORDER BY r.${embeddingColumn} <=> query_embedding
+  LIMIT match_count;
+END;
+$$;
+`;
+}
+
+export function buildPluginEmbeddingColumnSetDDL(
+  tableName: string,
+  entry: CoreEmbeddingColumnSetEntry
+): string {
+  validateEmbeddingSqlName(entry.name);
+
+  const baseColumn = `embedding_${entry.name}`;
+  const requiredColumns = [
+    baseColumn,
+    `${baseColumn}_model`,
+    `${baseColumn}_dimensions`,
+    `${baseColumn}_provider`,
+    `${baseColumn}_truncated`,
+  ];
+  const requiredColumnsSql = requiredColumns.map((column) => `'${column}'`).join(', ');
+  const escapedTable = quoteIdentifier(tableName);
+
+  return `
+DO $$
+DECLARE
+  orphaned boolean;
+BEGIN
+  SELECT bool_or(column_name = '${baseColumn}')
+      AND count(column_name) FILTER (WHERE column_name IS NOT NULL) <> ${requiredColumns.length}
+  INTO orphaned
+  FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name = '${tableName.replaceAll("'", "''")}'
+    AND column_name = ANY(ARRAY[${requiredColumnsSql}]::text[]);
+
+  IF orphaned THEN
+    RAISE EXCEPTION 'orphaned embedding column(s) for entry ${entry.name}: %.%', '${tableName.replaceAll("'", "''")}', '${baseColumn}';
+  END IF;
+END $$;
+
+ALTER TABLE ${escapedTable} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(baseColumn)} vector(${entry.dimensions});
+ALTER TABLE ${escapedTable} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(`${baseColumn}_model`)} TEXT;
+ALTER TABLE ${escapedTable} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(`${baseColumn}_dimensions`)} INT;
+ALTER TABLE ${escapedTable} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(`${baseColumn}_provider`)} TEXT;
+ALTER TABLE ${escapedTable} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(`${baseColumn}_truncated`)} BOOLEAN;
+ALTER TABLE ${escapedTable} ADD COLUMN IF NOT EXISTS embedding_updated_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS ${quoteIdentifier(`idx_${tableName}_${baseColumn}`)}
+  ON ${escapedTable} USING hnsw (${quoteIdentifier(baseColumn)} vector_cosine_ops);
+
+${buildRecordMatchRpc(tableName, entry)}
+`;
 }
 
 export async function createCoreEmbeddingColumnSet(
