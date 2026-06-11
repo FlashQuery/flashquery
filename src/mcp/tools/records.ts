@@ -4,7 +4,10 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { pluginManager, resolveTableName } from '../../plugins/manager.js';
 import type { PluginTableSpec, RegistryEntry } from '../../plugins/manager.js';
 import { supabaseManager } from '../../storage/supabase.js';
-import { embeddingProvider } from '../../embedding/provider.js';
+import {
+  createEmbeddingProviderForCatalogEntry,
+  type EmbeddingCatalogProviderEntry,
+} from '../../embedding/provider.js';
 import {
   recordEmbeddingTarget,
   scheduleBackgroundEmbedding,
@@ -79,6 +82,33 @@ function buildRecordEmbedText(
     .join('\n');
 }
 
+async function resolvePluginActiveEmbedding(
+  entry: RegistryEntry,
+  instanceId: string
+): Promise<EmbeddingCatalogProviderEntry | null> {
+  if (!entry.embedding_name) return null;
+  const result = await supabaseManager.getClient()
+    .from('fqc_embeddings')
+    .select('name, dimensions, endpoints, status')
+    .eq('instance_id', instanceId)
+    .eq('name', entry.embedding_name)
+    .maybeSingle() as {
+      data: { name: string; dimensions: number; endpoints: unknown; status: string } | null;
+      error: { message: string } | null;
+    };
+  if (result.error || !result.data || result.data.status !== 'active') {
+    return null;
+  }
+  const endpoints = Array.isArray(result.data.endpoints)
+    ? result.data.endpoints as EmbeddingCatalogProviderEntry['endpoints']
+    : [];
+  return {
+    name: result.data.name,
+    dimensions: result.data.dimensions,
+    endpoints,
+  };
+}
+
 function formatElapsedMs(start: number): string {
   return (performance.now() - start).toFixed(1);
 }
@@ -107,6 +137,8 @@ async function scheduleRecordEmbedding(input: {
   embedFields: string[],
   supabase: ReturnType<typeof supabaseManager.getClient>,
   databaseUrl: string
+  embeddingEntry: EmbeddingCatalogProviderEntry
+  config: FlashQueryConfig
 }): Promise<EmbeddingWarning[]> {
   const embedText = buildRecordEmbedText(input.fields, input.embedFields);
   if (!embedText.trim()) return [];
@@ -119,9 +151,10 @@ async function scheduleRecordEmbedding(input: {
       label: input.fullTableName,
     }),
     embedText,
-    provider: embeddingProvider,
+    provider: createEmbeddingProviderForCatalogEntry(input.config, input.embeddingEntry),
     supabase: input.supabase,
     databaseUrl: input.databaseUrl,
+    embeddingName: input.embeddingEntry.name,
   });
   return result.warnings;
 }
@@ -329,7 +362,8 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           }
           row = insertResult.data;
 
-          if (resolved.tableSpec.embed_fields && resolved.tableSpec.embed_fields.length > 0) {
+          const activeEmbedding = await resolvePluginActiveEmbedding(resolved.entry, config.instance.id);
+          if (activeEmbedding && resolved.tableSpec.embed_fields && resolved.tableSpec.embed_fields.length > 0) {
             embeddingWarnings = await scheduleRecordEmbedding({
               fullTableName: resolved.fullTableName,
               recordId: row.id as string,
@@ -338,6 +372,8 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
               embedFields: resolved.tableSpec.embed_fields,
               supabase,
               databaseUrl: config.supabase.databaseUrl,
+              embeddingEntry: activeEmbedding,
+              config,
             });
           }
         } else {
@@ -357,7 +393,8 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           }
           row = updateResult.data;
 
-          if (resolved.tableSpec.embed_fields && resolved.tableSpec.embed_fields.length > 0) {
+          const activeEmbedding = await resolvePluginActiveEmbedding(resolved.entry, config.instance.id);
+          if (activeEmbedding && resolved.tableSpec.embed_fields && resolved.tableSpec.embed_fields.length > 0) {
             embeddingWarnings = await scheduleRecordEmbedding({
               fullTableName: resolved.fullTableName,
               recordId: updateId,
@@ -366,6 +403,8 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
               embedFields: resolved.tableSpec.embed_fields,
               supabase,
               databaseUrl: config.supabase.databaseUrl,
+              embeddingEntry: activeEmbedding,
+              config,
             });
           }
         }
@@ -724,7 +763,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           logger.warn(`[record tool] reconciliation warning: ${err instanceof Error ? err.message : String(err)}`);
         }
 
-        const { fullTableName, tableSpec } = resolveAndValidateTable(
+        const { fullTableName, tableSpec, entry } = resolveAndValidateTable(
           plugin_id,
           instanceName,
           table
@@ -785,9 +824,11 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         }
 
         // ── Semantic path (query + embed_fields) ──────────────────────────
-        if (hasEmbedFields) {
-          const queryEmbedding = await embeddingProvider.embed(queryText);
+        const activeEmbedding = await resolvePluginActiveEmbedding(entry, config.instance.id);
+        if (hasEmbedFields && activeEmbedding) {
+          const queryEmbedding = await createEmbeddingProviderForCatalogEntry(config, activeEmbedding).embed(queryText);
           const escapedTable = pg.escapeIdentifier(fullTableName);
+          const embeddingColumn = `embedding_${activeEmbedding.name}`;
 
           // Build filter clauses
           const params: unknown[] = [
@@ -804,13 +845,13 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           }
 
           const sql = `
-            SELECT *, 1 - (embedding <=> $1::vector) AS similarity
+            SELECT *, 1 - (${pg.escapeIdentifier(embeddingColumn)} <=> $1::vector) AS similarity
             FROM ${escapedTable}
             WHERE instance_id = $2
               AND status = 'active'
-              AND embedding IS NOT NULL
+              AND ${pg.escapeIdentifier(embeddingColumn)} IS NOT NULL
               ${filterSql}
-            ORDER BY embedding <=> $1::vector
+            ORDER BY ${pg.escapeIdentifier(embeddingColumn)} <=> $1::vector
             LIMIT $3
           `;
 
