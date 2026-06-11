@@ -11,6 +11,12 @@ export interface EmbeddingProvider {
   embed(text: string): Promise<number[]>;
   getDimensions(): number;
   getProviderInfo?(): { provider: string; model: string };
+  getLastEmbeddingMetadata?(): EmbeddingCallMetadata;
+}
+
+export interface EmbeddingCallMetadata {
+  truncated: boolean;
+  warnings: string[];
 }
 
 export interface EmbeddingCatalogEndpoint {
@@ -20,6 +26,39 @@ export interface EmbeddingCatalogEndpoint {
   max_input_chars?: number;
   maxInputChars?: number;
   rate_limit?: { min_delay_ms?: number };
+}
+
+export const DEFAULT_MAX_INPUT_CHARS = 24_000;
+
+export function truncateEmbeddingInput(
+  text: string,
+  maxInputChars = DEFAULT_MAX_INPUT_CHARS
+): { text: string; truncated: boolean } {
+  if (text.length <= maxInputChars) {
+    return { text, truncated: false };
+  }
+
+  const bounded = text.slice(0, maxInputChars);
+  const paragraphBoundary = bounded.lastIndexOf('\n\n');
+  if (paragraphBoundary > 0) {
+    return { text: bounded.slice(0, paragraphBoundary).trimEnd(), truncated: true };
+  }
+
+  const sentenceBoundary = Math.max(
+    bounded.lastIndexOf('. '),
+    bounded.lastIndexOf('! '),
+    bounded.lastIndexOf('? ')
+  );
+  if (sentenceBoundary > 0) {
+    return { text: bounded.slice(0, sentenceBoundary + 1).trimEnd(), truncated: true };
+  }
+
+  return { text: bounded.trimEnd(), truncated: true };
+}
+
+function isProviderOverLimitError(status: number, body: string): boolean {
+  if (status === 413) return true;
+  return /input length exceeds|context length|maximum context|too many tokens|token limit|too long/i.test(body);
 }
 
 export interface EmbeddingCatalogProviderEntry {
@@ -56,54 +95,49 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
   private apiKey: string;
   private dimensions: number;
   private providerName: string;
+  private maxInputChars: number;
+  private lastMetadata: EmbeddingCallMetadata = { truncated: false, warnings: [] };
 
   constructor(
     baseUrl: string,
     model: string,
     apiKey: string,
     dimensions: number,
-    providerName: string
+    providerName: string,
+    maxInputChars = DEFAULT_MAX_INPUT_CHARS
   ) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.model = model;
     this.apiKey = apiKey;
     this.dimensions = dimensions;
     this.providerName = providerName;
+    this.maxInputChars = maxInputChars;
   }
 
   async embed(text: string): Promise<number[]> {
     const startTime = performance.now();
-    let response: Response;
-    try {
-      response = await fetch(`${this.baseUrl}/v1/embeddings`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: this.model,
-          input: text,
-        }),
-      });
-    } catch {
-      throw new Error(
-        `Embedding error: Could not reach ${this.providerName} API. Check your internet connection.`
-      );
-    }
-
+    const initial = truncateEmbeddingInput(text, this.maxInputChars);
+    this.lastMetadata = {
+      truncated: initial.truncated,
+      warnings: initial.truncated ? ['truncated_inputs'] : [],
+    };
+    let response = await this.postEmbedding(initial.text);
     if (!response.ok) {
-      if (response.status === 401) {
-        throw new Error(
-          `Embedding error: ${this.providerName} API returned 401 Unauthorized. Check the API key in flashquery.yaml.`
-        );
+      const body = await response.text().catch(() => '');
+      if (isProviderOverLimitError(response.status, body)) {
+        const retry = truncateEmbeddingInput(text, Math.floor(this.maxInputChars * 0.75));
+        this.lastMetadata = {
+          truncated: true,
+          warnings: ['truncated_inputs'],
+        };
+        response = await this.postEmbedding(retry.text);
+        if (!response.ok) {
+          const retryBody = await response.text().catch(() => '');
+          throw this.errorForResponse(response.status, retryBody);
+        }
+      } else {
+        throw this.errorForResponse(response.status, body);
       }
-      if (response.status === 429) {
-        throw new Error(
-          `Embedding error: ${this.providerName} rate limit exceeded. Wait and retry.`
-        );
-      }
-      throw new Error(`Embedding error: ${this.providerName} API returned ${response.status}.`);
     }
 
     const data = (await response.json()) as { data: Array<{ embedding: number[] }> };
@@ -119,12 +153,51 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
     return vector;
   }
 
+  private async postEmbedding(input: string): Promise<Response> {
+    try {
+      return await fetch(`${this.baseUrl}/v1/embeddings`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.model,
+          input,
+        }),
+      });
+    } catch {
+      throw new Error(
+        `Embedding error: Could not reach ${this.providerName} API. Check your internet connection.`
+      );
+    }
+  }
+
+  private errorForResponse(status: number, body: string): Error {
+    if (status === 401) {
+      return new Error(
+        `Embedding error: ${this.providerName} API returned 401 Unauthorized. Check the API key in flashquery.yaml.`
+      );
+    }
+    if (status === 429) {
+      return new Error(
+        `Embedding error: ${this.providerName} rate limit exceeded. Wait and retry.`
+      );
+    }
+    const detail = body.trim() ? `: ${body.trim()}` : '';
+    return new Error(`Embedding error: ${this.providerName} API returned ${status}${detail}.`);
+  }
+
   getDimensions(): number {
     return this.dimensions;
   }
 
   getProviderInfo(): { provider: string; model: string } {
     return { provider: this.providerName, model: this.model };
+  }
+
+  getLastEmbeddingMetadata(): EmbeddingCallMetadata {
+    return this.lastMetadata;
   }
 }
 
@@ -136,39 +209,40 @@ export class OllamaProvider implements EmbeddingProvider {
   private baseUrl: string;
   private model: string;
   private dimensions: number;
+  private maxInputChars: number;
+  private lastMetadata: EmbeddingCallMetadata = { truncated: false, warnings: [] };
 
-  constructor(baseUrl: string, model: string, dimensions: number) {
+  constructor(baseUrl: string, model: string, dimensions: number, maxInputChars = DEFAULT_MAX_INPUT_CHARS) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.model = model;
     this.dimensions = dimensions;
+    this.maxInputChars = maxInputChars;
   }
 
   async embed(text: string): Promise<number[]> {
     const startTime = performance.now();
-    let response: Response;
-    try {
-      response = await fetch(`${this.baseUrl}/api/embeddings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ model: this.model, prompt: text }),
-      });
-    } catch {
-      throw new Error(
-        'Embedding error: Could not reach Ollama API. Check your internet connection.'
-      );
-    }
-
+    const initial = truncateEmbeddingInput(text, this.maxInputChars);
+    this.lastMetadata = {
+      truncated: initial.truncated,
+      warnings: initial.truncated ? ['truncated_inputs'] : [],
+    };
+    let response = await this.postEmbedding(initial.text);
     if (!response.ok) {
-      let detail: string;
-      try {
-        const data = (await response.json()) as { error?: unknown };
-        detail = typeof data.error === 'string' ? `: ${data.error}` : '';
-      } catch {
-        detail = '';
+      const body = await response.text().catch(() => '');
+      if (isProviderOverLimitError(response.status, body)) {
+        const retry = truncateEmbeddingInput(text, Math.floor(this.maxInputChars * 0.75));
+        this.lastMetadata = {
+          truncated: true,
+          warnings: ['truncated_inputs'],
+        };
+        response = await this.postEmbedding(retry.text);
+        if (!response.ok) {
+          const retryBody = await response.text().catch(() => '');
+          throw new Error(`Embedding error: Ollama API returned ${response.status}${retryBody.trim() ? `: ${retryBody.trim()}` : ''}.`);
+        }
+      } else {
+        throw new Error(`Embedding error: Ollama API returned ${response.status}${body.trim() ? `: ${body.trim()}` : ''}.`);
       }
-      throw new Error(`Embedding error: Ollama API returned ${response.status}${detail}.`);
     }
 
     const data = (await response.json()) as { embedding: number[] };
@@ -183,12 +257,32 @@ export class OllamaProvider implements EmbeddingProvider {
     return data.embedding;
   }
 
+  private async postEmbedding(prompt: string): Promise<Response> {
+    try {
+      return await fetch(`${this.baseUrl}/api/embeddings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ model: this.model, prompt }),
+      });
+    } catch {
+      throw new Error(
+        'Embedding error: Could not reach Ollama API. Check your internet connection.'
+      );
+    }
+  }
+
   getDimensions(): number {
     return this.dimensions;
   }
 
   getProviderInfo(): { provider: string; model: string } {
     return { provider: 'Ollama', model: this.model };
+  }
+
+  getLastEmbeddingMetadata(): EmbeddingCallMetadata {
+    return this.lastMetadata;
   }
 }
 
@@ -227,6 +321,7 @@ export class FallbackEmbeddingProvider implements EmbeddingProvider {
   private providers: Array<{ name: string; provider: EmbeddingProvider }>;
   private dimensions: number;
   private lastProviderInfo?: { provider: string; model: string };
+  private lastMetadata: EmbeddingCallMetadata = { truncated: false, warnings: [] };
 
   constructor(providers: Array<{ name: string; provider: EmbeddingProvider }>, dimensions: number) {
     this.providers = providers;
@@ -239,6 +334,7 @@ export class FallbackEmbeddingProvider implements EmbeddingProvider {
       try {
         const vector = await provider.embed(text);
         this.lastProviderInfo = provider.getProviderInfo?.() ?? { provider: name, model: 'unknown' };
+        this.lastMetadata = provider.getLastEmbeddingMetadata?.() ?? { truncated: false, warnings: [] };
         return vector;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -261,6 +357,10 @@ export class FallbackEmbeddingProvider implements EmbeddingProvider {
       provider: this.providers.map(({ name }) => name).join(' fallback chain'),
       model: 'fallback embedding chain',
     };
+  }
+
+  getLastEmbeddingMetadata(): EmbeddingCallMetadata {
+    return this.lastMetadata;
   }
 }
 
@@ -288,7 +388,12 @@ export function createEmbeddingProviderForCatalogEntry(
     if (providerConfig.type === 'ollama') {
       return {
         name: providerName,
-        provider: new OllamaProvider(providerConfig.endpoint, endpoint.model, entry.dimensions),
+        provider: new OllamaProvider(
+          providerConfig.endpoint,
+          endpoint.model,
+          entry.dimensions,
+          endpoint.max_input_chars ?? endpoint.maxInputChars ?? DEFAULT_MAX_INPUT_CHARS
+        ),
       };
     }
 
@@ -306,7 +411,8 @@ export function createEmbeddingProviderForCatalogEntry(
         endpoint.model,
         providerConfig.apiKey,
         entry.dimensions,
-        providerName
+        providerName,
+        endpoint.max_input_chars ?? endpoint.maxInputChars ?? DEFAULT_MAX_INPUT_CHARS
       ),
     };
   });

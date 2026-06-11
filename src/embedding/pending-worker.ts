@@ -122,6 +122,7 @@ export async function processPendingEmbeddings(
       }
       const vector = await provider.embed(embedText);
       const providerInfo = provider.getProviderInfo?.();
+      const metadata = provider.getLastEmbeddingMetadata?.();
       const embeddingName = entry?.name ?? row.embedding_name ?? options.embeddingName;
       await updateTargetEmbedding(
         target,
@@ -133,7 +134,7 @@ export async function processPendingEmbeddings(
               embeddingName,
               model: providerInfo?.model ?? 'unknown',
               provider: providerInfo?.provider ?? 'unknown',
-              truncated: options.truncated ?? false,
+              truncated: options.truncated ?? metadata?.truncated ?? false,
             }
           : undefined
       );

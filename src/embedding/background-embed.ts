@@ -10,7 +10,10 @@ import { queryPgPool } from '../utils/pg-client.js';
 
 export const EMBEDDING_DEFERRED_WARNING = 'embedding_deferred' as const;
 
-export type EmbeddingWarning = typeof EMBEDDING_DEFERRED_WARNING | `embedding_deferred:${string}`;
+export type EmbeddingWarning =
+  | typeof EMBEDDING_DEFERRED_WARNING
+  | `embedding_deferred:${string}`
+  | 'truncated_inputs';
 export type BackgroundEmbeddingTargetKind = 'document' | 'memory' | 'record';
 
 export interface BackgroundEmbeddingTarget {
@@ -176,6 +179,7 @@ export async function scheduleBackgroundEmbedding(
   try {
     const vector = await options.provider.embed(options.embedText);
     const providerInfo = options.provider.getProviderInfo?.();
+    const metadata = options.provider.getLastEmbeddingMetadata?.();
     await updateTargetEmbedding(
       options.target,
       vector,
@@ -186,12 +190,12 @@ export async function scheduleBackgroundEmbedding(
             embeddingName: options.embeddingName,
             model: providerInfo?.model ?? 'unknown',
             provider: providerInfo?.provider ?? 'unknown',
-            truncated: options.truncated ?? false,
+            truncated: options.truncated ?? metadata?.truncated ?? false,
           }
         : undefined
     );
     await clearPendingEmbedding(options.supabase, options.target, options.embeddingName);
-    return { warnings: [] };
+    return { warnings: (metadata?.warnings ?? []).filter((warning): warning is EmbeddingWarning => warning === 'truncated_inputs') };
   } catch (err) {
     const message = errorMessage(err);
     try {
