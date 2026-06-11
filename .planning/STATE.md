@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Embedding Management & Multi-Provider Support
 status: in_progress
-last_updated: "2026-06-11T15:24:23.000Z"
+last_updated: "2026-06-11T15:47:43.000Z"
 last_activity: 2026-06-11
 progress:
   total_phases: 3
@@ -25,19 +25,19 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 ## Current Position
 
 Phase: 167 — Lifecycle Operations and Validation
-Plan: 167-05 — Lifecycle Operations and Validation
-Status: Phase 167 in progress; Plan 167-05 complete
-Last activity: 2026-06-11 — Phase 167 Plan 05 added records-scope and mixed-scope lifecycle execution for backfill/rebuild using frozen plugin embedding choices, plus D-118 and D-119 directed coverage
+Plan: 167-06 — Lifecycle Operations and Validation
+Status: Phase 167 in progress; Plan 167-06 complete
+Last activity: 2026-06-11 — Phase 167 Plan 06 added public directed scenarios for lifecycle lock conflicts, stale heartbeat recovery, background abort partial status, and abort expected-error envelopes
 
-Progress: ███████░░░ 67% (2/3 milestone phases complete; 11/11 currently executed milestone plans complete)
+Progress: ███████░░░ 67% (2/3 milestone phases complete; 12/12 currently executed milestone plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 11 (this milestone)
-- Average duration: ~45 min
-- Total execution time: ~8h 15m
+- Total plans completed: 12 (this milestone)
+- Average duration: ~43 min
+- Total execution time: ~8h 35m
 
 **By Phase:**
 
@@ -45,7 +45,7 @@ Progress: ███████░░░ 67% (2/3 milestone phases complete; 11/
 |-------|-------|-------|----------|
 | 165 | 3 | ~1h 30m | ~30m |
 | 166 | 4/4 | ~3h 05m | ~46m |
-| 167 | 5/? | ~3h 48m | ~46m |
+| 167 | 6/? | ~4h 08m | ~41m |
 
 *Updated after each plan completion*
 
@@ -97,6 +97,8 @@ Progress: ███████░░░ 67% (2/3 milestone phases complete; 11/
 - Phase 167 Plan 05 completed REQ-041: records-scope lifecycle work resolves from frozen `fqc_plugin_registry.embedding_name` values, rejects pure-records top-level `embedding_name`, skips opted-out plugin rows with `rows_skipped_no_embedding`, and executes records work through `recordEmbeddingTarget`/`updateTargetEmbedding`.
 - Mixed lifecycle scopes now split core document/memory work from records work: top-level `embedding_name` applies to core rows only, while plugin records use their frozen registration choice. Pure-records rebuild derives confirm from resolved plugin choices and refuses multi-entry records scopes before mutation.
 - D-118 and D-119 directed scenarios passed using `.env.test` credentials and managed embedding-enabled servers.
+- Phase 167 Plan 06 added D-114 through D-117 directed scenarios for public lifecycle lock, heartbeat, and abort behavior: same-entry conflict envelopes, different-entry parallelism, stale heartbeat takeover, background abort partial counts, preserved completed rows, lock release, and unknown/completed/already-aborted abort envelopes.
+- D-114 through D-117 directed scenarios passed using `.env.test` credentials and managed embedding-enabled servers.
 
 ### Todos
 
@@ -108,7 +110,7 @@ None
 
 ## Session Continuity
 
-**Last session:** 2026-06-11 — Phase 167 Plan 05 executed
+**Last session:** 2026-06-11 — Phase 167 Plan 06 executed
 **Next action:** Execute remaining Phase 167 lifecycle operations and validation plans
 **Context needed:** Phase 167 should build on `.planning/phases/166-embedding-pipeline/166-01-SUMMARY.md`, `166-02-SUMMARY.md`, `166-03-SUMMARY.md`, `166-04-SUMMARY.md`, plus the external source-of-truth requirements and test plan.
 
