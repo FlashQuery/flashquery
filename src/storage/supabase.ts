@@ -505,6 +505,44 @@ CREATE TABLE IF NOT EXISTS fqc_embeddings (
   UNIQUE(instance_id, name)
 );
 
+-- Phase 167: Durable lifecycle maintenance jobs (REQ-038, REQ-039)
+CREATE TABLE IF NOT EXISTS fqc_maintenance_jobs (
+  id UUID PRIMARY KEY,
+  instance_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  embedding_name TEXT,
+  status TEXT NOT NULL,
+  started_at TIMESTAMPTZ NOT NULL,
+  finished_at TIMESTAMPTZ,
+  heartbeat_at TIMESTAMPTZ NOT NULL,
+  abort_requested_at TIMESTAMPTZ,
+  counts JSONB NOT NULL DEFAULT '{}'::jsonb,
+  failures JSONB NOT NULL DEFAULT '[]'::jsonb,
+  error JSONB,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'fqc_maintenance_jobs_status_check'
+  ) THEN
+    ALTER TABLE fqc_maintenance_jobs
+      ADD CONSTRAINT fqc_maintenance_jobs_status_check
+      CHECK (status IN ('running', 'completed', 'failed', 'aborted'));
+  END IF;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fqc_maintenance_jobs_running_entry
+  ON fqc_maintenance_jobs(instance_id, embedding_name)
+  WHERE status = 'running'
+    AND embedding_name IS NOT NULL
+    AND action IN ('backfill_embeddings', 'rebuild_embeddings', 'retire_embedding');
+
+CREATE INDEX IF NOT EXISTS idx_fqc_maintenance_jobs_status
+  ON fqc_maintenance_jobs(instance_id, status, heartbeat_at);
+
 -- Phase 31: plugin_instance rename (PLUGIN-02)
 DO $$
 BEGIN
