@@ -5,10 +5,16 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { getResolvedHostToolExposure } from '../../config/loader.js';
 import { supabaseManager } from '../../storage/supabase.js';
-import { embeddingProvider, NullEmbeddingProvider } from '../../embedding/provider.js';
+import {
+  createEmbeddingProviderForCatalogEntry,
+  embeddingProvider,
+  NullEmbeddingProvider,
+  type EmbeddingProvider,
+} from '../../embedding/provider.js';
 import {
   documentEmbeddingTarget,
   scheduleBackgroundEmbeddingsForActiveEntries,
+  type ActiveEmbeddingEntry,
 } from '../../embedding/background-embed.js';
 import { logger } from '../../logging/logger.js';
 import { pluginManager } from '../../plugins/manager.js';
@@ -59,6 +65,339 @@ import {
 } from '../utils/document-version.js';
 import { buildFrontmatterTargetedRegion } from '../utils/document-write.js';
 import { batchIdentifierItemSchema, batchIdentifiersSchema, normalizeBatchIdentifiers } from '../utils/batch-input.js';
+
+type SearchEmbeddingCatalogEntry = ActiveEmbeddingEntry | {
+  name: string;
+  dimensions: number;
+  endpoints: unknown[];
+  status: 'deactivated';
+};
+
+interface SearchEmbeddingRow {
+  name: string;
+  dimensions: number;
+  endpoints: unknown;
+  status: 'active' | 'deactivated';
+}
+
+interface SearchCatalogQuery {
+  select(columns: string): {
+    eq(column: string, value: unknown): PromiseLike<{
+      data?: SearchEmbeddingRow[] | SearchEmbeddingRow | null;
+      error?: { message: string } | null;
+    }>;
+  };
+}
+
+interface SearchEmbeddingSelection {
+  selected: ActiveEmbeddingEntry[];
+  warnings: string[];
+  ignoredForFilesystem: boolean;
+}
+
+interface SemanticSearchHit extends SearchResultItem {
+  embeddingName: string;
+  rank: number;
+}
+
+interface RetrieverFailure {
+  embedding_name: string;
+  error: string;
+}
+
+interface RetrieverResult {
+  entry: ActiveEmbeddingEntry;
+  hits: SemanticSearchHit[];
+  failure?: RetrieverFailure;
+}
+
+const RRF_K = 60;
+
+function embeddingSearchOrder(config: FlashQueryConfig): Map<string, number> {
+  return new Map((config.embeddings ?? []).map((entry, index) => [entry.name, index]));
+}
+
+function normalizeSearchEmbeddingRow(row: SearchEmbeddingRow): SearchEmbeddingCatalogEntry {
+  return {
+    name: row.name,
+    dimensions: row.dimensions,
+    endpoints: Array.isArray(row.endpoints) ? row.endpoints : [],
+    status: row.status,
+  };
+}
+
+async function selectSearchEmbeddingEntries(config: FlashQueryConfig): Promise<SearchEmbeddingCatalogEntry[]> {
+  const supabase = supabaseManager.getClient();
+  const from = supabase.from.bind(supabase) as unknown as (table: string) => SearchCatalogQuery;
+  const { data, error } = await from('fqc_embeddings')
+    .select('name, dimensions, endpoints, status')
+    .eq('instance_id', config.instance.id);
+
+  if (error) {
+    throw new Error(`Embedding catalog query failed: ${error.message}`);
+  }
+
+  const rows = Array.isArray(data) ? data : data ? [data] : [];
+  const order = embeddingSearchOrder(config);
+  return rows
+    .map(normalizeSearchEmbeddingRow)
+    .sort((left, right) => {
+      const leftOrder = order.get(left.name) ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = order.get(right.name) ?? Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+      return left.name.localeCompare(right.name);
+    });
+}
+
+function isActiveSearchEntry(entry: SearchEmbeddingCatalogEntry): entry is ActiveEmbeddingEntry {
+  return entry.status === 'active';
+}
+
+function resolveSearchEmbeddingSelection(input: {
+  entries: SearchEmbeddingCatalogEntry[];
+  requestedNames?: string[];
+  mode: 'filesystem' | 'semantic' | 'mixed';
+}): { selection?: SearchEmbeddingSelection; error?: ErrorEnvelope } {
+  const requestedNames = input.requestedNames;
+  if (requestedNames !== undefined && requestedNames.length === 0) {
+    return {
+      error: {
+        error: 'invalid_input',
+        message: 'embedding_names must contain at least one embedding name when provided',
+        identifier: 'embedding_names',
+        details: { field: 'embedding_names' },
+      },
+    };
+  }
+
+  if (input.mode === 'filesystem') {
+    return {
+      selection: {
+        selected: [],
+        warnings: requestedNames === undefined ? [] : ['embedding_names_ignored'],
+        ignoredForFilesystem: requestedNames !== undefined,
+      },
+    };
+  }
+
+  if (requestedNames === undefined) {
+    return {
+      selection: {
+        selected: input.entries.filter(isActiveSearchEntry),
+        warnings: [],
+        ignoredForFilesystem: false,
+      },
+    };
+  }
+
+  const selected: ActiveEmbeddingEntry[] = [];
+  const byName = new Map(input.entries.map((entry) => [entry.name, entry]));
+  for (const name of [...new Set(requestedNames)]) {
+    const entry = byName.get(name);
+    if (!entry) {
+      return {
+        error: {
+          error: 'not_found',
+          message: `Embedding catalog entry '${name}' was not found`,
+          identifier: name,
+          details: { field: 'embedding_names' },
+        },
+      };
+    }
+    if (entry.status === 'deactivated') {
+      return {
+        error: {
+          error: 'unsupported',
+          message: `Embedding catalog entry '${name}' is deactivated and cannot be used for search`,
+          identifier: name,
+          details: {
+            field: 'embedding_names',
+            status: 'deactivated',
+            remediation: [
+              'Re-add the embedding entry to flashquery.yml with the same vector-space identity to reactivate it.',
+              'Run retire_embedding for this entry if the stored vectors are no longer needed.',
+            ],
+          },
+        },
+      };
+    }
+    selected.push(entry);
+  }
+
+  return { selection: { selected, warnings: [], ignoredForFilesystem: false } };
+}
+
+function unsupportedZeroActiveSemantic(): ErrorEnvelope {
+  return {
+    error: 'unsupported',
+    message: 'Semantic search is unavailable because no active embedding catalog entries exist',
+    identifier: 'search',
+    details: {
+      reason: 'zero_active_embeddings',
+      remediation: [
+        'Add an embeddings entry to flashquery.yml and restart FlashQuery.',
+        'Reactivate a deactivated embedding entry by re-adding it with the same vector-space identity.',
+      ],
+    },
+  };
+}
+
+function searchPrefetchSize(limit: number): number {
+  return Math.min(Math.max(limit * 2, 20), 100);
+}
+
+function semanticResultKey(result: SearchResultItem): string {
+  return result.entity_type === 'document'
+    ? `documents:${result.fq_id ?? result.identifier}`
+    : `memories:${result.memory_id ?? result.identifier}`;
+}
+
+function semanticIdentifier(result: SearchResultItem): string {
+  return result.entity_type === 'document'
+    ? (result.path ?? result.identifier)
+    : (result.memory_id ?? result.identifier);
+}
+
+async function searchDocumentsForEmbedding(input: {
+  config: FlashQueryConfig;
+  entry: ActiveEmbeddingEntry;
+  queryEmbedding: number[];
+  tags?: string[];
+  tagMatch: 'any' | 'all';
+  limit: number;
+  includeArchived: boolean;
+}): Promise<SemanticSearchHit[]> {
+  const supabase = supabaseManager.getClient();
+  const rpcResult = await supabase.rpc(`match_documents_${input.entry.name}`, {
+    query_embedding: JSON.stringify(input.queryEmbedding),
+    match_threshold: 0.4,
+    match_count: input.limit,
+    filter_instance_id: input.config.instance.id,
+    filter_tags: input.tags ?? null,
+    filter_tag_match: input.tagMatch,
+    include_archived: input.includeArchived,
+  });
+  const { data, error } = rpcResult as { data: unknown; error: { message: string } | null };
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []) as Array<{ id: string; path: string; title: string; tags: string[]; similarity: number; created_at: string }>;
+  const vaultRoot = input.config.instance.vault.path;
+  const hits: SemanticSearchHit[] = [];
+  let rank = 1;
+  for (const doc of rows) {
+    const meta = await parseDocMeta(vaultRoot, doc.path);
+    hits.push({
+      entity_type: 'document',
+      identifier: doc.path,
+      title: doc.title,
+      path: doc.path,
+      fq_id: doc.id,
+      tags: doc.tags,
+      modified: meta?.modified ?? doc.created_at,
+      size: meta?.size ?? { chars: 0 },
+      score: doc.similarity,
+      match_source: ['semantic'],
+      embeddingName: input.entry.name,
+      rank,
+    });
+    rank += 1;
+  }
+  return hits;
+}
+
+async function searchMemoriesForEmbedding(input: {
+  config: FlashQueryConfig;
+  entry: ActiveEmbeddingEntry;
+  queryEmbedding: number[];
+  tags?: string[];
+  tagMatch: 'any' | 'all';
+  limit: number;
+  includeArchived: boolean;
+}): Promise<SemanticSearchHit[]> {
+  const supabase = supabaseManager.getClient();
+  const rpcResult = await supabase.rpc(`match_memories_${input.entry.name}`, {
+    query_embedding: JSON.stringify(input.queryEmbedding),
+    match_threshold: 0.4,
+    match_count: input.limit,
+    filter_tags: input.tags ?? null,
+    filter_tag_match: input.tagMatch,
+    filter_instance_id: input.config.instance.id,
+    include_archived: input.includeArchived,
+  });
+  const { data, error } = rpcResult as { data: unknown; error: { message: string } | null };
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Array<{
+    id: string;
+    content: string;
+    tags: string[];
+    plugin_scope: string | null;
+    similarity: number;
+    created_at: string;
+    updated_at: string;
+    is_latest: boolean;
+  }>).map((memory, index) => ({
+    entity_type: 'memory' as const,
+    identifier: memory.id,
+    memory_id: memory.id,
+    content_preview: memory.content.length > 120 ? `${memory.content.slice(0, 117)}...` : memory.content,
+    tags: memory.tags,
+    plugin_scope: memory.plugin_scope ?? 'global',
+    created_at: memory.created_at,
+    updated_at: memory.updated_at,
+    score: memory.similarity,
+    match_source: ['semantic' as const],
+    embeddingName: input.entry.name,
+    rank: index + 1,
+  }));
+}
+
+async function runEmbeddingRetriever(input: {
+  config: FlashQueryConfig;
+  entry: ActiveEmbeddingEntry;
+  provider: EmbeddingProvider;
+  query: string;
+  entityTypes: Array<'documents' | 'memories'>;
+  tags?: string[];
+  tagMatch: 'any' | 'all';
+  limit: number;
+  includeArchived: boolean;
+}): Promise<RetrieverResult> {
+  try {
+    const queryEmbedding = await input.provider.embed(input.query);
+    const hits: SemanticSearchHit[] = [];
+    if (input.entityTypes.includes('documents')) {
+      hits.push(...await searchDocumentsForEmbedding({
+        config: input.config,
+        entry: input.entry,
+        queryEmbedding,
+        tags: input.tags,
+        tagMatch: input.tagMatch,
+        limit: input.limit,
+        includeArchived: input.includeArchived,
+      }));
+    }
+    if (input.entityTypes.includes('memories')) {
+      hits.push(...await searchMemoriesForEmbedding({
+        config: input.config,
+        entry: input.entry,
+        queryEmbedding,
+        tags: input.tags,
+        tagMatch: input.tagMatch,
+        limit: input.limit,
+        includeArchived: input.includeArchived,
+      }));
+    }
+    return { entry: input.entry, hits };
+  } catch (err) {
+    return {
+      entry: input.entry,
+      hits: [],
+      failure: {
+        embedding_name: input.entry.name,
+        error: err instanceof Error ? err.message : String(err),
+      },
+    };
+  }
+}
 
 type HeadingMatchInput = {
   heading?: string;
@@ -995,6 +1334,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         entity_types: z.array(z.enum(['documents', 'memories'])).optional().describe('Search domains. Default: enabled searchable domains.'),
         list_all: z.boolean().optional().describe('Allow empty unfiltered list-mode search.'),
         path_filter: z.string().optional().describe('Document path substring filter for filesystem/list searches.'),
+        embedding_names: z.array(z.string()).optional().describe('Optional embedding catalog entry names for semantic/mixed search. Omit for catalog default.'),
         include_archived: z.boolean().optional().describe('Include archived documents and memories. Default: false.'),
         body_contains: z.unknown().optional().describe('Unsupported deferred literal body-search parameter; use macro/string operations instead.'),
         body_regex: z.unknown().optional().describe('Unsupported deferred literal body-search parameter; use macro/string operations instead.'),
@@ -1005,7 +1345,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
       },
     },
     async (params) => {
-      const { tags, tag_match, path_filter, include_archived } = params;
+      const { tags, tag_match, path_filter, include_archived, embedding_names } = params;
       if (getIsShuttingDown()) {
         return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
       }
@@ -1027,10 +1367,79 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
       const allResults: SearchResultItem[] = [];
 
       try {
+        const catalogEntries = await selectSearchEmbeddingEntries(config);
+        const usesCatalogSearch = (config.embeddings?.length ?? 0) > 0 || catalogEntries.length > 0 || embedding_names !== undefined;
+        let catalogSemanticHandled = false;
+        let catalogFusion: 'none' | 'rrf' = 'none';
+        let catalogFusionK: number | undefined;
+        let embeddingsQueried: string[] = [];
+
+        if (usesCatalogSearch) {
+          const selectionResult = resolveSearchEmbeddingSelection({
+            entries: catalogEntries,
+            requestedNames: embedding_names,
+            mode: intent.requested_mode,
+          });
+          if (selectionResult.error) {
+            return jsonExpectedError(selectionResult.error);
+          }
+          const selection = selectionResult.selection!;
+          warnings.push(...selection.warnings);
+
+          if ((intent.requested_mode === 'semantic' || intent.requested_mode === 'mixed') && intent.query) {
+            catalogSemanticHandled = true;
+            if (selection.selected.length === 0) {
+              if (intent.requested_mode === 'semantic') {
+                return jsonExpectedError(unsupportedZeroActiveSemantic());
+              }
+              warnings.push('embedding_unavailable');
+            } else {
+              const retrieverLimit = selection.selected.length > 1 ? searchPrefetchSize(intent.limit) : intent.limit;
+              const retrievers = await Promise.all(selection.selected.map((entry) =>
+                runEmbeddingRetriever({
+                  config,
+                  entry,
+                  provider: createEmbeddingProviderForCatalogEntry(config, entry),
+                  query: intent.query,
+                  entityTypes: intent.entity_types,
+                  tags,
+                  tagMatch: matchMode,
+                  limit: retrieverLimit,
+                  includeArchived: include_archived === true,
+                })
+              ));
+              const successful = retrievers.filter((result) => result.failure === undefined);
+              const failed = retrievers.filter((result) => result.failure !== undefined);
+              if (successful.length === 0) {
+                if (intent.requested_mode === 'semantic') {
+                  return jsonExpectedError({
+                    error: 'unsupported',
+                    message: 'Semantic search is unavailable',
+                    identifier: 'search',
+                    details: {
+                      reason: 'embedding_unavailable',
+                      retriever_failures: failed.map((result) => result.failure),
+                    },
+                  });
+                }
+                warnings.push('embedding_unavailable');
+              } else {
+                for (const failedResult of failed) {
+                  warnings.push(`partial_retriever_failure:${failedResult.entry.name}`);
+                }
+                embeddingsQueried = successful.map((result) => result.entry.name);
+                allResults.push(...successful.flatMap((result) =>
+                  result.hits.map(({ embeddingName: _embeddingName, rank: _rank, ...hit }) => hit)
+                ));
+              }
+            }
+          }
+        }
+
         if (intent.entity_types.includes('documents')) {
           const vaultRoot = config.instance.vault.path;
           const canSemantic = !(embeddingProvider instanceof NullEmbeddingProvider);
-          if ((intent.requested_mode === 'semantic' || intent.requested_mode === 'mixed') && intent.query && canSemantic) {
+          if (!catalogSemanticHandled && (intent.requested_mode === 'semantic' || intent.requested_mode === 'mixed') && intent.query && canSemantic) {
             try {
 	              const docs = await searchDocumentsSemantic(config, intent.query, {
 	                tags,
@@ -1065,7 +1474,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 });
               }
             }
-          } else if (intent.requested_mode === 'semantic' && !canSemantic) {
+          } else if (!catalogSemanticHandled && intent.requested_mode === 'semantic' && !canSemantic) {
             return jsonExpectedError({
               error: 'unsupported',
               message: 'Semantic document search is unavailable',
@@ -1108,7 +1517,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
         if (intent.entity_types.includes('memories')) {
           const canSemantic = !(embeddingProvider instanceof NullEmbeddingProvider);
-          if ((intent.requested_mode === 'semantic' || intent.requested_mode === 'mixed') && intent.query && canSemantic) {
+          if (!catalogSemanticHandled && (intent.requested_mode === 'semantic' || intent.requested_mode === 'mixed') && intent.query && canSemantic) {
             try {
 	              const memories = await searchMemoriesSemantic(config, intent.query, {
 	                tags,
@@ -1139,7 +1548,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 });
               }
             }
-          } else if (intent.requested_mode === 'semantic' && !canSemantic) {
+          } else if (!catalogSemanticHandled && intent.requested_mode === 'semantic' && !canSemantic) {
             return jsonExpectedError({
               error: 'unsupported',
               message: 'Semantic memory search is unavailable',
@@ -1188,6 +1597,11 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           query: intent.query,
           entity_types: intent.entity_types,
           mode: intent.mode,
+          ...(usesCatalogSearch ? {
+            embeddings_queried: embeddingsQueried,
+            fusion: catalogFusion,
+            ...(catalogFusionK === undefined ? {} : { fusion_k: catalogFusionK }),
+          } : {}),
           total: results.length,
           ...(warnings.length > 0 ? { warnings: [...new Set(warnings)] } : {}),
           results,
