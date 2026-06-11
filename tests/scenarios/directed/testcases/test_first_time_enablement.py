@@ -112,13 +112,15 @@ def run_test(args: argparse.Namespace):
         if plugin.ok:
             record = ctx.client.call_tool(
                 "write_record",
+                mode="create",
                 plugin_id=plugin_id,
                 plugin_instance="default",
                 table="notes",
-                fields={
+                data={
                     "title": f"Lifecycle plugin record first-time-{run.run_id}",
                     "body": "Plugin record body for first-time embedding enablement.",
                 },
+                include=["data"],
             )
             record_payload = parse_payload(record)
             record_id = str(record_payload.get("id") or record_payload.get("record_id") or "")

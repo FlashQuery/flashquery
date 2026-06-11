@@ -91,17 +91,6 @@ export async function prepareCoreLifecycleJob(
   const databaseUrl = requireDatabaseUrl(config);
   if (!databaseUrl.ok) return databaseUrl;
 
-  if (hasRecordsScope(input.scope)) {
-    return unsupported(
-      'records scope lifecycle processing is deferred to Plan 167-05',
-      String(input.action),
-      {
-        reason: 'records_scope_deferred',
-        supported_entity_types: ['documents', 'memory'],
-      }
-    );
-  }
-
   const plan = await resolveCoreLifecycleWorkPlan(config, input, mode);
   if (!plan.ok) return plan;
   const cap = validateMaxRows(mode, plan.payload.rows.length, input.max_rows);
@@ -124,17 +113,6 @@ export async function runCoreLifecycle(
   const startedAt = new Date().toISOString();
   const databaseUrl = requireDatabaseUrl(config);
   if (!databaseUrl.ok) return databaseUrl;
-
-  if (hasRecordsScope(input.scope)) {
-    return unsupported(
-      'records scope lifecycle processing is deferred to Plan 167-05',
-      String(input.action),
-      {
-        reason: 'records_scope_deferred',
-        supported_entity_types: ['documents', 'memory'],
-      }
-    );
-  }
 
   const plan = await resolveCoreLifecycleWorkPlan(config, input, mode);
   if (!plan.ok) return plan;
@@ -524,10 +502,6 @@ function coreEntityTypes(scope: LifecycleScope | undefined): Array<'documents' |
     (entity): entity is 'documents' | 'memory' => entity === 'documents' || entity === 'memory'
   );
   return requested && requested.length > 0 ? [...new Set(requested)] : ['documents', 'memory'];
-}
-
-function hasRecordsScope(scope: LifecycleScope | undefined): boolean {
-  return scope?.entity_types?.includes('records') === true;
 }
 
 function initialCounts(

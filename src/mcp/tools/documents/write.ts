@@ -211,8 +211,10 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
                 content_hash: contentHash,
                 status: 'active',
                 template_meta: extractTemplateMeta(fm),
-                embedding: null,
-              };
+              } as Record<string, unknown>;
+              if ((config.embeddings?.length ?? 0) === 0) {
+                insertPayload.embedding = null;
+              }
               const { error: insertError } = await supabase
                 .from('fqc_documents')
                 .insert(insertPayload);

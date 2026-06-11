@@ -266,8 +266,10 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
             chain_root_id: memoryId,
             is_latest: true,
             archived_at: null,
-            embedding: null,
-          };
+          } as Record<string, unknown>;
+          if ((config.embeddings?.length ?? 0) === 0) {
+            insertRow.embedding = null;
+          }
           const { data, error } = await supabase
             .from('fqc_memory')
             .insert(insertRow)

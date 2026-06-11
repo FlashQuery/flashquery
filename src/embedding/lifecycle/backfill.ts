@@ -3,7 +3,7 @@ import type {
   ErrorEnvelope,
   MaintenanceLifecycleActionResult,
 } from '../../mcp/utils/response-formats.js';
-import type { BackfillLifecycleCounts, LifecycleBaseInput, LifecycleScope } from './types.js';
+import type { BackfillLifecycleCounts, LifecycleBaseInput } from './types.js';
 import type { LifecycleJobRef } from './jobs.js';
 import {
   resolveCoreLifecycleWorkPlan,
@@ -20,9 +20,7 @@ import {
   resolveRecordLifecycleWorkUnits,
   resolveSingleRecordLifecycleEmbeddingName,
 } from './records-scope.js';
-import { validateMaxRows } from './scope.js';
-
-const RECORDS_ONLY = ['records'];
+import { hasRecordsScope, isPureRecordsScope, validateMaxRows, withoutRecordsScope } from './scope.js';
 type RecordExecutionOrError =
   | { ok: true; payload: RecordLifecycleExecutionResult }
   | { ok: false; error: ErrorEnvelope };
@@ -255,24 +253,6 @@ async function executeBackfillRecordsWithOptionalJob(
     }).catch(() => undefined);
     throw err;
   }
-}
-
-function isPureRecordsScope(scope: LifecycleBaseInput['scope']): boolean {
-  return JSON.stringify(scope?.entity_types ?? []) === JSON.stringify(RECORDS_ONLY);
-}
-
-function hasRecordsScope(scope: LifecycleBaseInput['scope']): boolean {
-  return scope?.entity_types?.includes('records') === true;
-}
-
-function withoutRecordsScope(scope: LifecycleScope | undefined): LifecycleScope {
-  return {
-    ...(scope ?? {}),
-    entity_types: scope?.entity_types?.filter((entity) => entity !== 'records') ?? [
-      'documents',
-      'memory',
-    ],
-  };
 }
 
 function asBackfillCounts(

@@ -1,11 +1,18 @@
 name: embedding_first_time_enablement_search
 description: >
   First-time embedding enablement recipe: write document and memory content,
-  let the managed embedding catalog populate vectors, and verify semantic search
-  returns both entity types.
+  run the lifecycle backfill, and verify semantic search returns both entity
+  types.
 coverage: [IS-50]
 deps: [embeddings]
 server_modes: [managed]
+extra_config:
+  embeddings:
+    - name: primary
+      dimensions: 768
+      endpoints:
+        - provider_name: local-ollama
+          model: nomic-embed-text
 
 steps:
   - label: "Write first-time enablement document"
@@ -22,8 +29,14 @@ steps:
     content: "Calypso enablement recipe memory for semantic retrieval."
     tags: [embedding-enable]
 
-  - sleep: 3
-    label: "Wait for managed embedding worker"
+  - label: "Run first-time lifecycle backfill"
+    action: maintain_vault
+    args:
+      action: backfill_embeddings
+      embedding_name: primary
+      scope:
+        entity_types: [documents, memory]
+      max_rows: 0
 
   - label: "Search returns enabled document and memory semantically"
     assert:

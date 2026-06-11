@@ -10,7 +10,10 @@ function isDestructiveEmbeddingRepairEnabled(): boolean {
 }
 
 export async function verifyStartupEmbeddingCatalog(config: FlashQueryConfig): Promise<void> {
-  if (!config.embeddings || config.embeddings.length === 0) return;
+  const hasEmbeddingsCatalog = (config.embeddings?.length ?? 0) > 0;
+  const hasLegacyEmbeddingPurpose =
+    config.llm?.purposes?.some((purpose) => purpose.name === 'embedding') === true;
+  if (!hasEmbeddingsCatalog && !hasLegacyEmbeddingPurpose) return;
 
   const databaseUrl = config.supabase.databaseUrl?.trim();
   if (!databaseUrl) {
@@ -29,6 +32,11 @@ export async function verifyStartupEmbeddingCatalog(config: FlashQueryConfig): P
   const client = createPgClientIPv4(databaseUrl);
   await client.connect();
   try {
+    if (hasLegacyEmbeddingPurpose) {
+      await refusePopulatedLegacyEmbeddingColumns(client);
+      if (!hasEmbeddingsCatalog) return;
+    }
+
     const repairEnabled = isDestructiveEmbeddingRepairEnabled();
     if (repairEnabled) {
       const repaired = await repairEmbeddingDimensionDrift(client, {
@@ -46,4 +54,41 @@ export async function verifyStartupEmbeddingCatalog(config: FlashQueryConfig): P
   } finally {
     await client.end();
   }
+}
+
+async function refusePopulatedLegacyEmbeddingColumns(
+  client: Awaited<ReturnType<typeof createPgClientIPv4>>
+): Promise<void> {
+  const columns = await client.query<{ table_name: string }>(
+    `
+    SELECT table_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name IN ('fqc_documents', 'fqc_memory')
+      AND column_name = 'embedding'
+    ORDER BY table_name
+    `
+  );
+
+  const populated: Array<{ table_name: string; row_count: string }> = [];
+  for (const row of columns.rows) {
+    const count = await client.query<{ row_count: string }>(
+      `SELECT count(*)::text AS row_count FROM ${row.table_name} WHERE embedding IS NOT NULL`
+    );
+    const rowCount = count.rows[0]?.row_count ?? '0';
+    if (Number(rowCount) > 0) {
+      populated.push({ table_name: row.table_name, row_count: rowCount });
+    }
+  }
+
+  if (populated.length === 0) return;
+
+  const affected = populated
+    .map((row) => `${row.table_name}.embedding (${row.row_count} row${row.row_count === '1' ? '' : 's'})`)
+    .join(', ');
+  throw new Error(
+    `Legacy embedding schema reset required before startup. ` +
+      `The LLM embedding purpose is configured while populated legacy vector data remains in ${affected}. ` +
+      `Drop or migrate the singular legacy embedding columns, then restart with the embeddings catalog and run maintain_vault backfill_embeddings.`
+  );
 }

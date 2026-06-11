@@ -110,6 +110,20 @@ export function isPureRecordsScope(scope: LifecycleScope | undefined): boolean {
   return scope?.entity_types?.length === 1 && scope.entity_types[0] === 'records';
 }
 
+export function hasRecordsScope(scope: LifecycleScope | undefined): boolean {
+  return scope?.entity_types?.includes('records') === true;
+}
+
+export function withoutRecordsScope(scope: LifecycleScope | undefined): LifecycleScope {
+  return {
+    ...(scope ?? {}),
+    entity_types: scope?.entity_types?.filter((entity) => entity !== 'records') ?? [
+      'documents',
+      'memory',
+    ],
+  };
+}
+
 function validateBackfillParameters(
   input: LifecycleBaseInput
 ): LifecycleValidationResult<MaxRowsValidationSuccess> {

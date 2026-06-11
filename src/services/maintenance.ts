@@ -11,14 +11,20 @@ import type {
   LifecycleScope,
 } from '../embedding/lifecycle/types.js';
 import {
+  hasRecordsScope,
   isLifecycleAction,
   isPureRecordsScope,
   validateLifecycleActionParameters,
+  validateMaxRows,
+  withoutRecordsScope,
 } from '../embedding/lifecycle/scope.js';
 import { runBackfillEmbeddings } from '../embedding/lifecycle/backfill.js';
 import { runRebuildEmbeddings } from '../embedding/lifecycle/rebuild.js';
 import { runRetireEmbedding } from '../embedding/lifecycle/retire.js';
-import { prepareCoreLifecycleJob } from '../embedding/lifecycle/core-processor.js';
+import {
+  prepareCoreLifecycleJob,
+  resolveCoreLifecycleWorkPlan,
+} from '../embedding/lifecycle/core-processor.js';
 import {
   resolveRecordLifecycleWorkUnits,
   resolveSingleRecordLifecycleEmbeddingName,
@@ -327,7 +333,9 @@ async function dispatchBackgroundLifecycle(
 ): Promise<MaintenanceResult<MaintenanceAcceptedPayload>> {
   const acquired = isPureRecordsScope(input.scope)
     ? await prepareRecordsLifecycleJob(config, input)
-    : await prepareCoreLifecycleJob({ config, input, mode: input.action });
+    : hasRecordsScope(input.scope)
+      ? await prepareMixedLifecycleJob(config, input)
+      : await prepareCoreLifecycleJob({ config, input, mode: input.action });
   if (!acquired.ok) return acquired;
 
   if (input.action === 'backfill_embeddings') {
@@ -344,6 +352,29 @@ async function dispatchBackgroundLifecycle(
       started_at: acquired.payload.started_at,
     },
   };
+}
+
+async function prepareMixedLifecycleJob(
+  config: FlashQueryConfig,
+  input:
+    | (LifecycleBaseInput & { action: 'backfill_embeddings' })
+    | (LifecycleBaseInput & { action: 'rebuild_embeddings' })
+): Promise<Awaited<ReturnType<typeof prepareCoreLifecycleJob>>> {
+  const coreInput = { ...input, scope: withoutRecordsScope(input.scope) };
+  const corePlan = await resolveCoreLifecycleWorkPlan(config, coreInput, input.action);
+  if (!corePlan.ok) return corePlan;
+
+  const resolved = await resolveRecordLifecycleWorkUnits(config, input, input.action);
+  if (!resolved.ok) return resolved;
+
+  const cap = validateMaxRows(
+    input.action,
+    corePlan.payload.rows.length + resolved.payload.rows_in_scope,
+    input.max_rows
+  );
+  if (!cap.ok) return { ok: false, error: cap.error };
+
+  return await prepareCoreLifecycleJob({ config, input: coreInput, mode: input.action });
 }
 
 async function prepareRecordsLifecycleJob(

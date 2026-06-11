@@ -195,7 +195,7 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
             );
             const contentHash = computeHash(rawCopyContent);
             const supabase = supabaseManager.getClient();
-            const { error: insertError } = await supabase.from('fqc_documents').insert({
+            const insertPayload = {
               id: newFqcId,
               instance_id: config.instance.id,
               path: copyRelativePath,
@@ -204,8 +204,13 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
               content_hash: contentHash,
               status: 'active',
               template_meta: extractTemplateMeta(copyFm),
-              embedding: null,
-            });
+            } as Record<string, unknown>;
+            if ((config.embeddings?.length ?? 0) === 0) {
+              insertPayload.embedding = null;
+            }
+            const { error: insertError } = await supabase
+              .from('fqc_documents')
+              .insert(insertPayload);
             if (insertError) {
               throw new Error(
                 `Supabase copy insert failed for ${copyRelativePath}: ${insertError.message}`

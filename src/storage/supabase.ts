@@ -706,14 +706,34 @@ CREATE INDEX IF NOT EXISTS idx_fqc_purpose_templates_lookup
 
 -- Step 3: Create indexes
 
-CREATE INDEX IF NOT EXISTS idx_fqc_memory_embedding ON fqc_memory USING hnsw (embedding vector_cosine_ops);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'fqc_memory'
+      AND column_name = 'embedding'
+  ) THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_fqc_memory_embedding ON fqc_memory USING hnsw (embedding vector_cosine_ops)';
+  END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_fqc_memory_tags ON fqc_memory USING gin (tags);
 CREATE INDEX IF NOT EXISTS idx_fqc_memory_status ON fqc_memory (status);
 	CREATE INDEX IF NOT EXISTS idx_fqc_memory_latest_status ON fqc_memory (instance_id, status, is_latest);
 	CREATE UNIQUE INDEX IF NOT EXISTS idx_fqc_memory_one_latest_per_chain
 	  ON fqc_memory (instance_id, chain_root_id) WHERE (is_latest = true);
 CREATE INDEX IF NOT EXISTS idx_fqc_vault_instance ON fqc_vault (instance_id);
-CREATE INDEX IF NOT EXISTS idx_fqc_documents_embedding ON fqc_documents USING hnsw (embedding vector_cosine_ops);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'fqc_documents'
+      AND column_name = 'embedding'
+  ) THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_fqc_documents_embedding ON fqc_documents USING hnsw (embedding vector_cosine_ops)';
+  END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_fqc_documents_instance ON fqc_documents (instance_id);
 -- Phase 90: migrate from full to partial unique index on (instance_id, path).
 -- Archived rows are excluded so a new document at the same path (after archiving
