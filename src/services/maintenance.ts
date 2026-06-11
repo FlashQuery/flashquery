@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { FlashQueryConfig } from '../config/loader.js';
 import {
-  acquireLifecycleJob,
   getLifecycleJobStatus,
   requestLifecycleAbort,
 } from '../embedding/lifecycle/jobs.js';
@@ -9,6 +8,7 @@ import type { LifecycleAction, LifecycleBaseInput, LifecycleScope } from '../emb
 import { isLifecycleAction, validateLifecycleActionParameters } from '../embedding/lifecycle/scope.js';
 import { runBackfillEmbeddings } from '../embedding/lifecycle/backfill.js';
 import { runRebuildEmbeddings } from '../embedding/lifecycle/rebuild.js';
+import { prepareCoreLifecycleJob } from '../embedding/lifecycle/core-processor.js';
 import { logger } from '../logging/logger.js';
 import type {
   ErrorEnvelope,
@@ -306,11 +306,7 @@ async function dispatchBackgroundLifecycle(
       action: input.action,
     });
   }
-  const acquired = await acquireLifecycleJob(config, {
-    action: input.action,
-    embedding_name: input.embedding_name,
-    metadata: { dry_run: false, background: true },
-  });
+  const acquired = await prepareCoreLifecycleJob({ config, input, mode: input.action });
   if (!acquired.ok) return acquired;
 
   if (input.action === 'backfill_embeddings') {

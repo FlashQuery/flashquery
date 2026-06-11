@@ -50,6 +50,10 @@ export type CoreLifecycleResult =
   | { ok: true; payload: MaintenanceLifecycleActionResult; aborted?: boolean }
   | { ok: false; error: ErrorEnvelope };
 
+export type CoreLifecycleJobPrepareResult =
+  | { ok: true; payload: LifecycleJobRef }
+  | { ok: false; error: ErrorEnvelope };
+
 interface CatalogRow extends EmbeddingCatalogProviderEntry {
   status: 'active' | 'deactivated';
 }
@@ -69,6 +73,59 @@ interface CoreWorkRow {
 type LifecycleCounts = BackfillLifecycleCounts | RebuildLifecycleCounts;
 
 const COST_BASIS = 'unavailable_provider_pricing_metadata';
+
+export async function prepareCoreLifecycleJob(options: CoreLifecycleOptions): Promise<CoreLifecycleJobPrepareResult> {
+  const { config, input, mode } = options;
+  const databaseUrl = requireDatabaseUrl(config);
+  if (!databaseUrl.ok) return databaseUrl;
+
+  if (hasRecordsScope(input.scope)) {
+    return unsupported('records scope lifecycle processing is deferred to Plan 167-05', String(input.action), {
+      reason: 'records_scope_deferred',
+      supported_entity_types: ['documents', 'memory'],
+    });
+  }
+
+  const embeddingName = input.embedding_name;
+  if (embeddingName === undefined || embeddingName.length === 0) {
+    return invalidInput('embedding_name is required for core document and memory lifecycle actions', 'embedding_name', {
+      action: input.action,
+    });
+  }
+
+  try {
+    validateEmbeddingSqlName(embeddingName);
+  } catch (err) {
+    return invalidInput(err instanceof Error ? err.message : String(err), 'embedding_name', {
+      embedding_name: embeddingName,
+    });
+  }
+
+  const catalog = await loadCatalogEntry(config, embeddingName);
+  if (!catalog.ok) return catalog;
+  if (catalog.payload.status !== 'active') {
+    return unsupported(`Embedding catalog entry '${embeddingName}' is deactivated`, embeddingName, {
+      status: catalog.payload.status,
+    });
+  }
+
+  const rows = await selectRows(config, input.scope, catalog.payload, mode, {
+    staleOnly: input.stale_only === true,
+    mismatchedWidthOnly: input.mismatched_width_only === true,
+  });
+  const skippedAlreadyPresent = mode === 'backfill_embeddings'
+    ? await countAlreadyPresent(config, input.scope, embeddingName)
+    : 0;
+  const cap = validateMaxRows(mode, rows.length, input.max_rows);
+  if (!cap.ok) return { ok: false, error: cap.error };
+
+  return await acquireLifecycleJob(config, {
+    action: mode,
+    embedding_name: embeddingName,
+    counts: countsRecord(initialCounts(mode, rows.length, skippedAlreadyPresent)),
+    metadata: { dry_run: false, background: true },
+  });
+}
 
 export async function runCoreLifecycle(options: CoreLifecycleOptions): Promise<CoreLifecycleResult> {
   const { config, input, mode } = options;
