@@ -166,7 +166,11 @@
   4. A second lifecycle invocation for the same `(instance_id, embedding_name)` while a job is in flight returns `conflict` naming the in-flight `job_id`; separate entries run concurrently without interference; a stale lock (heartbeat missed beyond threshold) is acquirable by the next caller
   5. A background job stops at the next checkpoint when `abort` is called; already-embedded rows remain; the concurrency lock is released; status transitions to `aborted`
   6. The first-time enablement directed scenario (add YAML entry → restart → optional dry-run → core backfill → plugin re-registration + records backfill → verification semantic search) completes with all per-step assertions passing; the legacy schema reset directed scenario (7 steps) completes with all per-step assertions passing; both are reproducible from documentation alone
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 167-01-PLAN.md — Lifecycle contract, durable job/lock foundation, abort/status, and max_rows validation
+- [ ] 167-02-PLAN.md — Core backfill/rebuild lifecycle processing for documents and memories
+- [ ] 167-03-PLAN.md — Retire transaction, records-scope resolution, lifecycle lock/abort scenarios
+- [ ] 167-04-PLAN.md — Operator recipe scenarios, coverage matrices, and example config
 
 ## Progress
 
