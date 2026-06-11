@@ -48,12 +48,14 @@ export interface LifecycleFailure {
   entity_type: LifecycleEntityType;
   identifier: string;
   message: string;
+  error?: string;
 }
 
 export interface LifecycleEstimate {
   input_tokens?: number;
   cost_usd?: number;
   wall_time_seconds?: number;
+  cost_basis?: string;
 }
 
 export interface LifecycleJobRef {

@@ -133,12 +133,13 @@ export interface MaintenanceLifecycleActionResult {
         indexes_dropped: number;
         catalog_rows_deleted: number;
       };
-  failures?: Array<{ entity_type: string; identifier: string; message: string }>;
+  failures?: Array<{ entity_type: string; identifier: string; message: string; error?: string }>;
   would_process?: number;
   estimated?: {
     input_tokens?: number;
-    cost_usd?: number;
+    cost_usd?: number | null;
     wall_time_seconds?: number;
+    cost_basis?: string;
   };
   warnings?: WarningCode[];
 }

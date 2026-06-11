@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { FlashQueryConfig } from '../config/loader.js';
 import {
+  acquireLifecycleJob,
   getLifecycleJobStatus,
   requestLifecycleAbort,
 } from '../embedding/lifecycle/jobs.js';
 import type { LifecycleAction, LifecycleBaseInput, LifecycleScope } from '../embedding/lifecycle/types.js';
 import { isLifecycleAction, validateLifecycleActionParameters } from '../embedding/lifecycle/scope.js';
+import { runBackfillEmbeddings } from '../embedding/lifecycle/backfill.js';
 import { logger } from '../logging/logger.js';
 import type {
   ErrorEnvelope,
@@ -244,7 +246,7 @@ function normalizeMaintenanceActions(
 async function validateLifecycleDispatch(
   config: FlashQueryConfig,
   input: MaintainVaultInput
-): Promise<MaintenanceResult<MaintenanceStatusPayload>> {
+): Promise<MaintenanceResult<MaintenanceSyncPayload | MaintenanceAcceptedPayload | MaintenanceStatusPayload>> {
   const validation = validateLifecycleActionParameters(input as LifecycleBaseInput);
   if (!validation.ok) {
     return { ok: false, error: validation.error };
@@ -252,6 +254,14 @@ async function validateLifecycleDispatch(
 
   if (input.action === 'abort') {
     return await requestLifecycleAbort(config, input.job_id ?? '');
+  }
+
+  if (getIsShuttingDown()) {
+    return shutdownRejection();
+  }
+
+  if (input.action === 'backfill_embeddings') {
+    return await dispatchBackfillEmbeddings(config, input as LifecycleBaseInput & { action: 'backfill_embeddings' });
   }
 
   return {
@@ -264,6 +274,46 @@ async function validateLifecycleDispatch(
         action: input.action,
         reason: 'lifecycle_processor_not_implemented',
       },
+    },
+  };
+}
+
+async function dispatchBackfillEmbeddings(
+  config: FlashQueryConfig,
+  input: LifecycleBaseInput & { action: 'backfill_embeddings' }
+): Promise<MaintenanceResult<MaintenanceSyncPayload | MaintenanceAcceptedPayload>> {
+  if (input.background === true) {
+    return await dispatchBackgroundLifecycle(config, input);
+  }
+  const result = await runBackfillEmbeddings(config, input);
+  if (!result.ok) return result;
+  return { ok: true, payload: { actions: [result.payload] } };
+}
+
+async function dispatchBackgroundLifecycle(
+  config: FlashQueryConfig,
+  input: LifecycleBaseInput & { action: 'backfill_embeddings' }
+): Promise<MaintenanceResult<MaintenanceAcceptedPayload>> {
+  if (!input.embedding_name) {
+    return invalidInput('embedding_name is required for background lifecycle actions', 'embedding_name', {
+      action: input.action,
+    });
+  }
+  const acquired = await acquireLifecycleJob(config, {
+    action: input.action,
+    embedding_name: input.embedding_name,
+    metadata: { dry_run: false, background: true },
+  });
+  if (!acquired.ok) return acquired;
+
+  void runBackfillEmbeddings(config, input, acquired.payload);
+
+  return {
+    ok: true,
+    payload: {
+      accepted: true,
+      job_id: acquired.payload.job_id,
+      started_at: acquired.payload.started_at,
     },
   };
 }
