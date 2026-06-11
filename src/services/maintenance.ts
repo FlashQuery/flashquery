@@ -8,6 +8,7 @@ import type { LifecycleAction, LifecycleBaseInput, LifecycleScope } from '../emb
 import { isLifecycleAction, validateLifecycleActionParameters } from '../embedding/lifecycle/scope.js';
 import { runBackfillEmbeddings } from '../embedding/lifecycle/backfill.js';
 import { runRebuildEmbeddings } from '../embedding/lifecycle/rebuild.js';
+import { runRetireEmbedding } from '../embedding/lifecycle/retire.js';
 import { prepareCoreLifecycleJob } from '../embedding/lifecycle/core-processor.js';
 import { logger } from '../logging/logger.js';
 import type {
@@ -269,18 +270,7 @@ async function validateLifecycleDispatch(
     return await dispatchRebuildEmbeddings(config, input as LifecycleBaseInput & { action: 'rebuild_embeddings' });
   }
 
-  return {
-    ok: false,
-    error: {
-      error: 'unsupported',
-      message: `${input.action} validation is available, but execution is not implemented until the lifecycle processor plans`,
-      identifier: String(input.action),
-      details: {
-        action: input.action,
-        reason: 'lifecycle_processor_not_implemented',
-      },
-    },
-  };
+  return await dispatchRetireEmbedding(config, input as LifecycleBaseInput & { action: 'retire_embedding' });
 }
 
 async function dispatchBackfillEmbeddings(
@@ -333,6 +323,15 @@ async function dispatchRebuildEmbeddings(
     return await dispatchBackgroundLifecycle(config, input);
   }
   const result = await runRebuildEmbeddings(config, input);
+  if (!result.ok) return result;
+  return { ok: true, payload: { actions: [result.payload] } };
+}
+
+async function dispatchRetireEmbedding(
+  config: FlashQueryConfig,
+  input: LifecycleBaseInput & { action: 'retire_embedding' }
+): Promise<MaintenanceResult<MaintenanceSyncPayload>> {
+  const result = await runRetireEmbedding(config, input);
   if (!result.ok) return result;
   return { ok: true, payload: { actions: [result.payload] } };
 }
