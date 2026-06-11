@@ -1,8 +1,9 @@
 import pg from 'pg';
 import * as yaml from 'js-yaml';
-import { supabaseManager } from '../storage/supabase.js';
+import { buildPluginEmbeddingColumnSetDDL, supabaseManager } from '../storage/supabase.js';
 import { logger } from '../logging/logger.js';
 import type { FlashQueryConfig } from '../config/loader.js';
+import { createPgClientIPv4 } from '../utils/pg-client.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -57,6 +58,12 @@ export interface RegistryEntry {
   table_prefix: string; // "fqcp_{plugin_id}_{plugin_instance}_"
   schema: ParsedPluginSchema;
   embedding_name: string | null;
+}
+
+interface CatalogEmbeddingEntry {
+  name: string;
+  dimensions: number;
+  status: 'active' | 'deactivated';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -524,16 +531,32 @@ export async function initPlugins(config: FlashQueryConfig): Promise<void> {
   const manager = new PluginManager();
   const supabase = supabaseManager.getClient();
 
+  const catalogResult = (await supabase
+    .from('fqc_embeddings')
+    .select('name, dimensions, status')
+    .eq('instance_id', config.instance.id)) as {
+    data: Array<{ name: string; dimensions: number; status: string }> | null;
+    error: { message: string } | null;
+  };
+  const catalogEntries: CatalogEmbeddingEntry[] = (catalogResult.data ?? []).map((row) => ({
+    name: row.name,
+    dimensions: row.dimensions,
+    status: row.status === 'deactivated' ? 'deactivated' : 'active',
+  }));
+
   const registryResult = (await supabase
     .from('fqc_plugin_registry')
-    .select('plugin_id, plugin_instance, table_prefix, schema_yaml')
+    .select('id, plugin_id, plugin_instance, table_prefix, schema_yaml, embedding_name, embedding_resolved_at')
     .eq('status', 'active')
     .eq('instance_id', config.instance.id)) as {
     data: Array<{
+      id: string;
       plugin_id: string;
       plugin_instance: string;
       table_prefix: string;
       schema_yaml: string;
+      embedding_name: string | null;
+      embedding_resolved_at: string | null;
     }> | null;
     error: { message: string } | null;
   };
@@ -550,16 +573,91 @@ export async function initPlugins(config: FlashQueryConfig): Promise<void> {
 
   for (const row of data ?? []) {
     const schema = parsePluginSchema(row.schema_yaml);
-      manager.loadEntry({
-        plugin_id: row.plugin_id,
-        plugin_instance: row.plugin_instance ?? 'default',
-        table_prefix: row.table_prefix,
+    const instanceName = row.plugin_instance ?? 'default';
+    let embeddingName = row.embedding_name;
+    if (row.embedding_resolved_at === null) {
+      const migrated = await migrateLegacyPluginEmbedding({
+        config,
+        registryId: row.id,
+        pluginId: row.plugin_id,
+        pluginInstance: instanceName,
         schema,
-        embedding_name: null,
+        catalogEntries,
       });
+      embeddingName = migrated;
+    }
+    manager.loadEntry({
+      plugin_id: row.plugin_id,
+      plugin_instance: instanceName,
+      table_prefix: row.table_prefix,
+      schema,
+      embedding_name: embeddingName,
+    });
   }
 
   pluginManager = manager;
   buildGlobalTypeRegistry();
   logger.info(`Plugins: loaded ${data?.length ?? 0} active plugin instance(s)`);
+}
+
+async function migrateLegacyPluginEmbedding(input: {
+  config: FlashQueryConfig;
+  registryId: string;
+  pluginId: string;
+  pluginInstance: string;
+  schema: ParsedPluginSchema;
+  catalogEntries: CatalogEmbeddingEntry[];
+}): Promise<string | null> {
+  const active = input.catalogEntries
+    .filter((entry) => entry.status === 'active')
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const resolved = active.length === 1 ? active[0] : null;
+  const resolvedAt = new Date().toISOString();
+
+  if (active.length === 0) {
+    logger.info(
+      `Plugins: legacy registration '${input.pluginId}' instance '${input.pluginInstance}' resolved embedding_name=null because no active embeddings are configured`
+    );
+  } else if (active.length > 1) {
+    logger.warn(
+      `Plugins: legacy registration '${input.pluginId}' instance '${input.pluginInstance}' resolved embedding_name=null because multiple active embeddings are configured (${active.map((entry) => entry.name).join(', ')}); re-register with embedding_name to enable semantic search`
+    );
+  }
+
+  if (resolved) {
+    const pgClient = createPgClientIPv4(input.config.supabase.databaseUrl);
+    try {
+      await pgClient.connect();
+      await pgClient.query('BEGIN');
+      for (const table of input.schema.tables) {
+        if (!table.embed_fields || table.embed_fields.length === 0) continue;
+        const fullTableName = resolveTableName(input.pluginId, input.pluginInstance, table.name);
+        await pgClient.query(buildPluginEmbeddingColumnSetDDL(fullTableName, resolved));
+      }
+      await pgClient.query('COMMIT');
+      await pgClient.query(`SELECT pg_notify('pgrst', 'reload schema')`);
+    } catch (err) {
+      try {
+        await pgClient.query('ROLLBACK');
+      } catch {
+        // no active transaction
+      }
+      throw err;
+    } finally {
+      await pgClient.end();
+    }
+  }
+
+  const { error } = await supabaseManager.getClient()
+    .from('fqc_plugin_registry')
+    .update({
+      embedding_name: resolved?.name ?? null,
+      embedding_resolved_at: resolvedAt,
+      updated_at: resolvedAt,
+    })
+    .eq('id', input.registryId);
+  if (error) {
+    throw new Error(`Failed to migrate legacy plugin embedding registration: ${error.message}`);
+  }
+  return resolved?.name ?? null;
 }

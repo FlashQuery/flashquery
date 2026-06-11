@@ -2067,3 +2067,11 @@ Behaviors verifying the `call_model` and `get_llm_usage` MCP tools introduced in
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
 | L-23 | Embedding semantic search works end-to-end when routed through the `embedding` purpose — save_memory + search_memory return results matching the seed entry (EMBED-01) | test_embedding_migration | 2026-04-29 | 2026-05-07 |
+
+## Phase 166 Plugin Embedding Registration
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| D-100 | T-S-001 / REQ-030: plugin manifest `embedding: "*"` refuses a multi-active catalog with `ambiguous_identifier` and available names; re-invocation with explicit `embedding_name` succeeds. | test_plugin_registration_resolution | 2026-06-11 | 2026-06-11 |
+| D-101 | T-S-002 / REQ-030: plugin manifest specific embedding name not present in the catalog returns `not_found` with available active names. | test_plugin_registration_specific_not_found | 2026-06-11 | 2026-06-11 |
+| D-102 | T-S-003 / REQ-006 / REQ-030: plugin registration against a deactivated embedding entry returns `unsupported` with a reactivation or retire remediation hint. | test_plugin_registration_deactivated | 2026-06-11 | 2026-06-11 |
