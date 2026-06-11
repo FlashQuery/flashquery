@@ -6,6 +6,7 @@ import { loadConfig, type FlashQueryConfig } from '../../../src/config/loader.js
 import { initLogger } from '../../../src/logging/logger.js';
 import { initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
 import { syncEmbeddingCatalog } from '../../../src/embedding/embedding-config-sync.js';
+import { runRetireEmbedding } from '../../../src/embedding/lifecycle/retire.js';
 import { setupTestSupabase } from '../../helpers/supabase.js';
 import { HAS_SUPABASE } from '../../helpers/test-env.js';
 
@@ -76,6 +77,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('per-entry-rpcs core RPC creation', ()
   beforeEach(async () => {
     await client.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]);
     await client.query('DELETE FROM fqc_memory WHERE instance_id = $1', [TEST_INSTANCE_ID]);
+    await client.query('DELETE FROM fqc_maintenance_jobs WHERE instance_id = $1', [TEST_INSTANCE_ID]);
     await cleanupPrimarySchema(client);
     await client.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]);
   }, 60000);
@@ -83,6 +85,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('per-entry-rpcs core RPC creation', ()
   afterAll(async () => {
     await client?.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.query('DELETE FROM fqc_memory WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
+    await client?.query('DELETE FROM fqc_maintenance_jobs WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await cleanupPrimarySchema(client).catch(() => undefined);
     await client?.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.end().catch(() => undefined);
@@ -122,5 +125,28 @@ describe.skipIf(!HAS_SUPABASE).sequential('per-entry-rpcs core RPC creation', ()
     await expect(
       client.query(`SELECT * FROM match_documents_primary($1::vector, 0, 1)`, [vectorLiteral(95)])
     ).rejects.toThrow(/different vector dimensions|expected 96 dimensions/i);
+  });
+
+  it('T-I-051 drops core per-entry semantic RPCs when the entry is retired', async () => {
+    const config = configWithEmbeddings([
+      {
+        name: 'primary',
+        dimensions: 96,
+        endpoints: [{ providerName: 'openai', model: 'text-embedding-3-small' }],
+      },
+    ]);
+    await syncEmbeddingCatalog(config);
+    await expect(getFunctionDefinition(client, 'match_memories_primary')).resolves.toContain('embedding_primary');
+    await expect(getFunctionDefinition(client, 'match_documents_primary')).resolves.toContain('embedding_primary');
+
+    const retireResult = await runRetireEmbedding(config, {
+      action: 'retire_embedding',
+      embedding_name: 'primary',
+      confirm: 'primary',
+    });
+
+    expect(retireResult.ok).toBe(true);
+    await expect(getFunctionDefinition(client, 'match_memories_primary')).resolves.toBeUndefined();
+    await expect(getFunctionDefinition(client, 'match_documents_primary')).resolves.toBeUndefined();
   });
 });

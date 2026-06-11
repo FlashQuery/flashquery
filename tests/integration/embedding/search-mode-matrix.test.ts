@@ -76,6 +76,37 @@ describe.skipIf(!HAS_SUPABASE).sequential('embedding search mode matrix', () => 
     expect(payload.results[0]).not.toHaveProperty('score');
   }, 90_000);
 
+  it('T-I-047 returns filesystem results normally when zero catalog entries are active', async () => {
+    harness = await createEmbeddingSearchHarness({
+      instanceId: 'phase-166-search-zero-filesystem',
+      entries: [{ name: ENTRY_PRIMARY, status: 'deactivated' }],
+    });
+    await addSearchDocument({ harness, path: 'filesystem-zero.md', title: 'Filesystem Zero' });
+
+    const result = await harness.server.search({
+      query: 'filesystem',
+      mode: 'filesystem',
+      entity_types: ['documents'],
+    });
+    const payload = parseToolJson<{
+      embeddings_queried: string[];
+      fusion: string;
+      warnings?: string[];
+      results: Array<{ path: string; match_source: string[]; score?: number }>;
+    }>(result);
+
+    expect(payload.embeddings_queried).toEqual([]);
+    expect(payload.fusion).toBe('none');
+    expect(payload.warnings ?? []).not.toContain('embedding_unavailable');
+    expect(payload.results).toEqual([
+      expect.objectContaining({
+        path: 'filesystem-zero.md',
+        match_source: ['filesystem'],
+      }),
+    ]);
+    expect(payload.results[0]).not.toHaveProperty('score');
+  }, 90_000);
+
   it('T-I-048 queries the only active entry with fusion none', async () => {
     harness = await createEmbeddingSearchHarness({
       instanceId: 'phase-166-search-one-active',

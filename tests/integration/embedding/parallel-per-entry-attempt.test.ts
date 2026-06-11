@@ -15,6 +15,33 @@ import {
   TEST_SUPABASE_KEY,
   TEST_SUPABASE_URL,
 } from '../../helpers/test-env.js';
+import {
+  createPluginRecordHarness,
+  destroyPluginRecordHarness,
+  pluginRecordYaml,
+  textOf,
+  type PluginRecordHarness,
+} from '../plugin-record-embedding-helpers.js';
+
+const providerState = vi.hoisted(() => ({
+  calls: [] as Array<{ entryName: string; text: string }>,
+}));
+
+vi.mock('../../../src/embedding/provider.js', async () => {
+  const actual = await vi.importActual<typeof import('../../../src/embedding/provider.js')>('../../../src/embedding/provider.js');
+  return {
+    ...actual,
+    createEmbeddingProviderForCatalogEntry: vi.fn((_config, entry: { name: string; dimensions: number }) => ({
+      embed: vi.fn(async (text: string) => {
+        providerState.calls.push({ entryName: entry.name, text });
+        return Array.from({ length: entry.dimensions }, (_, index) => (index + 1) / 10);
+      }),
+      getDimensions: () => entry.dimensions,
+      getProviderInfo: () => ({ provider: 'mock-provider', model: `${entry.name}-model` }),
+      getLastEmbeddingMetadata: () => ({ truncated: false, warnings: [] }),
+    })),
+  };
+});
 
 const TEST_INSTANCE_ID = 'phase-166-parallel-entry';
 const ENTRY_NAMES = ['primary', 'analysis'] as const;
@@ -186,4 +213,59 @@ describe.skipIf(!HAS_SUPABASE).sequential('parallel per-entry embedding attempts
     expect([...startTimes.keys()].sort()).toEqual(['analysis', 'primary']);
     expect(Math.abs(startTimes.get('analysis')! - startTimes.get('primary')!)).toBeLessThan(50);
   });
+
+  it('T-I-036 writes plugin records with exactly one embed call for the resolved entry', async () => {
+    let harness: PluginRecordHarness | undefined;
+    try {
+      providerState.calls = [];
+      harness = await createPluginRecordHarness();
+      const pluginId = 'plug_parallel_single';
+      const tableName = `fqcp_${pluginId}_default_notes`;
+      harness.tablesToDrop.add(tableName);
+
+      const registerResult = await harness.registerPlugin({
+        schema_yaml: pluginRecordYaml(pluginId, '*'),
+        embedding_name: 'primary',
+      }) as { isError?: boolean };
+      expect(registerResult.isError).toBeFalsy();
+
+      const writeResult = await harness.writeRecord({
+        mode: 'create',
+        plugin_id: pluginId,
+        table: 'notes',
+        data: { title: 'One plugin route', body: 'Only primary should embed' },
+        include: ['data'],
+      }) as { isError?: boolean };
+      expect(writeResult.isError).toBeFalsy();
+      const payload = JSON.parse(textOf(writeResult)) as { id: string; warnings?: string[] };
+      expect(payload.warnings).toBeUndefined();
+
+      expect(providerState.calls).toEqual([
+        { entryName: 'primary', text: 'One plugin route\nOnly primary should embed' },
+      ]);
+      const row = await harness.client.query(
+        `SELECT embedding_primary::text AS primary_vec
+         FROM ${pg.escapeIdentifier(tableName)}
+         WHERE id = $1`,
+        [payload.id]
+      );
+      expect(row.rows[0]).toMatchObject({
+        primary_vec: '[0.1,0.2,0.3]',
+      });
+      const columns = await harness.client.query(
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = $1
+           AND column_name = 'embedding_analysis'`,
+        [tableName]
+      );
+      expect(columns.rows).toEqual([]);
+    } finally {
+      providerState.calls = [];
+      if (harness) {
+        await destroyPluginRecordHarness(harness);
+      }
+    }
+  }, 90_000);
 });

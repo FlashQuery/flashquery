@@ -41,8 +41,15 @@ async function cleanupPrimarySchema(client: pg.Client): Promise<void> {
   for (const table of coreTables) {
     await client.query(`DROP INDEX IF EXISTS idx_${table}_embedding_primary`);
     for (const column of managedColumns) {
-      await client.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS ${column}`);
+      await client.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS ${column} CASCADE`);
     }
+  }
+}
+
+async function dropLegacyEmbeddingColumns(client: pg.Client): Promise<void> {
+  for (const table of coreTables) {
+    await client.query(`DROP INDEX IF EXISTS idx_${table}_embedding`);
+    await client.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS embedding`);
   }
 }
 
@@ -77,6 +84,15 @@ async function resizeColumnOnly(client: pg.Client, table: string, width: number)
   await client.query(`ALTER TABLE ${table} ADD COLUMN embedding_primary vector(${width})`);
 }
 
+async function createMismatchedLegacyEmbeddingColumns(client: pg.Client): Promise<void> {
+  for (const table of coreTables) {
+    await client.query(`DROP INDEX IF EXISTS idx_${table}_embedding`);
+    await client.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS embedding`);
+    await client.query(`ALTER TABLE ${table} ADD COLUMN embedding vector(32)`);
+    await client.query(`CREATE INDEX idx_${table}_embedding ON ${table} USING hnsw (embedding vector_cosine_ops)`);
+  }
+}
+
 describe.skipIf(!HAS_SUPABASE).sequential('drift-detection catalog verification', () => {
   let client: pg.Client;
 
@@ -88,6 +104,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('drift-detection catalog verification'
 
   beforeEach(async () => {
     await cleanupPrimarySchema(client);
+    await dropLegacyEmbeddingColumns(client);
     await client.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]);
   }, 60000);
 
@@ -118,6 +135,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('drift-detection catalog verification'
 
   it('T-I-028 ignores legacy singular embedding columns', async () => {
     await createPrimaryEntry(client, 96);
+    await createMismatchedLegacyEmbeddingColumns(client);
 
     await expect(verifySchema(client, { instanceId: TEST_INSTANCE_ID })).resolves.toBeUndefined();
   });

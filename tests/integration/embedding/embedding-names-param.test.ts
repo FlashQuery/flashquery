@@ -29,7 +29,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('search embedding_names parameter', ()
     }
   });
 
-  it('T-I-051 limits semantic search to a singleton requested embedding name', async () => {
+  it('T-I-052 limits semantic search to a singleton requested embedding name', async () => {
     harness = await createEmbeddingSearchHarness({
       instanceId: 'phase-166-embedding-names-singleton',
       entries: [{ name: ENTRY_PRIMARY }, { name: ENTRY_SECONDARY }],
@@ -54,7 +54,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('search embedding_names parameter', ()
     expect(payload.results).toHaveLength(1);
   }, 90_000);
 
-  it('T-I-052 rejects an empty embedding_names array as invalid_input', async () => {
+  it('T-I-054 rejects an empty embedding_names array as invalid_input', async () => {
     harness = await createEmbeddingSearchHarness({
       instanceId: 'phase-166-embedding-names-empty',
       entries: [{ name: ENTRY_PRIMARY }],
@@ -90,7 +90,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('search embedding_names parameter', ()
     expect(payload).toMatchObject({ error: 'not_found', identifier: 'missing_entry' });
   }, 90_000);
 
-  it('T-I-054 rejects an explicitly requested deactivated embedding as unsupported', async () => {
+  it('also rejects an explicitly requested deactivated embedding as unsupported', async () => {
     harness = await createEmbeddingSearchHarness({
       instanceId: 'phase-166-embedding-names-deactivated',
       entries: [{ name: ENTRY_PRIMARY }, { name: ENTRY_OLD, status: 'deactivated' }],

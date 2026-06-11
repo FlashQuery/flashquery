@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { initLogger } from '../../src/logging/logger.js';
 import { initPlugins } from '../../src/plugins/manager.js';
@@ -30,7 +30,7 @@ function makeConfig(vaultPath: string): FlashQueryConfig {
       { name: 'analysis', dimensions: 3, endpoints: [{ providerName: 'catalog_provider', model: 'analysis-model' }] },
     ],
     embedding: { provider: 'none', model: '', dimensions: 3 },
-    logging: { level: 'error', output: 'stdout' },
+    logging: { level: 'info', output: 'stdout' },
     trashFolder: { enabled: false, path: '.trash', collisionStrategy: 'suffix' },
   } as unknown as FlashQueryConfig;
 }
@@ -113,6 +113,10 @@ describe.skipIf(SKIP)('legacy plugin embedding registration migration', () => {
     await client.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [INSTANCE_ID]);
   }, 60_000);
 
+  afterEach(() => {
+    initLogger(config);
+  });
+
   afterAll(async () => {
     for (const tableName of tables) {
       await client.query(`DROP TABLE IF EXISTS ${pg.escapeIdentifier(tableName)} CASCADE`).catch(() => undefined);
@@ -125,6 +129,8 @@ describe.skipIf(SKIP)('legacy plugin embedding registration migration', () => {
   });
 
   it('T-I-067 defaults a legacy plugin to the only active entry', async () => {
+    const logs: string[] = [];
+    initLogger(config, (line) => logs.push(line));
     await seedCatalog(client, ['primary']);
     const tableName = await seedLegacyPlugin(client, 'plug_legacy_one');
     tables.add(tableName);
@@ -139,9 +145,12 @@ describe.skipIf(SKIP)('legacy plugin embedding registration migration', () => {
     expect(registry.rows[0].embedding_resolved_at).toBeTruthy();
     const tableColumns = await columns(client, tableName);
     expect(tableColumns).toEqual(expect.arrayContaining(['embedding', 'embedding_primary']));
+    expect(logs.join('\n')).toMatch(/INFO\s+Plugins: legacy registration 'plug_legacy_one'.*resolved embedding_name='primary'/i);
   }, 90_000);
 
   it('T-I-068 resolves a multi-active legacy plugin to null', async () => {
+    const logs: string[] = [];
+    initLogger(config, (line) => logs.push(line));
     await seedCatalog(client, ['primary', 'analysis']);
     const tableName = await seedLegacyPlugin(client, 'plug_legacy_multi');
     tables.add(tableName);
@@ -158,6 +167,9 @@ describe.skipIf(SKIP)('legacy plugin embedding registration migration', () => {
     expect(tableColumns).toContain('embedding');
     expect(tableColumns).not.toContain('embedding_primary');
     expect(tableColumns).not.toContain('embedding_analysis');
+    expect(logs.join('\n')).toMatch(
+      /WARN\s+Plugins: legacy registration 'plug_legacy_multi'.*multiple active embeddings are configured \(analysis, primary\).*re-register with embedding_name/i
+    );
   }, 90_000);
 
   it('T-I-069 leaves legacy singular embedding columns untouched', async () => {

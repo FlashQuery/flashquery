@@ -618,6 +618,10 @@ async function migrateLegacyPluginEmbedding(input: {
     logger.info(
       `Plugins: legacy registration '${input.pluginId}' instance '${input.pluginInstance}' resolved embedding_name=null because no active embeddings are configured`
     );
+  } else if (active.length === 1) {
+    logger.info(
+      `Plugins: legacy registration '${input.pluginId}' instance '${input.pluginInstance}' resolved embedding_name='${active[0]!.name}' from the only active embedding`
+    );
   } else if (active.length > 1) {
     logger.warn(
       `Plugins: legacy registration '${input.pluginId}' instance '${input.pluginInstance}' resolved embedding_name=null because multiple active embeddings are configured (${active.map((entry) => entry.name).join(', ')}); re-register with embedding_name to enable semantic search`

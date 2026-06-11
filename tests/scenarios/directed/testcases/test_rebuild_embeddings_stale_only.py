@@ -30,7 +30,11 @@ def run_test(args: argparse.Namespace):
         doc_id, memory_id = create_doc_and_memory(ctx, run, run.run_id)
         if not doc_id or not memory_id:
             return run
+        fresh_doc_id, fresh_memory_id = create_doc_and_memory(ctx, run, f"{run.run_id}-fresh")
+        if not fresh_doc_id or not fresh_memory_id:
+            return run
         stamp_stale_vectors(ctx, doc_id, memory_id)
+        fresh_before = read_stamp_models(ctx, fresh_doc_id, fresh_memory_id)
 
         result = ctx.client.call_tool(
             "maintain_vault",
@@ -45,13 +49,16 @@ def run_test(args: argparse.Namespace):
         action = first_action(payload)
         counts = action.get("counts") if isinstance(action.get("counts"), dict) else {}
         models = read_stamp_models(ctx, doc_id, memory_id)
+        fresh_after = read_stamp_models(ctx, fresh_doc_id, fresh_memory_id)
         run.step(
-            "stale_only rebuild restamps stale rows",
+            "stale_only rebuild restamps stale rows and excludes fresh rows",
             passed=(
                 result.ok
                 and counts.get("rows_examined") == 2
                 and counts.get("rows_embedded") == 2
                 and all(model and model != "stale-model" for model in models)
+                and fresh_before == fresh_after
+                and all(model and model != "stale-model" for model in fresh_after)
             ),
             detail=expectation_detail(result) or result.error or json.dumps(payload, sort_keys=True),
             timing_ms=result.timing_ms,

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { maintainVault } from '../../src/services/maintenance.js';
 import { HAS_SUPABASE } from '../helpers/test-env.js';
 
 const providerState = vi.hoisted(() => ({
@@ -113,6 +114,59 @@ describe.skipIf(!HAS_SUPABASE)('plugin write_record embedding routing', () => {
     );
     expect(row.rows[0]).toMatchObject({ primary_vec: null, analysis_model: 'analysis-model' });
     expect(row.rows[0].analysis_vec).toBe('[0.1,0.2,0.3]');
+  }, 90_000);
+
+  it('REQ-033 backfills the new entry column for existing rows after re-registration', async () => {
+    harness = await createPluginRecordHarness();
+    const pluginId = 'plug_write_switch_backfill';
+    const tableName = `fqcp_${pluginId}_default_notes`;
+    harness.tablesToDrop.add(tableName);
+    await harness.registerPlugin({
+      schema_yaml: pluginRecordYaml(pluginId, '*'),
+      embedding_name: 'primary',
+    });
+    const writeResult = await harness.writeRecord({
+      mode: 'create',
+      plugin_id: pluginId,
+      table: 'notes',
+      data: { title: 'Existing row', body: 'Backfill after switch' },
+      include: ['data'],
+    }) as { isError?: boolean };
+    expect(writeResult.isError).toBeFalsy();
+    const payload = JSON.parse(textOf(writeResult)) as { id: string };
+
+    await harness.registerPlugin({
+      schema_yaml: pluginRecordYaml(pluginId, '*'),
+      embedding_name: 'analysis',
+    });
+    providerState.calls = [];
+
+    const backfill = await maintainVault(harness.config, {
+      action: 'backfill_embeddings',
+      scope: { entity_types: ['records'], records: { plugin: pluginId } },
+      max_rows: 0,
+    });
+
+    expect(backfill.ok).toBe(true);
+    if (backfill.ok) {
+      const action = backfill.payload.actions[0];
+      expect(action?.counts.rows_embedded).toBeGreaterThanOrEqual(1);
+    }
+    expect(providerState.calls).toEqual([
+      { entryName: 'analysis', text: 'Existing row\nBackfill after switch' },
+    ]);
+    const row = await harness.client.query(
+      `SELECT embedding_primary::text AS primary_vec,
+              embedding_analysis::text AS analysis_vec,
+              embedding_analysis_model AS analysis_model
+       FROM ${tableName} WHERE id = $1`,
+      [payload.id]
+    );
+    expect(row.rows[0]).toMatchObject({
+      primary_vec: '[0.1,0.2,0.3]',
+      analysis_vec: '[0.1,0.2,0.3]',
+      analysis_model: 'analysis-model',
+    });
   }, 90_000);
 
   it('emits a suffixed deferred warning and pending row when plugin embedding fails', async () => {

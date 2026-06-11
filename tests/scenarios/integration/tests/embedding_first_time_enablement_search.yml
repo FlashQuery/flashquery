@@ -2,7 +2,10 @@ name: embedding_first_time_enablement_search
 description: >
   First-time embedding enablement recipe: write document and memory content,
   run the lifecycle backfill, and verify semantic search returns both entity
-  types.
+  types. The YAML integration DSL can assert presence and JSON fields, but it
+  cannot express a portable cross-entity relative ranking check for provider-
+  dependent semantic scores; ranking remains covered by lower-level search/RRF
+  tests and this scenario documents that limitation for IS-50.
 coverage: [IS-50]
 deps: [embeddings]
 server_modes: [managed]
@@ -39,6 +42,10 @@ steps:
       max_rows: 0
 
   - label: "Search returns enabled document and memory semantically"
+    # IS-50 ranking note: this DSL step proves cross-domain presence after
+    # enablement. It intentionally does not assert relative order because
+    # provider-dependent semantic scores make a stable doc-vs-memory rank
+    # assertion non-portable in the YAML runner.
     assert:
       op: search
       args:
