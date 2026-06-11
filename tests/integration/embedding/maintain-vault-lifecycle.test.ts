@@ -37,6 +37,7 @@ function makeConfig(overrides: Partial<FlashQueryConfig['supabase']> = {}): Flas
     embedding: { provider: 'none', model: '', apiKey: '', dimensions: 3 },
     logging: { level: 'error', output: 'stdout' },
     locking: { enabled: false },
+    embeddingLifecycle: { lockStaleMs: 5 * 60 * 1_000 },
   } as unknown as FlashQueryConfig;
 }
 
@@ -114,11 +115,15 @@ describe.skipIf(!HAS_SUPABASE || !HAS_DIRECT_DATABASE_URL)(
       await initSupabase(config);
       client = new pg.Client({ connectionString: TEST_DATABASE_URL });
       await client.connect();
-      await client.query('DELETE FROM fqc_maintenance_jobs WHERE instance_id = $1', [TEST_INSTANCE_ID]);
+      await client.query('DELETE FROM fqc_maintenance_jobs WHERE instance_id = $1', [
+        TEST_INSTANCE_ID,
+      ]);
     }, 60_000);
 
     afterAll(async () => {
-      await client?.query('DELETE FROM fqc_maintenance_jobs WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
+      await client
+        ?.query('DELETE FROM fqc_maintenance_jobs WHERE instance_id = $1', [TEST_INSTANCE_ID])
+        .catch(() => undefined);
       await client?.end();
       await supabaseManager.close();
     });
@@ -212,6 +217,70 @@ describe.skipIf(!HAS_SUPABASE || !HAS_DIRECT_DATABASE_URL)(
       });
     });
 
+    it('REQ-038 honors the configured stale heartbeat threshold', async () => {
+      const config = {
+        ...makeConfig(),
+        embeddingLifecycle: { lockStaleMs: 1 },
+      } as FlashQueryConfig;
+      const stale = await acquireLifecycleJob(config, {
+        action: 'backfill_embeddings',
+        embedding_name: 'configured_stale_entry',
+      });
+      expect(stale.ok).toBe(true);
+      if (!stale.ok) throw new Error(stale.error.message);
+
+      await client.query(
+        "UPDATE fqc_maintenance_jobs SET heartbeat_at = now() - interval '1 second' WHERE id = $1",
+        [stale.payload.job_id]
+      );
+
+      const recovered = await acquireLifecycleJob(config, {
+        action: 'rebuild_embeddings',
+        embedding_name: 'configured_stale_entry',
+      });
+      expect(recovered.ok).toBe(true);
+      if (!recovered.ok) throw new Error(recovered.error.message);
+
+      await completeLifecycleJob(config, recovered.payload.job_id, {
+        rows_examined: 0,
+        rows_embedded: 0,
+        rows_failed: 0,
+      });
+    });
+
+    it('REQ-041 returns ambiguous_identifier with active entries when core embedding_name is omitted', async () => {
+      const config = makeConfig();
+      await client.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]);
+      await client.query(
+        `INSERT INTO fqc_embeddings(instance_id, name, dimensions, endpoints, source, status)
+         VALUES
+           ($1, 'analysis', 3, $2::jsonb, 'yaml', 'active'),
+           ($1, 'primary', 3, $3::jsonb, 'yaml', 'active')`,
+        [
+          TEST_INSTANCE_ID,
+          JSON.stringify([{ provider_name: 'test', model: 'analysis-model' }]),
+          JSON.stringify([{ provider_name: 'test', model: 'primary-model' }]),
+        ]
+      );
+
+      const result = await maintainVault(config, {
+        action: 'backfill_embeddings',
+        scope: { entity_types: ['documents'] },
+        max_rows: 0,
+      });
+
+      expect(result).toEqual({
+        ok: false,
+        error: expect.objectContaining({
+          error: 'ambiguous_identifier',
+          identifier: 'embedding_name',
+          details: expect.objectContaining({
+            active_embeddings: ['analysis', 'primary'],
+          }),
+        }),
+      });
+    });
+
     it('REQ-039 aborts running lifecycle jobs, preserves partial counts, and releases the lock', async () => {
       const config = makeConfig();
       const running = await acquireLifecycleJob(config, {
@@ -231,7 +300,11 @@ describe.skipIf(!HAS_SUPABASE || !HAS_DIRECT_DATABASE_URL)(
             expect.objectContaining({
               action: 'rebuild_embeddings',
               embedding_name: 'abortable',
-              counts: expect.objectContaining({ rows_examined: 4, rows_embedded: 2, rows_failed: 0 }),
+              counts: expect.objectContaining({
+                rows_examined: 4,
+                rows_embedded: 2,
+                rows_failed: 0,
+              }),
             }),
           ],
         }),
@@ -252,7 +325,9 @@ describe.skipIf(!HAS_SUPABASE || !HAS_DIRECT_DATABASE_URL)(
 
     it('REQ-039 returns expected errors for unknown and non-running abort targets', async () => {
       const config = makeConfig();
-      await expect(requestLifecycleAbort(config, '00000000-0000-4000-8000-000000000000')).resolves.toEqual({
+      await expect(
+        requestLifecycleAbort(config, '00000000-0000-4000-8000-000000000000')
+      ).resolves.toEqual({
         ok: false,
         error: expect.objectContaining({ error: 'not_found' }),
       });
@@ -299,7 +374,11 @@ describe.skipIf(!HAS_SUPABASE || !HAS_DIRECT_DATABASE_URL)(
             expect.objectContaining({
               action: 'rebuild_embeddings',
               embedding_name: 'service_abortable',
-              counts: expect.objectContaining({ rows_examined: 3, rows_embedded: 1, rows_failed: 0 }),
+              counts: expect.objectContaining({
+                rows_examined: 3,
+                rows_embedded: 1,
+                rows_failed: 0,
+              }),
             }),
           ],
         }),
@@ -315,7 +394,11 @@ describe.skipIf(!HAS_SUPABASE || !HAS_DIRECT_DATABASE_URL)(
           actions: [
             expect.objectContaining({
               action: 'rebuild_embeddings',
-              counts: expect.objectContaining({ rows_examined: 3, rows_embedded: 1, rows_failed: 0 }),
+              counts: expect.objectContaining({
+                rows_examined: 3,
+                rows_embedded: 1,
+                rows_failed: 0,
+              }),
             }),
           ],
         }),

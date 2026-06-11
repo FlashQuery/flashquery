@@ -10,22 +10,34 @@ export interface FlashQueryConfig {
   server: { host: string; port: number; url?: string };
   supabase: { url: string; serviceRoleKey: string; databaseUrl: string; skipDdl: boolean };
   git: { autoCommit: boolean; autoPush: boolean; remote: string; branch: string };
-  mcp: { transport: 'stdio' | 'streamable-http'; host?: string; port?: number; authSecret?: string; tokenLifetime?: number };
+  mcp: {
+    transport: 'stdio' | 'streamable-http';
+    host?: string;
+    port?: number;
+    authSecret?: string;
+    tokenLifetime?: number;
+  };
   locking: { enabled: boolean; lockTimeoutSeconds: number };
   trashFolder: { enabled: boolean; path: string; collisionStrategy: 'suffix' | 'timestamp' };
   hostMcpTools?: { tools?: string[]; excludedTools?: string[] };
-  mcpServers: Record<string, {
-    transport: 'stdio';
-    command: string;
-    args: string[];
-    env: Record<string, string>;
-    costPerCall: number;
-    perCallTimeoutMs: number;
-    toolOverrides: Record<string, {
-      costPerCall?: number;
-      descriptionOverride?: string;
-    }>;
-  }>;
+  mcpServers: Record<
+    string,
+    {
+      transport: 'stdio';
+      command: string;
+      args: string[];
+      env: Record<string, string>;
+      costPerCall: number;
+      perCallTimeoutMs: number;
+      toolOverrides: Record<
+        string,
+        {
+          costPerCall?: number;
+          descriptionOverride?: string;
+        }
+      >;
+    }
+  >;
   host: { mcpServers: string[]; toolSearch: 'enabled' | 'disabled' };
   templates?: {
     defaultAccess: 'permissive' | 'restrictive';
@@ -34,7 +46,14 @@ export interface FlashQueryConfig {
   };
   macro: { defaultTimeoutMs: number };
   llm?: {
-    providers: Array<{ name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; apiKey?: string; local?: boolean; timeoutMs?: number }>;
+    providers: Array<{
+      name: string;
+      type: 'openai-compatible' | 'ollama';
+      endpoint: string;
+      apiKey?: string;
+      local?: boolean;
+      timeoutMs?: number;
+    }>;
     models: Array<{
       name: string;
       providerName: string;
@@ -79,6 +98,9 @@ export interface FlashQueryConfig {
       maxInputChars?: number;
     }>;
   }>;
+  embeddingLifecycle?: {
+    lockStaleMs: number;
+  };
   embedding?: {
     provider: string;
     model: string;

@@ -1,17 +1,31 @@
 import type { FlashQueryConfig } from '../../config/loader.js';
-import type { MaintenanceLifecycleActionResult } from '../../mcp/utils/response-formats.js';
+import type {
+  ErrorEnvelope,
+  MaintenanceLifecycleActionResult,
+} from '../../mcp/utils/response-formats.js';
 import type { LifecycleJobRef } from './jobs.js';
 import type { LifecycleBaseInput, LifecycleScope, RebuildLifecycleCounts } from './types.js';
-import { runCoreLifecycle, type CoreLifecycleResult } from './core-processor.js';
+import {
+  resolveCoreLifecycleWorkPlan,
+  runCoreLifecycle,
+  type CoreLifecycleResult,
+} from './core-processor.js';
+import { acquireLifecycleJob, completeLifecycleJob, failLifecycleJob } from './jobs.js';
 import {
   estimateRecordLifecycleRows,
   executeRecordLifecycleWorkUnits,
+  type RecordLifecycleExecutionResult,
+  type RecordLifecycleResolution,
   reindexRecordTables,
   resolveRecordLifecycleWorkUnits,
+  resolveSingleRecordLifecycleEmbeddingName,
 } from './records-scope.js';
-import { resolveRebuildConfirmFromResolvedWorkUnits } from './scope.js';
+import { resolveRebuildConfirmFromResolvedWorkUnits, validateMaxRows } from './scope.js';
 
 const RECORDS_ONLY = ['records'];
+type RecordExecutionOrError =
+  | { ok: true; payload: RecordLifecycleExecutionResult }
+  | { ok: false; error: ErrorEnvelope };
 
 export async function runRebuildEmbeddings(
   config: FlashQueryConfig,
@@ -40,7 +54,9 @@ export async function runRebuildEmbeddings(
             started_at: startedAt,
             finished_at: new Date().toISOString(),
             dry_run: true,
-            ...(confirm.payload.expected_confirm === null ? {} : { embedding_name: confirm.payload.expected_confirm }),
+            ...(confirm.payload.expected_confirm === null
+              ? {}
+              : { embedding_name: confirm.payload.expected_confirm }),
             counts: {
               rows_examined: resolved.payload.rows_in_scope,
               rows_embedded: 0,
@@ -59,11 +75,17 @@ export async function runRebuildEmbeddings(
               rows_failed: 0,
               rows_skipped_no_embedding: unit.rows_skipped_no_embedding,
             })),
-          } as MaintenanceLifecycleActionResult,
+          },
         };
       }
 
-      const records = await executeRecordLifecycleWorkUnits({ config, workUnits: resolved.payload.work_units });
+      const recordsResult = await executeRebuildRecordsWithOptionalJob(
+        config,
+        resolved.payload,
+        backgroundJob
+      );
+      if (!recordsResult.ok) return { ok: false, error: recordsResult.error };
+      const records = recordsResult.payload;
       if (records.affected_tables.size > 0) {
         await reindexRecordTables(config, resolved.payload.work_units, records.affected_tables);
       }
@@ -74,7 +96,9 @@ export async function runRebuildEmbeddings(
           started_at: startedAt,
           finished_at: new Date().toISOString(),
           dry_run: false,
-          ...(confirm.payload.expected_confirm === null ? {} : { embedding_name: confirm.payload.expected_confirm }),
+          ...(confirm.payload.expected_confirm === null
+            ? {}
+            : { embedding_name: confirm.payload.expected_confirm }),
           counts: {
             rows_examined: records.rows_examined,
             rows_embedded: records.rows_embedded,
@@ -84,11 +108,20 @@ export async function runRebuildEmbeddings(
           ...(records.failures.length === 0 ? {} : { failures: records.failures }),
           ...(records.warnings.length === 0 ? {} : { warnings: records.warnings }),
           plugin_breakdown: records.plugin_breakdown,
-        } as MaintenanceLifecycleActionResult,
+        },
       };
     }
 
     const coreInput = { ...input, scope: withoutRecordsScope(input.scope) };
+    const corePlan = await resolveCoreLifecycleWorkPlan(config, coreInput, 'rebuild_embeddings');
+    if (!corePlan.ok) return corePlan;
+    const combinedCap = validateMaxRows(
+      'rebuild_embeddings',
+      corePlan.payload.rows.length + resolved.payload.rows_in_scope,
+      input.max_rows
+    );
+    if (!combinedCap.ok) return { ok: false, error: combinedCap.error };
+
     const core = await runCoreLifecycle({
       config,
       input: coreInput,
@@ -110,7 +143,10 @@ export async function runRebuildEmbeddings(
             rows_skipped_no_embedding: resolved.payload.rows_skipped_no_embedding,
           },
           would_process: (core.payload.would_process ?? 0) + resolved.payload.rows_in_scope,
-          estimated: mergeEstimates(core.payload.estimated, estimateRecordLifecycleRows(resolved.payload.work_units)),
+          estimated: mergeEstimates(
+            core.payload.estimated,
+            estimateRecordLifecycleRows(resolved.payload.work_units)
+          ),
           plugin_breakdown: resolved.payload.work_units.map((unit) => ({
             plugin_id: unit.plugin_id,
             plugin_instance: unit.plugin_instance,
@@ -121,12 +157,14 @@ export async function runRebuildEmbeddings(
             rows_failed: 0,
             rows_skipped_no_embedding: unit.rows_skipped_no_embedding,
           })),
-        } as MaintenanceLifecycleActionResult,
+        },
         aborted: core.aborted,
       };
     }
 
-    const records = await executeRecordLifecycleWorkUnits({ config, workUnits: resolved.payload.work_units });
+    const recordsResult = await executeRebuildRecordsWithOptionalJob(config, resolved.payload);
+    if (!recordsResult.ok) return { ok: false, error: recordsResult.error };
+    const records = recordsResult.payload;
     if (records.affected_tables.size > 0) {
       await reindexRecordTables(config, resolved.payload.work_units, records.affected_tables);
     }
@@ -147,8 +185,8 @@ export async function runRebuildEmbeddings(
         ...(failures.length === 0 ? {} : { failures }),
         ...(warnings.length === 0 ? {} : { warnings }),
         plugin_breakdown: records.plugin_breakdown,
-      } as MaintenanceLifecycleActionResult,
-      aborted: core.aborted,
+      },
+      aborted: core.aborted || records.aborted,
     };
   }
 
@@ -162,6 +200,67 @@ export async function runRebuildEmbeddings(
 
 export type RebuildEmbeddingsResult = MaintenanceLifecycleActionResult;
 
+async function executeRebuildRecordsWithOptionalJob(
+  config: FlashQueryConfig,
+  resolution: RecordLifecycleResolution,
+  backgroundJob?: LifecycleJobRef
+): Promise<RecordExecutionOrError> {
+  const jobName = resolveSingleRecordLifecycleEmbeddingName(resolution, 'rebuild_embeddings');
+  if (!jobName.ok) return jobName;
+  if (jobName.payload === null) {
+    return {
+      ok: true,
+      payload: await executeRecordLifecycleWorkUnits({ config, workUnits: resolution.work_units }),
+    };
+  }
+
+  const initialCounts = {
+    rows_examined: resolution.rows_in_scope,
+    rows_embedded: 0,
+    rows_failed: 0,
+    rows_skipped_no_embedding: resolution.rows_skipped_no_embedding,
+  };
+  const job =
+    backgroundJob ??
+    (await acquireLifecycleJob(config, {
+      action: 'rebuild_embeddings',
+      embedding_name: jobName.payload,
+      counts: initialCounts,
+      metadata: { dry_run: false, scope: 'records' },
+    }));
+  if (!('job_id' in job) && !job.ok) return job;
+  const jobRef = 'job_id' in job ? job : job.payload;
+
+  try {
+    const records = await executeRecordLifecycleWorkUnits({
+      config,
+      workUnits: resolution.work_units,
+      job: jobRef,
+    });
+    if (!records.aborted) {
+      await completeLifecycleJob(
+        config,
+        jobRef.job_id,
+        {
+          rows_examined: records.rows_examined,
+          rows_embedded: records.rows_embedded,
+          rows_failed: records.rows_failed,
+          rows_skipped_no_embedding: records.rows_skipped_no_embedding,
+        },
+        records.failures
+      );
+    }
+    return { ok: true, payload: records };
+  } catch (err) {
+    await failLifecycleJob(config, jobRef.job_id, {
+      error: 'runtime_error',
+      message: err instanceof Error ? err.message : String(err),
+      identifier: jobName.payload,
+    }).catch(() => undefined);
+    throw err;
+  }
+}
+
 function isPureRecordsScope(scope: LifecycleBaseInput['scope']): boolean {
   return JSON.stringify(scope?.entity_types ?? []) === JSON.stringify(RECORDS_ONLY);
 }
@@ -173,11 +272,16 @@ function hasRecordsScope(scope: LifecycleBaseInput['scope']): boolean {
 function withoutRecordsScope(scope: LifecycleScope | undefined): LifecycleScope {
   return {
     ...(scope ?? {}),
-    entity_types: scope?.entity_types?.filter((entity) => entity !== 'records') ?? ['documents', 'memory'],
+    entity_types: scope?.entity_types?.filter((entity) => entity !== 'records') ?? [
+      'documents',
+      'memory',
+    ],
   };
 }
 
-function asRebuildCounts(counts: MaintenanceLifecycleActionResult['counts']): RebuildLifecycleCounts {
+function asRebuildCounts(
+  counts: MaintenanceLifecycleActionResult['counts']
+): RebuildLifecycleCounts {
   if ('rows_examined' in counts) {
     return {
       rows_examined: counts.rows_examined,

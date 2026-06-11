@@ -9,7 +9,10 @@ export const LIFECYCLE_ACTIONS = [
 
 export type LifecycleAction = (typeof LIFECYCLE_ACTIONS)[number];
 export type LifecycleEmbeddingAction = Exclude<LifecycleAction, 'abort'>;
-export type LifecycleRunnableAction = 'backfill_embeddings' | 'rebuild_embeddings' | 'retire_embedding';
+export type LifecycleRunnableAction =
+  | 'backfill_embeddings'
+  | 'rebuild_embeddings'
+  | 'retire_embedding';
 
 export type LifecycleEntityType = 'documents' | 'memory' | 'records';
 
@@ -53,7 +56,7 @@ export interface LifecycleFailure {
 
 export interface LifecycleEstimate {
   input_tokens?: number;
-  cost_usd?: number;
+  cost_usd?: number | null;
   wall_time_seconds?: number;
   cost_basis?: string;
 }
@@ -86,7 +89,10 @@ export interface RetireLifecycleCounts {
   catalog_rows_deleted: number;
 }
 
-export type LifecycleCounts = BackfillLifecycleCounts | RebuildLifecycleCounts | RetireLifecycleCounts;
+export type LifecycleCounts =
+  | BackfillLifecycleCounts
+  | RebuildLifecycleCounts
+  | RetireLifecycleCounts;
 
 export interface LifecycleActionResultBase {
   action: LifecycleAction;
@@ -106,7 +112,9 @@ export interface MaxRowsValidationSuccess {
   unlimited: boolean;
 }
 
-export type LifecycleValidationResult<T> = { ok: true; payload: T } | { ok: false; error: ErrorEnvelope };
+export type LifecycleValidationResult<T> =
+  | { ok: true; payload: T }
+  | { ok: false; error: ErrorEnvelope };
 
 export interface ResolvedRebuildConfirmInput {
   action: 'rebuild_embeddings';

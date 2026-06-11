@@ -26,7 +26,10 @@ import type {
 } from './types.js';
 import { validateEmbeddingSqlName } from '../../storage/supabase.js';
 import { withPgClient } from '../../utils/pg-client.js';
-import type { ErrorEnvelope, MaintenanceLifecycleActionResult } from '../../mcp/utils/response-formats.js';
+import type {
+  ErrorEnvelope,
+  MaintenanceLifecycleActionResult,
+} from '../../mcp/utils/response-formats.js';
 import {
   acquireLifecycleJob,
   completeLifecycleJob,
@@ -54,6 +57,13 @@ export type CoreLifecycleJobPrepareResult =
   | { ok: true; payload: LifecycleJobRef }
   | { ok: false; error: ErrorEnvelope };
 
+export interface CoreLifecycleWorkPlan {
+  embeddingName: string;
+  catalog: CatalogRow;
+  rows: CoreWorkRow[];
+  skippedAlreadyPresent: number;
+}
+
 interface CatalogRow extends EmbeddingCatalogProviderEntry {
   status: 'active' | 'deactivated';
 }
@@ -74,106 +84,65 @@ type LifecycleCounts = BackfillLifecycleCounts | RebuildLifecycleCounts;
 
 const COST_BASIS = 'unavailable_provider_pricing_metadata';
 
-export async function prepareCoreLifecycleJob(options: CoreLifecycleOptions): Promise<CoreLifecycleJobPrepareResult> {
+export async function prepareCoreLifecycleJob(
+  options: CoreLifecycleOptions
+): Promise<CoreLifecycleJobPrepareResult> {
   const { config, input, mode } = options;
   const databaseUrl = requireDatabaseUrl(config);
   if (!databaseUrl.ok) return databaseUrl;
 
   if (hasRecordsScope(input.scope)) {
-    return unsupported('records scope lifecycle processing is deferred to Plan 167-05', String(input.action), {
-      reason: 'records_scope_deferred',
-      supported_entity_types: ['documents', 'memory'],
-    });
+    return unsupported(
+      'records scope lifecycle processing is deferred to Plan 167-05',
+      String(input.action),
+      {
+        reason: 'records_scope_deferred',
+        supported_entity_types: ['documents', 'memory'],
+      }
+    );
   }
 
-  const embeddingName = input.embedding_name;
-  if (embeddingName === undefined || embeddingName.length === 0) {
-    return invalidInput('embedding_name is required for core document and memory lifecycle actions', 'embedding_name', {
-      action: input.action,
-    });
-  }
-
-  try {
-    validateEmbeddingSqlName(embeddingName);
-  } catch (err) {
-    return invalidInput(err instanceof Error ? err.message : String(err), 'embedding_name', {
-      embedding_name: embeddingName,
-    });
-  }
-
-  const catalog = await loadCatalogEntry(config, embeddingName);
-  if (!catalog.ok) return catalog;
-  if (catalog.payload.status !== 'active') {
-    return unsupported(`Embedding catalog entry '${embeddingName}' is deactivated`, embeddingName, {
-      status: catalog.payload.status,
-    });
-  }
-
-  const rows = await selectRows(config, input.scope, catalog.payload, mode, {
-    staleOnly: input.stale_only === true,
-    mismatchedWidthOnly: input.mismatched_width_only === true,
-  });
-  const skippedAlreadyPresent = mode === 'backfill_embeddings'
-    ? await countAlreadyPresent(config, input.scope, embeddingName)
-    : 0;
-  const cap = validateMaxRows(mode, rows.length, input.max_rows);
+  const plan = await resolveCoreLifecycleWorkPlan(config, input, mode);
+  if (!plan.ok) return plan;
+  const cap = validateMaxRows(mode, plan.payload.rows.length, input.max_rows);
   if (!cap.ok) return { ok: false, error: cap.error };
 
   return await acquireLifecycleJob(config, {
     action: mode,
-    embedding_name: embeddingName,
-    counts: countsRecord(initialCounts(mode, rows.length, skippedAlreadyPresent)),
+    embedding_name: plan.payload.embeddingName,
+    counts: countsRecord(
+      initialCounts(mode, plan.payload.rows.length, plan.payload.skippedAlreadyPresent)
+    ),
     metadata: { dry_run: false, background: true },
   });
 }
 
-export async function runCoreLifecycle(options: CoreLifecycleOptions): Promise<CoreLifecycleResult> {
+export async function runCoreLifecycle(
+  options: CoreLifecycleOptions
+): Promise<CoreLifecycleResult> {
   const { config, input, mode } = options;
   const startedAt = new Date().toISOString();
   const databaseUrl = requireDatabaseUrl(config);
   if (!databaseUrl.ok) return databaseUrl;
 
   if (hasRecordsScope(input.scope)) {
-    return unsupported('records scope lifecycle processing is deferred to Plan 167-05', String(input.action), {
-      reason: 'records_scope_deferred',
-      supported_entity_types: ['documents', 'memory'],
-    });
+    return unsupported(
+      'records scope lifecycle processing is deferred to Plan 167-05',
+      String(input.action),
+      {
+        reason: 'records_scope_deferred',
+        supported_entity_types: ['documents', 'memory'],
+      }
+    );
   }
 
-  const embeddingName = input.embedding_name;
-  if (embeddingName === undefined || embeddingName.length === 0) {
-    return invalidInput('embedding_name is required for core document and memory lifecycle actions', 'embedding_name', {
-      action: input.action,
-    });
-  }
-
-  try {
-    validateEmbeddingSqlName(embeddingName);
-  } catch (err) {
-    return invalidInput(err instanceof Error ? err.message : String(err), 'embedding_name', {
-      embedding_name: embeddingName,
-    });
-  }
-
-  const catalog = await loadCatalogEntry(config, embeddingName);
-  if (!catalog.ok) return catalog;
-  if (catalog.payload.status !== 'active') {
-    return unsupported(`Embedding catalog entry '${embeddingName}' is deactivated`, embeddingName, {
-      status: catalog.payload.status,
-    });
-  }
-
-  const rows = await selectRows(config, input.scope, catalog.payload, mode, {
-    staleOnly: input.stale_only === true,
-    mismatchedWidthOnly: input.mismatched_width_only === true,
-  });
-  const skippedAlreadyPresent = mode === 'backfill_embeddings'
-    ? await countAlreadyPresent(config, input.scope, embeddingName)
-    : 0;
+  const plan = await resolveCoreLifecycleWorkPlan(config, input, mode);
+  if (!plan.ok) return plan;
+  const { embeddingName, catalog, rows, skippedAlreadyPresent } = plan.payload;
   const cap = validateMaxRows(mode, rows.length, input.max_rows);
   if (!cap.ok) return { ok: false, error: cap.error };
 
-  const estimate = estimateRows(rows, catalog.payload);
+  const estimate = estimateRows(rows, catalog);
   if (input.dry_run === true) {
     return {
       ok: true,
@@ -190,17 +159,19 @@ export async function runCoreLifecycle(options: CoreLifecycleOptions): Promise<C
     };
   }
 
-  const acquired = options.backgroundJob ?? await acquireLifecycleJob(config, {
-    action: mode,
-    embedding_name: embeddingName,
-    counts: countsRecord(initialCounts(mode, rows.length, skippedAlreadyPresent)),
-    metadata: { dry_run: false },
-  });
+  const acquired =
+    options.backgroundJob ??
+    (await acquireLifecycleJob(config, {
+      action: mode,
+      embedding_name: embeddingName,
+      counts: countsRecord(initialCounts(mode, rows.length, skippedAlreadyPresent)),
+      metadata: { dry_run: false },
+    }));
   if (!('job_id' in acquired)) {
     if (!acquired.ok) return acquired;
   }
   const job = 'job_id' in acquired ? acquired : acquired.payload;
-  const provider = createEmbeddingProviderForCatalogEntry(config, catalog.payload);
+  const provider = createEmbeddingProviderForCatalogEntry(config, catalog);
   const counts = initialCounts(mode, rows.length, skippedAlreadyPresent);
   const failures: LifecycleFailure[] = [];
   const warnings = new Set<string>();
@@ -250,7 +221,12 @@ export async function runCoreLifecycle(options: CoreLifecycleOptions): Promise<C
         affectedTables.add(tableForEntity(row.entity_type));
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        failures.push({ entity_type: row.entity_type, identifier: row.label, message, error: message });
+        failures.push({
+          entity_type: row.entity_type,
+          identifier: row.label,
+          message,
+          error: message,
+        });
         counts.rows_failed += 1;
       }
 
@@ -281,9 +257,122 @@ export async function runCoreLifecycle(options: CoreLifecycleOptions): Promise<C
       message: err instanceof Error ? err.message : String(err),
       identifier: embeddingName,
     };
-    await failLifecycleJob(config, job.job_id, error, countsRecord(counts), failures).catch(() => undefined);
+    await failLifecycleJob(config, job.job_id, error, countsRecord(counts), failures).catch(
+      () => undefined
+    );
     return { ok: false, error };
   }
+}
+
+export async function resolveCoreLifecycleWorkPlan(
+  config: FlashQueryConfig,
+  input: LifecycleBaseInput & { action: CoreLifecycleKind },
+  mode: CoreLifecycleKind
+): Promise<{ ok: true; payload: CoreLifecycleWorkPlan } | { ok: false; error: ErrorEnvelope }> {
+  const embeddingName = await resolveCoreEmbeddingName(config, input.embedding_name);
+  if (!embeddingName.ok) return embeddingName;
+
+  if (mode === 'rebuild_embeddings' && input.confirm !== embeddingName.payload) {
+    return invalidInput('confirm must match embedding_name for rebuild_embeddings', 'confirm', {
+      expected_confirm: embeddingName.payload,
+      received_confirm: input.confirm,
+    });
+  }
+
+  try {
+    validateEmbeddingSqlName(embeddingName.payload);
+  } catch (err) {
+    return invalidInput(err instanceof Error ? err.message : String(err), 'embedding_name', {
+      embedding_name: embeddingName.payload,
+    });
+  }
+
+  const catalog = await loadCatalogEntry(config, embeddingName.payload);
+  if (!catalog.ok) return catalog;
+  if (catalog.payload.status !== 'active') {
+    return unsupported(
+      `Embedding catalog entry '${embeddingName.payload}' is deactivated`,
+      embeddingName.payload,
+      {
+        status: catalog.payload.status,
+      }
+    );
+  }
+
+  const rows = await selectRows(config, input.scope, catalog.payload, mode, {
+    staleOnly: input.stale_only === true,
+    mismatchedWidthOnly: input.mismatched_width_only === true,
+  });
+  const skippedAlreadyPresent =
+    mode === 'backfill_embeddings'
+      ? await countAlreadyPresent(config, input.scope, embeddingName.payload)
+      : 0;
+
+  return {
+    ok: true,
+    payload: {
+      embeddingName: embeddingName.payload,
+      catalog: catalog.payload,
+      rows,
+      skippedAlreadyPresent,
+    },
+  };
+}
+
+async function resolveCoreEmbeddingName(
+  config: FlashQueryConfig,
+  requested: string | undefined
+): Promise<{ ok: true; payload: string } | { ok: false; error: ErrorEnvelope }> {
+  if (requested !== undefined && requested.length > 0) {
+    return { ok: true, payload: requested };
+  }
+
+  const active = await loadActiveCatalogEntries(config);
+  if (!active.ok) return active;
+  if (active.payload.length === 1) {
+    const [entry] = active.payload;
+    return { ok: true, payload: entry.name };
+  }
+
+  return {
+    ok: false,
+    error: {
+      error: active.payload.length === 0 ? 'invalid_input' : 'ambiguous_identifier',
+      message:
+        active.payload.length === 0
+          ? 'No active embedding catalog entries are available for core lifecycle actions'
+          : 'embedding_name is required when multiple active embedding catalog entries exist',
+      identifier: 'embedding_name',
+      details: {
+        active_embeddings: active.payload.map((entry) => entry.name),
+      },
+    },
+  };
+}
+
+async function loadActiveCatalogEntries(
+  config: FlashQueryConfig
+): Promise<{ ok: true; payload: CatalogRow[] } | { ok: false; error: ErrorEnvelope }> {
+  const result = await withPgClient(config.supabase.databaseUrl, async (client) =>
+    client.query<CatalogRow>(
+      `
+      SELECT name, dimensions, endpoints, status
+      FROM fqc_embeddings
+      WHERE instance_id = $1 AND status = 'active'
+      ORDER BY name ASC
+      `,
+      [config.instance.id]
+    )
+  );
+  return {
+    ok: true,
+    payload: result.rows.map((row) => ({
+      name: row.name,
+      dimensions: row.dimensions,
+      endpoints: Array.isArray(row.endpoints) ? row.endpoints : [],
+      status: row.status,
+    })),
+  };
 }
 
 async function loadCatalogEntry(
@@ -348,17 +437,23 @@ async function selectRows(
       predicates.push(`${pg.escapeIdentifier(baseColumn)} IS NULL`);
     } else {
       if (filters.staleOnly) {
-        const models = [...new Set(entry.endpoints.map((endpoint) => endpoint.model).filter(Boolean))];
+        const models = [
+          ...new Set(entry.endpoints.map((endpoint) => endpoint.model).filter(Boolean)),
+        ];
         if (models.length === 0) {
           predicates.push(`${pg.escapeIdentifier(`${baseColumn}_model`)} IS NULL`);
         } else {
           values.push(models);
-          predicates.push(`(${pg.escapeIdentifier(`${baseColumn}_model`)} IS NULL OR ${pg.escapeIdentifier(`${baseColumn}_model`)} <> ALL($${values.length}::text[]))`);
+          predicates.push(
+            `(${pg.escapeIdentifier(`${baseColumn}_model`)} IS NULL OR ${pg.escapeIdentifier(`${baseColumn}_model`)} <> ALL($${values.length}::text[]))`
+          );
         }
       }
       if (filters.mismatchedWidthOnly) {
         values.push(entry.dimensions);
-        predicates.push(`(${pg.escapeIdentifier(`${baseColumn}_dimensions`)} IS NULL OR ${pg.escapeIdentifier(`${baseColumn}_dimensions`)} <> $${values.length})`);
+        predicates.push(
+          `(${pg.escapeIdentifier(`${baseColumn}_dimensions`)} IS NULL OR ${pg.escapeIdentifier(`${baseColumn}_dimensions`)} <> $${values.length})`
+        );
       }
     }
 
@@ -381,7 +476,7 @@ async function selectRows(
       rows.push({
         entity_type: entity,
         id,
-        label: entity === 'documents' ? String(row.path ?? id) : id,
+        label: entity === 'documents' && typeof row.path === 'string' ? row.path : id,
         title: typeof row.title === 'string' ? row.title : undefined,
         path: typeof row.path === 'string' ? row.path : undefined,
         content: typeof row.content === 'string' ? row.content : undefined,
@@ -402,7 +497,11 @@ async function countAlreadyPresent(
   let total = 0;
   for (const entity of coreEntityTypes(scope)) {
     const table = tableForEntity(entity);
-    const predicates = [`instance_id = $1`, `status = 'active'`, `${pg.escapeIdentifier(`embedding_${embeddingName}`)} IS NOT NULL`];
+    const predicates = [
+      `instance_id = $1`,
+      `status = 'active'`,
+      `${pg.escapeIdentifier(`embedding_${embeddingName}`)} IS NOT NULL`,
+    ];
     const values: unknown[] = [config.instance.id];
     if (entity === 'memory') predicates.push(`is_latest = true`);
     if (scope?.path_prefix && entity === 'documents') {
@@ -421,8 +520,8 @@ async function countAlreadyPresent(
 }
 
 function coreEntityTypes(scope: LifecycleScope | undefined): Array<'documents' | 'memory'> {
-  const requested = scope?.entity_types?.filter((entity): entity is 'documents' | 'memory' =>
-    entity === 'documents' || entity === 'memory'
+  const requested = scope?.entity_types?.filter(
+    (entity): entity is 'documents' | 'memory' => entity === 'documents' || entity === 'memory'
   );
   return requested && requested.length > 0 ? [...new Set(requested)] : ['documents', 'memory'];
 }
@@ -472,15 +571,19 @@ async function buildEmbedText(config: FlashQueryConfig, row: CoreWorkRow): Promi
 
 function estimateRows(rows: CoreWorkRow[], entry: CatalogRow): LifecycleEstimate {
   const totalChars = rows.reduce((sum, row) => {
-    const approx = row.entity_type === 'documents'
-      ? `${row.title ?? ''}\n\n${row.path ?? ''}`.length
-      : (row.content ?? '').length;
+    const approx =
+      row.entity_type === 'documents'
+        ? `${row.title ?? ''}\n\n${row.path ?? ''}`.length
+        : (row.content ?? '').length;
     return sum + approx;
   }, 0);
-  const maxDelayMs = entry.endpoints.reduce((max, endpoint) => Math.max(max, endpointMinDelayMs(endpoint)), 0);
+  const maxDelayMs = entry.endpoints.reduce(
+    (max, endpoint) => Math.max(max, endpointMinDelayMs(endpoint)),
+    0
+  );
   return {
     input_tokens: Math.ceil(totalChars / 4),
-    cost_usd: null as unknown as number,
+    cost_usd: null,
     wall_time_seconds: Math.ceil((rows.length * maxDelayMs) / 1000),
     cost_basis: COST_BASIS,
   };
@@ -500,7 +603,11 @@ function collectProviderWarnings(provider: EmbeddingProvider, warnings: Set<stri
 
 function targetForRow(config: FlashQueryConfig, row: CoreWorkRow) {
   if (row.entity_type === 'documents') {
-    return documentEmbeddingTarget({ instanceId: config.instance.id, id: row.id, label: row.label });
+    return documentEmbeddingTarget({
+      instanceId: config.instance.id,
+      id: row.id,
+      label: row.label,
+    });
   }
   return memoryEmbeddingTarget({ instanceId: config.instance.id, id: row.id, label: row.label });
 }
@@ -516,18 +623,23 @@ async function reindexAffectedTables(
 ): Promise<void> {
   await withPgClient(config.supabase.databaseUrl, async (client) => {
     for (const table of tables) {
-      await client.query(`REINDEX INDEX ${pg.escapeIdentifier(`idx_${table}_embedding_${embeddingName}`)}`);
+      await client.query(
+        `REINDEX INDEX ${pg.escapeIdentifier(`idx_${table}_embedding_${embeddingName}`)}`
+      );
     }
   });
 }
 
-function requireDatabaseUrl(config: FlashQueryConfig): { ok: true; payload: string } | { ok: false; error: ErrorEnvelope } {
+function requireDatabaseUrl(
+  config: FlashQueryConfig
+): { ok: true; payload: string } | { ok: false; error: ErrorEnvelope } {
   if (!config.supabase.databaseUrl) {
     return {
       ok: false,
       error: {
         error: 'invalid_input',
-        message: 'Embedding lifecycle actions require supabase.databaseUrl for direct PostgreSQL access',
+        message:
+          'Embedding lifecycle actions require supabase.databaseUrl for direct PostgreSQL access',
         identifier: 'supabase.databaseUrl',
         details: { reason: 'direct_postgresql_required' },
       },

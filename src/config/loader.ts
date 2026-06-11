@@ -7,10 +7,7 @@ import type { FlashQueryConfig } from './types.js';
 import { validateAllPurposeMode2Admissions } from '../llm/capabilities.js';
 import { HARD_EXCLUDED_NATIVE_TOOLS, TOOL_TIERS } from '../llm/tool-policy.js';
 import { getLegacyToolSuggestion, getToolMetadata } from '../mcp/tool-metadata.js';
-import {
-  resolveHostToolExposure,
-  type ResolvedHostToolExposure,
-} from '../mcp/tool-exposure.js';
+import { resolveHostToolExposure, type ResolvedHostToolExposure } from '../mcp/tool-exposure.js';
 import { logger } from '../logging/logger.js';
 
 export type { FlashQueryConfig } from './types.js';
@@ -35,7 +32,6 @@ const InstanceSchema = z
     vault: VaultSchema,
   })
   .strip();
-
 
 const ServerSchema = z
   .object({
@@ -136,8 +132,8 @@ const ModelCapabilitiesSchema = z
   })
   .strict();
 
-const ModelSchema = z
-  .preprocess((raw) => {
+const ModelSchema = z.preprocess(
+  (raw) => {
     if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return raw;
     const model = { ...(raw as Record<string, unknown>) };
     if (Array.isArray(model['capabilities'])) {
@@ -145,7 +141,9 @@ const ModelSchema = z
       delete model['capabilities'];
     }
     return model;
-  }, z.object({
+  },
+  z
+    .object({
       name: z.string(),
       provider_name: z.string(),
       model: z.string(),
@@ -157,7 +155,8 @@ const ModelSchema = z
       tags: z.array(z.string()).optional(),
       capabilities: ModelCapabilitiesSchema.optional(),
     })
-    .strip());
+    .strip()
+);
 
 const LOOP_GUARDRAIL_DEFAULT_KEYS = [
   'timeout_ms',
@@ -229,6 +228,17 @@ const EmbeddingCatalogEntrySchema = z
   .strip();
 
 const EmbeddingsSchema = z.array(EmbeddingCatalogEntrySchema).optional();
+
+const EmbeddingLifecycleSchema = z
+  .object({
+    lock_stale_ms: z
+      .number()
+      .int()
+      .positive()
+      .default(5 * 60 * 1_000),
+  })
+  .strip()
+  .prefault({});
 
 const EmbeddingSchema = z
   .object({
@@ -316,6 +326,7 @@ const ConfigSchema = z
     host: HostSchema,
     llm: LlmSchema,
     embeddings: EmbeddingsSchema,
+    embedding_lifecycle: EmbeddingLifecycleSchema,
     host_mcp_tools: HostMcpToolsSchema.optional(),
     templates: TemplatesSchema,
     embedding: EmbeddingSchema.optional(),
@@ -427,7 +438,7 @@ function snakeToCamel(obj: unknown): unknown {
 }
 
 function camelizeBrokerServers(
-  servers: RawBrokerConfig['mcp_servers'],
+  servers: RawBrokerConfig['mcp_servers']
 ): FlashQueryConfig['mcpServers'] {
   const camelized = snakeToCamel(servers) as FlashQueryConfig['mcpServers'];
   const out: FlashQueryConfig['mcpServers'] = {};
@@ -441,7 +452,7 @@ function camelizeBrokerServers(
         Object.entries(rawToolOverrides).map(([toolName, override]) => [
           toolName,
           snakeToCamel(override) as FlashQueryConfig['mcpServers'][string]['toolOverrides'][string],
-        ]),
+        ])
       ),
     };
   }
@@ -460,9 +471,11 @@ const FIELD_HINTS: Record<string, string> = {
   'instance.id': 'Add a unique identifier for this FlashQuery instance (e.g., "i-abc123").',
   'instance.name': 'Add a human-readable name for this instance (e.g., "My Knowledge Base").',
   'instance.vault.path': 'Add the path to your vault directory (e.g., "/Users/name/vault").',
-  'instance.vault.markdown_extensions': 'Optional: array of file extensions to index (default: [".md"]).',
+  'instance.vault.markdown_extensions':
+    'Optional: array of file extensions to index (default: [".md"]).',
   'llm.providers': 'LLM providers must be an array of {name, type, endpoint} objects.',
-  'llm.models': 'LLM models must be an array of {name, provider_name, model, type, cost_per_million} objects.',
+  'llm.models':
+    'LLM models must be an array of {name, provider_name, model, type, cost_per_million} objects.',
   'llm.purposes': 'LLM purposes must be an array of {name, description, models} objects.',
 };
 
@@ -496,7 +509,13 @@ function formatZodErrors(issues: ZodIssue[]): string {
 // LLM config normalization & validation (v3.0)
 // ─────────────────────────────────────────────────────────────────────────────
 
-type RawLlmProvider = { name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; api_key?: string; local?: boolean };
+type RawLlmProvider = {
+  name: string;
+  type: 'openai-compatible' | 'ollama';
+  endpoint: string;
+  api_key?: string;
+  local?: boolean;
+};
 type RawLlmModel = {
   name: string;
   provider_name: string;
@@ -552,7 +571,11 @@ function normalizeEmbeddingProviderNames(embeddings: RawEmbeddingCatalogEntry[])
   }
 }
 
-type LlmValidationError = { layer: 'provider' | 'model' | 'purpose' | 'cross-ref'; name: string; message: string };
+type LlmValidationError = {
+  layer: 'provider' | 'model' | 'purpose' | 'cross-ref';
+  name: string;
+  message: string;
+};
 
 /**
  * Validates LLM config after normalization. Returns an array of errors (empty = valid).
@@ -571,17 +594,29 @@ function validateLlmConfig(llm: RawLlm): LlmValidationError[] {
   // CONF-01: name format validation
   for (const p of llm.providers) {
     if (!namePattern.test(p.name)) {
-      errors.push({ layer: 'provider', name: p.name, message: `Provider name '${p.name}' must match [a-z0-9][a-z0-9_-]*` });
+      errors.push({
+        layer: 'provider',
+        name: p.name,
+        message: `Provider name '${p.name}' must match [a-z0-9][a-z0-9_-]*`,
+      });
     }
   }
   for (const m of llm.models) {
     if (!namePattern.test(m.name)) {
-      errors.push({ layer: 'model', name: m.name, message: `Model name '${m.name}' must match [a-z0-9][a-z0-9_-]*` });
+      errors.push({
+        layer: 'model',
+        name: m.name,
+        message: `Model name '${m.name}' must match [a-z0-9][a-z0-9_-]*`,
+      });
     }
   }
   for (const pu of llm.purposes) {
     if (!namePattern.test(pu.name)) {
-      errors.push({ layer: 'purpose', name: pu.name, message: `Purpose name '${pu.name}' must match [a-z0-9][a-z0-9_-]*` });
+      errors.push({
+        layer: 'purpose',
+        name: pu.name,
+        message: `Purpose name '${pu.name}' must match [a-z0-9][a-z0-9_-]*`,
+      });
     }
   }
 
@@ -589,19 +624,34 @@ function validateLlmConfig(llm: RawLlm): LlmValidationError[] {
   const providerCount = new Map<string, number>();
   for (const p of llm.providers) providerCount.set(p.name, (providerCount.get(p.name) ?? 0) + 1);
   for (const [name, count] of providerCount) {
-    if (count > 1) errors.push({ layer: 'provider', name, message: `Duplicate provider name '${name}' appears ${count} times (case-insensitive)` });
+    if (count > 1)
+      errors.push({
+        layer: 'provider',
+        name,
+        message: `Duplicate provider name '${name}' appears ${count} times (case-insensitive)`,
+      });
   }
 
   const modelCount = new Map<string, number>();
   for (const m of llm.models) modelCount.set(m.name, (modelCount.get(m.name) ?? 0) + 1);
   for (const [name, count] of modelCount) {
-    if (count > 1) errors.push({ layer: 'model', name, message: `Duplicate model name '${name}' appears ${count} times (case-insensitive)` });
+    if (count > 1)
+      errors.push({
+        layer: 'model',
+        name,
+        message: `Duplicate model name '${name}' appears ${count} times (case-insensitive)`,
+      });
   }
 
   const purposeCount = new Map<string, number>();
   for (const pu of llm.purposes) purposeCount.set(pu.name, (purposeCount.get(pu.name) ?? 0) + 1);
   for (const [name, count] of purposeCount) {
-    if (count > 1) errors.push({ layer: 'purpose', name, message: `Duplicate purpose name '${name}' appears ${count} times (case-insensitive)` });
+    if (count > 1)
+      errors.push({
+        layer: 'purpose',
+        name,
+        message: `Duplicate purpose name '${name}' appears ${count} times (case-insensitive)`,
+      });
   }
 
   // CONF-03: every model.provider_name must resolve to a defined provider name
@@ -634,7 +684,11 @@ function validateLlmConfig(llm: RawLlm): LlmValidationError[] {
     const tools = pu.tools ?? [];
     const excludedTools = pu.excluded_tools ?? [];
     if (excludedTools.length > 0 && tools.length === 0) {
-      errors.push({ layer: 'purpose', name: pu.name, message: `purpose '${pu.name}' excluded_tools requires tools` });
+      errors.push({
+        layer: 'purpose',
+        name: pu.name,
+        message: `purpose '${pu.name}' excluded_tools requires tools`,
+      });
     }
 
     for (const tool of [...tools, ...excludedTools]) {
@@ -665,8 +719,9 @@ function validateLlmConfig(llm: RawLlm): LlmValidationError[] {
 function warnHardExcludedPurposeTools(llm: RawLlm): void {
   const hardExcluded = new Set<string>(HARD_EXCLUDED_NATIVE_TOOLS);
   for (const pu of llm.purposes) {
-    const hardExcludedTools = [...(pu.tools ?? []), ...(pu.excluded_tools ?? [])]
-      .filter((tool) => hardExcluded.has(tool));
+    const hardExcludedTools = [...(pu.tools ?? []), ...(pu.excluded_tools ?? [])].filter((tool) =>
+      hardExcluded.has(tool)
+    );
     for (const tool of hardExcludedTools) {
       logger?.warn(
         `Config: purpose '${pu.name}' lists hard-excluded native tool '${tool}'; it will be removed from the model-visible registry.`
@@ -681,7 +736,9 @@ function validateBrokerServerReferences(config: RawBrokerConfig): void {
 
   for (const serverId of config.host.mcp_servers) {
     if (!serverIds.has(serverId)) {
-      errors.push(`Config error: [host] host.mcp_servers references unknown MCP server '${serverId}'`);
+      errors.push(
+        `Config error: [host] host.mcp_servers references unknown MCP server '${serverId}'`
+      );
     }
   }
 
@@ -816,7 +873,7 @@ function rejectLegacyFields(raw: unknown): void {
   if ('projects' in obj) {
     throw new Error(
       "Config error: 'projects' configuration removed in v1.7. " +
-        "Scoping is now path-based (file location) + tag-based (characteristics). " +
+        'Scoping is now path-based (file location) + tag-based (characteristics). ' +
         "Remove the 'projects:' section from your config file."
     );
   }
@@ -826,7 +883,7 @@ function rejectLegacyFields(raw: unknown): void {
     if (defaults && typeof defaults === 'object' && 'project' in defaults) {
       throw new Error(
         "Config error: 'defaults.project' concept eliminated in v1.7. " +
-          "Use tags for categorization instead. " +
+          'Use tags for categorization instead. ' +
           "Remove the 'defaults:' section from your config file."
       );
     }
@@ -836,18 +893,23 @@ function rejectLegacyFields(raw: unknown): void {
     throw new Error(
       "Config error: Top-level 'vault:' section removed in v1.7. " +
         "Move vault configuration under 'instance.vault:' instead. " +
-        "See the migration guide for details."
+        'See the migration guide for details.'
     );
   }
 
   // CONF-06: detect pre-v3.0 flat llm: { provider, model } shape
-  if ('llm' in obj && obj['llm'] !== null && typeof obj['llm'] === 'object' && !Array.isArray(obj['llm'])) {
+  if (
+    'llm' in obj &&
+    obj['llm'] !== null &&
+    typeof obj['llm'] === 'object' &&
+    !Array.isArray(obj['llm'])
+  ) {
     const llm = obj['llm'] as Record<string, unknown>;
     if ('provider' in llm || 'model' in llm) {
       throw new Error(
         "Config error: The 'llm:' section uses the pre-v3.0 flat format (provider/model keys). " +
-        "Migrate to the three-layer format with providers:, models:, and purposes: arrays. " +
-        "See flashquery.example.yml for the new format."
+          'Migrate to the three-layer format with providers:, models:, and purposes: arrays. ' +
+          'See flashquery.example.yml for the new format.'
       );
     }
   }
@@ -901,7 +963,11 @@ export function loadConfig(configPath: string): FlashQueryConfig {
     'llm' in (raw as Record<string, unknown>)
   ) {
     const rawLlm = (raw as Record<string, unknown>)['llm'];
-    if (rawLlm !== null && typeof rawLlm === 'object' && 'providers' in (rawLlm as Record<string, unknown>)) {
+    if (
+      rawLlm !== null &&
+      typeof rawLlm === 'object' &&
+      'providers' in (rawLlm as Record<string, unknown>)
+    ) {
       const providers = (rawLlm as { providers?: unknown }).providers;
       if (Array.isArray(providers)) {
         for (const p of providers) {
@@ -952,9 +1018,7 @@ export function loadConfig(configPath: string): FlashQueryConfig {
     }
     const llmErrors = validateLlmConfig(result.data.llm);
     if (llmErrors.length > 0) {
-      const message = llmErrors
-        .map((e) => `Config error: [${e.layer}] ${e.message}`)
-        .join('\n');
+      const message = llmErrors.map((e) => `Config error: [${e.layer}] ${e.message}`).join('\n');
       throw new Error(message);
     }
     warnHardExcludedPurposeTools(result.data.llm);
@@ -973,12 +1037,18 @@ export function loadConfig(configPath: string): FlashQueryConfig {
   // max_tokens, etc.) whose key naming is governed by the LLM provider, not by FlashQuery's
   // snake_case-to-camelCase convention. Without this, snakeToCamel would silently rename
   // `max_tokens` -> `maxTokens` and break provider compatibility.
-  if (result.data.llm?.purposes && Array.isArray((camel['llm'] as { purposes?: unknown })?.purposes)) {
+  if (
+    result.data.llm?.purposes &&
+    Array.isArray((camel['llm'] as { purposes?: unknown })?.purposes)
+  ) {
     const camelLlm = camel['llm'] as { purposes: Array<{ defaults?: Record<string, unknown> }> };
     for (let i = 0; i < camelLlm.purposes.length; i++) {
       const rawDefaults = result.data.llm.purposes[i]?.defaults;
       if (rawDefaults !== undefined) {
-        camelLlm.purposes[i].defaults = JSON.parse(JSON.stringify(rawDefaults)) as Record<string, unknown>;
+        camelLlm.purposes[i].defaults = JSON.parse(JSON.stringify(rawDefaults)) as Record<
+          string,
+          unknown
+        >;
       } else {
         delete camelLlm.purposes[i].defaults;
       }
@@ -993,7 +1063,10 @@ export function loadConfig(configPath: string): FlashQueryConfig {
     for (let i = 0; i < camelLlm.models.length; i++) {
       const rawCapabilities = result.data.llm.models[i]?.capabilities;
       if (rawCapabilities !== undefined) {
-        camelLlm.models[i].capabilities = JSON.parse(JSON.stringify(rawCapabilities)) as Record<string, unknown>;
+        camelLlm.models[i].capabilities = JSON.parse(JSON.stringify(rawCapabilities)) as Record<
+          string,
+          unknown
+        >;
       } else {
         delete camelLlm.models[i].capabilities;
       }
@@ -1001,7 +1074,11 @@ export function loadConfig(configPath: string): FlashQueryConfig {
   }
 
   // 9. Build final config
-  const instanceData = camel['instance'] as { name: string; id: string; vault: { path: string; markdownExtensions: string[] } };
+  const instanceData = camel['instance'] as {
+    name: string;
+    id: string;
+    vault: { path: string; markdownExtensions: string[] };
+  };
 
   const config: FlashQueryConfig = {
     ...(camel as unknown as FlashQueryConfig),
@@ -1037,7 +1114,9 @@ export function loadConfig(configPath: string): FlashQueryConfig {
 
   const capabilityErrors = validateAllPurposeMode2Admissions(config);
   if (capabilityErrors.length > 0) {
-    throw new Error(capabilityErrors.map((e) => `Config error: [capability] ${e.message}`).join('\n'));
+    throw new Error(
+      capabilityErrors.map((e) => `Config error: [capability] ${e.message}`).join('\n')
+    );
   }
 
   return config;

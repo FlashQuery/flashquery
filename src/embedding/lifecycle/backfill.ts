@@ -1,16 +1,31 @@
 import type { FlashQueryConfig } from '../../config/loader.js';
-import type { MaintenanceLifecycleActionResult } from '../../mcp/utils/response-formats.js';
+import type {
+  ErrorEnvelope,
+  MaintenanceLifecycleActionResult,
+} from '../../mcp/utils/response-formats.js';
 import type { BackfillLifecycleCounts, LifecycleBaseInput, LifecycleScope } from './types.js';
 import type { LifecycleJobRef } from './jobs.js';
-import { runCoreLifecycle, type CoreLifecycleResult } from './core-processor.js';
+import {
+  resolveCoreLifecycleWorkPlan,
+  runCoreLifecycle,
+  type CoreLifecycleResult,
+} from './core-processor.js';
+import { acquireLifecycleJob, completeLifecycleJob, failLifecycleJob } from './jobs.js';
 import {
   estimateRecordLifecycleRows,
   executeRecordLifecycleWorkUnits,
+  type RecordLifecycleExecutionResult,
+  type RecordLifecycleResolution,
   reindexRecordTables,
   resolveRecordLifecycleWorkUnits,
+  resolveSingleRecordLifecycleEmbeddingName,
 } from './records-scope.js';
+import { validateMaxRows } from './scope.js';
 
 const RECORDS_ONLY = ['records'];
+type RecordExecutionOrError =
+  | { ok: true; payload: RecordLifecycleExecutionResult }
+  | { ok: false; error: ErrorEnvelope };
 
 export async function runBackfillEmbeddings(
   config: FlashQueryConfig,
@@ -20,6 +35,17 @@ export async function runBackfillEmbeddings(
   if (hasRecordsScope(input.scope) && !isPureRecordsScope(input.scope)) {
     const startedAt = new Date().toISOString();
     const coreInput = { ...input, scope: withoutRecordsScope(input.scope) };
+    const corePlan = await resolveCoreLifecycleWorkPlan(config, coreInput, 'backfill_embeddings');
+    if (!corePlan.ok) return corePlan;
+    const resolved = await resolveRecordLifecycleWorkUnits(config, input, 'backfill_embeddings');
+    if (!resolved.ok) return resolved;
+    const combinedCap = validateMaxRows(
+      'backfill_embeddings',
+      corePlan.payload.rows.length + resolved.payload.rows_in_scope,
+      input.max_rows
+    );
+    if (!combinedCap.ok) return { ok: false, error: combinedCap.error };
+
     const core = await runCoreLifecycle({
       config,
       input: coreInput,
@@ -28,8 +54,6 @@ export async function runBackfillEmbeddings(
     });
     if (!core.ok) return core;
 
-    const resolved = await resolveRecordLifecycleWorkUnits(config, input, 'backfill_embeddings');
-    if (!resolved.ok) return resolved;
     if (input.dry_run === true) {
       const coreCounts = asBackfillCounts(core.payload.counts);
       const recordEstimate = estimateRecordLifecycleRows(resolved.payload.work_units);
@@ -58,11 +82,13 @@ export async function runBackfillEmbeddings(
             rows_failed: 0,
             rows_skipped_no_embedding: unit.rows_skipped_no_embedding,
           })),
-        } as MaintenanceLifecycleActionResult,
+        },
       };
     }
 
-    const records = await executeRecordLifecycleWorkUnits({ config, workUnits: resolved.payload.work_units });
+    const recordsResult = await executeBackfillRecordsWithOptionalJob(config, resolved.payload);
+    if (!recordsResult.ok) return { ok: false, error: recordsResult.error };
+    const records = recordsResult.payload;
     if (records.affected_tables.size > 0) {
       await reindexRecordTables(config, resolved.payload.work_units, records.affected_tables);
     }
@@ -84,8 +110,8 @@ export async function runBackfillEmbeddings(
         ...(failures.length === 0 ? { failures: undefined } : { failures }),
         ...(warnings.length === 0 ? { warnings: undefined } : { warnings }),
         plugin_breakdown: records.plugin_breakdown,
-      } as MaintenanceLifecycleActionResult,
-      aborted: core.aborted,
+      },
+      aborted: core.aborted || records.aborted,
     };
   }
 
@@ -121,11 +147,17 @@ export async function runBackfillEmbeddings(
             rows_failed: 0,
             rows_skipped_no_embedding: unit.rows_skipped_no_embedding,
           })),
-        } as MaintenanceLifecycleActionResult,
+        },
       };
     }
 
-    const records = await executeRecordLifecycleWorkUnits({ config, workUnits: resolved.payload.work_units });
+    const recordsResult = await executeBackfillRecordsWithOptionalJob(
+      config,
+      resolved.payload,
+      backgroundJob
+    );
+    if (!recordsResult.ok) return { ok: false, error: recordsResult.error };
+    const records = recordsResult.payload;
     if (records.affected_tables.size > 0) {
       await reindexRecordTables(config, resolved.payload.work_units, records.affected_tables);
     }
@@ -146,7 +178,8 @@ export async function runBackfillEmbeddings(
         ...(records.failures.length === 0 ? {} : { failures: records.failures }),
         ...(records.warnings.length === 0 ? {} : { warnings: records.warnings }),
         plugin_breakdown: records.plugin_breakdown,
-      } as MaintenanceLifecycleActionResult,
+      },
+      aborted: records.aborted,
     };
   }
 
@@ -160,6 +193,70 @@ export async function runBackfillEmbeddings(
 
 export type BackfillEmbeddingsResult = MaintenanceLifecycleActionResult;
 
+async function executeBackfillRecordsWithOptionalJob(
+  config: FlashQueryConfig,
+  resolution: RecordLifecycleResolution,
+  backgroundJob?: LifecycleJobRef
+): Promise<RecordExecutionOrError> {
+  const jobName = resolveSingleRecordLifecycleEmbeddingName(resolution, 'backfill_embeddings');
+  if (!jobName.ok) return jobName;
+
+  if (jobName.payload === null) {
+    return {
+      ok: true,
+      payload: await executeRecordLifecycleWorkUnits({ config, workUnits: resolution.work_units }),
+    };
+  }
+
+  const initialCounts = {
+    rows_examined: resolution.rows_in_scope,
+    rows_embedded: 0,
+    rows_failed: 0,
+    rows_skipped_already_present: 0,
+    rows_skipped_no_embedding: resolution.rows_skipped_no_embedding,
+  };
+  const job =
+    backgroundJob ??
+    (await acquireLifecycleJob(config, {
+      action: 'backfill_embeddings',
+      embedding_name: jobName.payload,
+      counts: initialCounts,
+      metadata: { dry_run: false, scope: 'records' },
+    }));
+  if (!('job_id' in job) && !job.ok) return job;
+  const jobRef = 'job_id' in job ? job : job.payload;
+
+  try {
+    const records = await executeRecordLifecycleWorkUnits({
+      config,
+      workUnits: resolution.work_units,
+      job: jobRef,
+    });
+    if (!records.aborted) {
+      await completeLifecycleJob(
+        config,
+        jobRef.job_id,
+        {
+          rows_examined: records.rows_examined,
+          rows_embedded: records.rows_embedded,
+          rows_failed: records.rows_failed,
+          rows_skipped_already_present: 0,
+          rows_skipped_no_embedding: records.rows_skipped_no_embedding,
+        },
+        records.failures
+      );
+    }
+    return { ok: true, payload: records };
+  } catch (err) {
+    await failLifecycleJob(config, jobRef.job_id, {
+      error: 'runtime_error',
+      message: err instanceof Error ? err.message : String(err),
+      identifier: jobName.payload,
+    }).catch(() => undefined);
+    throw err;
+  }
+}
+
 function isPureRecordsScope(scope: LifecycleBaseInput['scope']): boolean {
   return JSON.stringify(scope?.entity_types ?? []) === JSON.stringify(RECORDS_ONLY);
 }
@@ -171,11 +268,16 @@ function hasRecordsScope(scope: LifecycleBaseInput['scope']): boolean {
 function withoutRecordsScope(scope: LifecycleScope | undefined): LifecycleScope {
   return {
     ...(scope ?? {}),
-    entity_types: scope?.entity_types?.filter((entity) => entity !== 'records') ?? ['documents', 'memory'],
+    entity_types: scope?.entity_types?.filter((entity) => entity !== 'records') ?? [
+      'documents',
+      'memory',
+    ],
   };
 }
 
-function asBackfillCounts(counts: MaintenanceLifecycleActionResult['counts']): BackfillLifecycleCounts {
+function asBackfillCounts(
+  counts: MaintenanceLifecycleActionResult['counts']
+): BackfillLifecycleCounts {
   if ('rows_examined' in counts) {
     return {
       rows_examined: counts.rows_examined,

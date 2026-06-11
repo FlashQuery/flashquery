@@ -22,6 +22,7 @@ import { parsePluginSchema, resolveTableName } from '../../plugins/manager.js';
 import type { PluginTableSpec } from '../../plugins/manager.js';
 import { validateMaxRows } from './scope.js';
 import { withPgClient } from '../../utils/pg-client.js';
+import { heartbeatLifecycleJob, isLifecycleAbortRequested, type LifecycleJobRef } from './jobs.js';
 
 export type RecordLifecycleKind = 'backfill_embeddings' | 'rebuild_embeddings';
 
@@ -50,6 +51,7 @@ export interface RecordLifecycleResolution {
 }
 
 export interface RecordLifecycleExecutionResult {
+  aborted: boolean;
   rows_examined: number;
   rows_embedded: number;
   rows_failed: number;
@@ -121,10 +123,17 @@ export async function resolveRecordLifecycleWorkUnits(
 
       const entry = await loadActiveCatalogEntry(config, row.embedding_name);
       if (!entry.ok) return entry;
-      const selected = await selectRecordRows(config, fullTableName, table.embed_fields, entry.payload, mode, {
-        staleOnly: input.stale_only === true,
-        mismatchedWidthOnly: input.mismatched_width_only === true,
-      });
+      const selected = await selectRecordRows(
+        config,
+        fullTableName,
+        table.embed_fields,
+        entry.payload,
+        mode,
+        {
+          staleOnly: input.stale_only === true,
+          mismatchedWidthOnly: input.mismatched_width_only === true,
+        }
+      );
       workUnits.push({
         plugin_id: row.plugin_id,
         plugin_instance: row.plugin_instance,
@@ -165,6 +174,8 @@ export async function resolveRecordLifecycleWorkUnits(
 export async function executeRecordLifecycleWorkUnits(input: {
   config: FlashQueryConfig;
   workUnits: RecordLifecycleWorkUnit[];
+  job?: LifecycleJobRef;
+  counts?: Record<string, unknown>;
 }): Promise<RecordLifecycleExecutionResult> {
   const supabase = createClient(input.config.supabase.url, input.config.supabase.serviceRoleKey);
   const failures: LifecycleFailure[] = [];
@@ -195,6 +206,35 @@ export async function executeRecordLifecycleWorkUnits(input: {
 
     const provider = createEmbeddingProviderForCatalogEntry(input.config, unit.embedding_entry);
     for (const row of unit.rows) {
+      if (input.job) {
+        const abort = await isLifecycleAbortRequested(input.config, input.job.job_id);
+        if (!abort.ok) {
+          failures.push({
+            entity_type: 'records',
+            identifier: `${unit.plugin_id}.${unit.table_name}:${row.id}`,
+            message: abort.error.message,
+            error: abort.error.message,
+          });
+          rowsFailed += 1;
+          breakdown.rows_failed += 1;
+          continue;
+        }
+        if (abort.payload) {
+          pluginBreakdown.push(breakdown);
+          return {
+            aborted: true,
+            rows_examined: input.workUnits.reduce((sum, workUnit) => sum + workUnit.rows.length, 0),
+            rows_embedded: rowsEmbedded,
+            rows_failed: rowsFailed,
+            rows_skipped_no_embedding: rowsSkippedNoEmbedding,
+            failures,
+            warnings: [...warnings],
+            affected_tables: affectedTables,
+            plugin_breakdown: pluginBreakdown,
+          };
+        }
+      }
+
       try {
         const embedText = buildRecordEmbedText(row.fields, unit.embed_fields);
         if (!embedText.trim()) {
@@ -237,11 +277,34 @@ export async function executeRecordLifecycleWorkUnits(input: {
         rowsFailed += 1;
         breakdown.rows_failed += 1;
       }
+
+      if (input.job) {
+        const heartbeat = await heartbeatLifecycleJob(
+          input.config,
+          input.job.job_id,
+          input.counts ?? {
+            rows_examined: input.workUnits.reduce((sum, workUnit) => sum + workUnit.rows.length, 0),
+            rows_embedded: rowsEmbedded,
+            rows_failed: rowsFailed,
+            rows_skipped_no_embedding: rowsSkippedNoEmbedding,
+          },
+          failures
+        );
+        if (!heartbeat.ok) {
+          failures.push({
+            entity_type: 'records',
+            identifier: `${unit.plugin_id}.${unit.table_name}:${row.id}`,
+            message: heartbeat.error.message,
+            error: heartbeat.error.message,
+          });
+        }
+      }
     }
     pluginBreakdown.push(breakdown);
   }
 
   return {
+    aborted: false,
     rows_examined: input.workUnits.reduce((sum, unit) => sum + unit.rows.length, 0),
     rows_embedded: rowsEmbedded,
     rows_failed: rowsFailed,
@@ -257,19 +320,52 @@ export function estimateRecordLifecycleRows(
   workUnits: RecordLifecycleWorkUnit[]
 ): LifecycleEstimate {
   const totalChars = workUnits.reduce((sum, unit) => {
-    return sum + unit.rows.reduce((rowSum, row) => rowSum + buildRecordEmbedText(row.fields, unit.embed_fields).length, 0);
+    return (
+      sum +
+      unit.rows.reduce(
+        (rowSum, row) => rowSum + buildRecordEmbedText(row.fields, unit.embed_fields).length,
+        0
+      )
+    );
   }, 0);
   const maxDelayMs = workUnits.reduce((max, unit) => {
-    const entryMax = unit.embedding_entry?.endpoints.reduce((entryDelay, endpoint) => {
-      return Math.max(entryDelay, endpoint.rate_limit?.min_delay_ms ?? endpoint.rateLimit?.minDelayMs ?? 0);
-    }, 0) ?? 0;
+    const entryMax =
+      unit.embedding_entry?.endpoints.reduce((entryDelay, endpoint) => {
+        return Math.max(
+          entryDelay,
+          endpoint.rate_limit?.min_delay_ms ?? endpoint.rateLimit?.minDelayMs ?? 0
+        );
+      }, 0) ?? 0;
     return Math.max(max, entryMax);
   }, 0);
   return {
     input_tokens: Math.ceil(totalChars / 4),
-    cost_usd: null as unknown as number,
-    wall_time_seconds: Math.ceil((workUnits.reduce((sum, unit) => sum + unit.rows.length, 0) * maxDelayMs) / 1000),
+    cost_usd: null,
+    wall_time_seconds: Math.ceil(
+      (workUnits.reduce((sum, unit) => sum + unit.rows.length, 0) * maxDelayMs) / 1000
+    ),
     cost_basis: COST_BASIS,
+  };
+}
+
+export function resolveSingleRecordLifecycleEmbeddingName(
+  resolution: RecordLifecycleResolution,
+  action: RecordLifecycleKind
+): { ok: true; payload: string | null } | { ok: false; error: ErrorEnvelope } {
+  if (resolution.resolved_embedding_names.length <= 1) {
+    return { ok: true, payload: resolution.resolved_embedding_names[0] ?? null };
+  }
+
+  return {
+    ok: false,
+    error: {
+      error: 'ambiguous_identifier',
+      message: `records ${action} spans multiple embedding entries; narrow scope.records.plugin or scope.records.targets so one embedding entry is processed per lifecycle job`,
+      identifier: 'embedding_name',
+      details: {
+        active_embeddings: resolution.resolved_embedding_names,
+      },
+    },
   };
 }
 
@@ -283,7 +379,9 @@ export async function reindexRecordTables(
     for (const table of affectedTables) {
       const embeddingName = byTable.get(table);
       if (!embeddingName) continue;
-      await client.query(`REINDEX INDEX ${pg.escapeIdentifier(`idx_${table}_embedding_${embeddingName}`)}`);
+      await client.query(
+        `REINDEX INDEX ${pg.escapeIdentifier(`idx_${table}_embedding_${embeddingName}`)}`
+      );
     }
   });
 }
@@ -380,21 +478,29 @@ async function selectRecordRows(
     predicates.push(`${pg.escapeIdentifier(baseColumn)} IS NULL`);
   } else {
     if (filters.staleOnly) {
-      const models = [...new Set(entry.endpoints.map((endpoint) => endpoint.model).filter(Boolean))];
+      const models = [
+        ...new Set(entry.endpoints.map((endpoint) => endpoint.model).filter(Boolean)),
+      ];
       if (models.length === 0) {
         predicates.push(`${pg.escapeIdentifier(`${baseColumn}_model`)} IS NULL`);
       } else {
         values.push(models);
-        predicates.push(`(${pg.escapeIdentifier(`${baseColumn}_model`)} IS NULL OR ${pg.escapeIdentifier(`${baseColumn}_model`)} <> ALL($${values.length}::text[]))`);
+        predicates.push(
+          `(${pg.escapeIdentifier(`${baseColumn}_model`)} IS NULL OR ${pg.escapeIdentifier(`${baseColumn}_model`)} <> ALL($${values.length}::text[]))`
+        );
       }
     }
     if (filters.mismatchedWidthOnly) {
       values.push(entry.dimensions);
-      predicates.push(`(${pg.escapeIdentifier(`${baseColumn}_dimensions`)} IS NULL OR ${pg.escapeIdentifier(`${baseColumn}_dimensions`)} <> $${values.length})`);
+      predicates.push(
+        `(${pg.escapeIdentifier(`${baseColumn}_dimensions`)} IS NULL OR ${pg.escapeIdentifier(`${baseColumn}_dimensions`)} <> $${values.length})`
+      );
     }
   }
 
-  const selectedColumns = ['id', ...embedFields].map((field) => pg.escapeIdentifier(field)).join(', ');
+  const selectedColumns = ['id', ...embedFields]
+    .map((field) => pg.escapeIdentifier(field))
+    .join(', ');
   const result = await withPgClient(config.supabase.databaseUrl, async (client) =>
     client.query<Record<string, unknown>>(
       `
@@ -430,22 +536,28 @@ function pluginInScope(row: RegistryRow, scope: LifecycleScope | undefined): boo
   const plugin = scope?.records?.plugin;
   if (plugin === undefined) return true;
   const requested = Array.isArray(plugin) ? plugin : [plugin];
-  return requested.some((item) =>
-    item === row.plugin_id ||
-    item === `${row.plugin_id}:${row.plugin_instance}` ||
-    item === `${row.plugin_id}.${row.plugin_instance}`
+  return requested.some(
+    (item) =>
+      item === row.plugin_id ||
+      item === `${row.plugin_id}:${row.plugin_instance}` ||
+      item === `${row.plugin_id}.${row.plugin_instance}`
   );
 }
 
-function tableInScope(row: RegistryRow, table: PluginTableSpec, scope: LifecycleScope | undefined): boolean {
+function tableInScope(
+  row: RegistryRow,
+  table: PluginTableSpec,
+  scope: LifecycleScope | undefined
+): boolean {
   const targets = scope?.records?.targets;
   if (!targets || targets.length === 0) return true;
   const fullTableName = resolveTableName(row.plugin_id, row.plugin_instance, table.name);
-  return targets.some((target) =>
-    target === table.name ||
-    target === fullTableName ||
-    target === `${row.plugin_id}.${table.name}` ||
-    target === `${row.plugin_id}.${row.plugin_instance}.${table.name}`
+  return targets.some(
+    (target) =>
+      target === table.name ||
+      target === fullTableName ||
+      target === `${row.plugin_id}.${table.name}` ||
+      target === `${row.plugin_id}.${row.plugin_instance}.${table.name}`
   );
 }
 
@@ -457,13 +569,16 @@ function collectProviderWarnings(provider: EmbeddingProvider, warnings: Set<stri
   }
 }
 
-function requireDatabaseUrl(config: FlashQueryConfig): { ok: true; payload: string } | { ok: false; error: ErrorEnvelope } {
+function requireDatabaseUrl(
+  config: FlashQueryConfig
+): { ok: true; payload: string } | { ok: false; error: ErrorEnvelope } {
   if (!config.supabase.databaseUrl) {
     return {
       ok: false,
       error: {
         error: 'invalid_input',
-        message: 'Embedding lifecycle actions require supabase.databaseUrl for direct PostgreSQL access',
+        message:
+          'Embedding lifecycle actions require supabase.databaseUrl for direct PostgreSQL access',
         identifier: 'supabase.databaseUrl',
         details: { reason: 'direct_postgresql_required' },
       },

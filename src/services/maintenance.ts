@@ -2,14 +2,27 @@ import { randomUUID } from 'node:crypto';
 import type { FlashQueryConfig } from '../config/loader.js';
 import {
   getLifecycleJobStatus,
+  acquireLifecycleJob,
   requestLifecycleAbort,
 } from '../embedding/lifecycle/jobs.js';
-import type { LifecycleAction, LifecycleBaseInput, LifecycleScope } from '../embedding/lifecycle/types.js';
-import { isLifecycleAction, validateLifecycleActionParameters } from '../embedding/lifecycle/scope.js';
+import type {
+  LifecycleAction,
+  LifecycleBaseInput,
+  LifecycleScope,
+} from '../embedding/lifecycle/types.js';
+import {
+  isLifecycleAction,
+  isPureRecordsScope,
+  validateLifecycleActionParameters,
+} from '../embedding/lifecycle/scope.js';
 import { runBackfillEmbeddings } from '../embedding/lifecycle/backfill.js';
 import { runRebuildEmbeddings } from '../embedding/lifecycle/rebuild.js';
 import { runRetireEmbedding } from '../embedding/lifecycle/retire.js';
 import { prepareCoreLifecycleJob } from '../embedding/lifecycle/core-processor.js';
+import {
+  resolveRecordLifecycleWorkUnits,
+  resolveSingleRecordLifecycleEmbeddingName,
+} from '../embedding/lifecycle/records-scope.js';
 import { logger } from '../logging/logger.js';
 import type {
   ErrorEnvelope,
@@ -62,9 +75,9 @@ export interface MaintenanceStatusPayload {
 
 export type MaintenanceSyncPayload = { actions: MaintenanceActionResult[] };
 
-export type MaintenanceResult<T = MaintenanceSyncPayload | MaintenanceAcceptedPayload | MaintenanceStatusPayload> =
-  | { ok: true; payload: T }
-  | { ok: false; error: ErrorEnvelope };
+export type MaintenanceResult<
+  T = MaintenanceSyncPayload | MaintenanceAcceptedPayload | MaintenanceStatusPayload,
+> = { ok: true; payload: T } | { ok: false; error: ErrorEnvelope };
 
 interface MaintenanceJobRecord extends MaintenanceStatusPayload {
   requestedActions: Array<'sync' | 'repair'>;
@@ -73,7 +86,9 @@ interface MaintenanceJobRecord extends MaintenanceStatusPayload {
 
 let maintenanceInProgress = false;
 const jobs = new Map<string, MaintenanceJobRecord>();
-let hostTemplateRefreshHook: ((config: FlashQueryConfig) => Promise<HostTemplateRefreshSummary>) | undefined;
+let hostTemplateRefreshHook:
+  | ((config: FlashQueryConfig) => Promise<HostTemplateRefreshSummary>)
+  | undefined;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function setHostTemplateRefreshHook(
@@ -91,7 +106,9 @@ export function resetMaintenanceStateForTests(): void {
 export async function maintainVault(
   config: FlashQueryConfig,
   input: MaintainVaultInput
-): Promise<MaintenanceResult<MaintenanceSyncPayload | MaintenanceAcceptedPayload | MaintenanceStatusPayload>> {
+): Promise<
+  MaintenanceResult<MaintenanceSyncPayload | MaintenanceAcceptedPayload | MaintenanceStatusPayload>
+> {
   if (input.action === 'status') {
     if (input.dry_run === true) {
       return invalidInput('dry_run is not supported for action: status', 'status', {
@@ -155,7 +172,9 @@ export async function maintainVault(
   }
 }
 
-export function getMaintenanceJobStatus(jobId: string): MaintenanceResult<MaintenanceStatusPayload> {
+export function getMaintenanceJobStatus(
+  jobId: string
+): MaintenanceResult<MaintenanceStatusPayload> {
   const job = jobs.get(jobId);
   if (!job) {
     return {
@@ -240,15 +259,21 @@ function normalizeMaintenanceActions(
     return { ok: true, payload: [action] };
   }
 
-  return invalidInput('action must be sync, repair, status, or ["repair","sync"]', 'maintain_vault', {
-    parameter: 'action',
-  });
+  return invalidInput(
+    'action must be sync, repair, status, or ["repair","sync"]',
+    'maintain_vault',
+    {
+      parameter: 'action',
+    }
+  );
 }
 
 async function validateLifecycleDispatch(
   config: FlashQueryConfig,
   input: MaintainVaultInput
-): Promise<MaintenanceResult<MaintenanceSyncPayload | MaintenanceAcceptedPayload | MaintenanceStatusPayload>> {
+): Promise<
+  MaintenanceResult<MaintenanceSyncPayload | MaintenanceAcceptedPayload | MaintenanceStatusPayload>
+> {
   const validation = validateLifecycleActionParameters(input as LifecycleBaseInput);
   if (!validation.ok) {
     return { ok: false, error: validation.error };
@@ -263,14 +288,23 @@ async function validateLifecycleDispatch(
   }
 
   if (input.action === 'backfill_embeddings') {
-    return await dispatchBackfillEmbeddings(config, input as LifecycleBaseInput & { action: 'backfill_embeddings' });
+    return await dispatchBackfillEmbeddings(
+      config,
+      input as LifecycleBaseInput & { action: 'backfill_embeddings' }
+    );
   }
 
   if (input.action === 'rebuild_embeddings') {
-    return await dispatchRebuildEmbeddings(config, input as LifecycleBaseInput & { action: 'rebuild_embeddings' });
+    return await dispatchRebuildEmbeddings(
+      config,
+      input as LifecycleBaseInput & { action: 'rebuild_embeddings' }
+    );
   }
 
-  return await dispatchRetireEmbedding(config, input as LifecycleBaseInput & { action: 'retire_embedding' });
+  return await dispatchRetireEmbedding(
+    config,
+    input as LifecycleBaseInput & { action: 'retire_embedding' }
+  );
 }
 
 async function dispatchBackfillEmbeddings(
@@ -291,12 +325,9 @@ async function dispatchBackgroundLifecycle(
     | (LifecycleBaseInput & { action: 'backfill_embeddings' })
     | (LifecycleBaseInput & { action: 'rebuild_embeddings' })
 ): Promise<MaintenanceResult<MaintenanceAcceptedPayload>> {
-  if (!input.embedding_name) {
-    return invalidInput('embedding_name is required for background lifecycle actions', 'embedding_name', {
-      action: input.action,
-    });
-  }
-  const acquired = await prepareCoreLifecycleJob({ config, input, mode: input.action });
+  const acquired = isPureRecordsScope(input.scope)
+    ? await prepareRecordsLifecycleJob(config, input)
+    : await prepareCoreLifecycleJob({ config, input, mode: input.action });
   if (!acquired.ok) return acquired;
 
   if (input.action === 'backfill_embeddings') {
@@ -313,6 +344,51 @@ async function dispatchBackgroundLifecycle(
       started_at: acquired.payload.started_at,
     },
   };
+}
+
+async function prepareRecordsLifecycleJob(
+  config: FlashQueryConfig,
+  input:
+    | (LifecycleBaseInput & { action: 'backfill_embeddings' })
+    | (LifecycleBaseInput & { action: 'rebuild_embeddings' })
+): Promise<Awaited<ReturnType<typeof acquireLifecycleJob>>> {
+  const resolved = await resolveRecordLifecycleWorkUnits(config, input, input.action);
+  if (!resolved.ok) return resolved;
+  const jobName = resolveSingleRecordLifecycleEmbeddingName(resolved.payload, input.action);
+  if (!jobName.ok) return jobName;
+  if (jobName.payload === null) {
+    return {
+      ok: false,
+      error: {
+        error: 'invalid_input',
+        message:
+          'background records lifecycle actions require at least one registered plugin with an embedding entry',
+        identifier: 'scope',
+        details: { reason: 'no_record_embedding_entries' },
+      },
+    };
+  }
+
+  return await acquireLifecycleJob(config, {
+    action: input.action,
+    embedding_name: jobName.payload,
+    counts:
+      input.action === 'backfill_embeddings'
+        ? {
+            rows_examined: resolved.payload.rows_in_scope,
+            rows_embedded: 0,
+            rows_failed: 0,
+            rows_skipped_already_present: 0,
+            rows_skipped_no_embedding: resolved.payload.rows_skipped_no_embedding,
+          }
+        : {
+            rows_examined: resolved.payload.rows_in_scope,
+            rows_embedded: 0,
+            rows_failed: 0,
+            rows_skipped_no_embedding: resolved.payload.rows_skipped_no_embedding,
+          },
+    metadata: { dry_run: false, background: true, scope: 'records' },
+  });
 }
 
 async function dispatchRebuildEmbeddings(
@@ -336,7 +412,10 @@ async function dispatchRetireEmbedding(
   return { ok: true, payload: { actions: [result.payload] } };
 }
 
-function validateModeOptions(actions: Array<'sync' | 'repair'>, input: MaintainVaultInput): MaintenanceResult<null> {
+function validateModeOptions(
+  actions: Array<'sync' | 'repair'>,
+  input: MaintainVaultInput
+): MaintenanceResult<null> {
   const identifier = actions.join(',');
   if (input.dry_run === true && (actions.length !== 1 || actions[0] !== 'repair')) {
     return invalidInput('dry_run is only supported for action: repair', identifier, {
@@ -368,13 +447,15 @@ async function executeActions(
     if (action === 'repair') {
       const result = await reconcileTrackedDocuments(config, { dryRun });
       const finishedAt = new Date().toISOString();
-      results.push(maintenanceActionResult({
-        action: 'repair',
-        started_at: startedAt,
-        finished_at: finishedAt,
-        dry_run: dryRun,
-        counts: repairCounts(result),
-      }));
+      results.push(
+        maintenanceActionResult({
+          action: 'repair',
+          started_at: startedAt,
+          finished_at: finishedAt,
+          dry_run: dryRun,
+          counts: repairCounts(result),
+        })
+      );
       continue;
     }
 
@@ -382,15 +463,19 @@ async function executeActions(
     invalidateReconciliationCache();
     const hostTemplateRefresh = await refreshHostTemplatesAfterSync(config);
     const finishedAt = new Date().toISOString();
-    results.push(maintenanceActionResult({
-      action: 'sync',
-      started_at: startedAt,
-      finished_at: finishedAt,
-      dry_run: false,
-      counts: scanCounts(result),
-      warnings: scanWarnings(result),
-      ...(hostTemplateRefresh === undefined ? {} : { host_template_refresh: hostTemplateRefresh }),
-    }));
+    results.push(
+      maintenanceActionResult({
+        action: 'sync',
+        started_at: startedAt,
+        finished_at: finishedAt,
+        dry_run: false,
+        counts: scanCounts(result),
+        warnings: scanWarnings(result),
+        ...(hostTemplateRefresh === undefined
+          ? {}
+          : { host_template_refresh: hostTemplateRefresh }),
+      })
+    );
   }
   return results;
 }
@@ -476,7 +561,9 @@ function scanWarnings(result: ScanResult): MaintenanceActionResult['warnings'] {
   return warnings.length > 0 ? warnings : undefined;
 }
 
-function repairCounts(result: DocumentReconciliationResult): MaintenanceLegacyActionResult['counts'] {
+function repairCounts(
+  result: DocumentReconciliationResult
+): MaintenanceLegacyActionResult['counts'] {
   return {
     scanned: result.scanned,
     added: 0,

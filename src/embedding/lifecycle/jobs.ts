@@ -6,7 +6,7 @@ import type {
   MaintenanceLifecycleActionResult,
 } from '../../mcp/utils/response-formats.js';
 import { withPgClient } from '../../utils/pg-client.js';
-import type { LifecycleEmbeddingAction, LifecycleRunnableAction } from './types.js';
+import type { LifecycleRunnableAction } from './types.js';
 
 const DEFAULT_STALE_AFTER_MS = 5 * 60 * 1_000;
 const RUNNING_LIFECYCLE_ACTIONS = ['backfill_embeddings', 'rebuild_embeddings', 'retire_embedding'];
@@ -69,7 +69,8 @@ export async function acquireLifecycleJob(
   if (!databaseUrl.ok) return databaseUrl;
 
   const jobId = randomUUID();
-  const staleAfterMs = options.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
+  const staleAfterMs =
+    options.staleAfterMs ?? config.embeddingLifecycle?.lockStaleMs ?? DEFAULT_STALE_AFTER_MS;
 
   return await withPgClient(databaseUrl.payload, async (client) => {
     await client.query('BEGIN');
@@ -176,7 +177,11 @@ export async function heartbeatLifecycleJob(
       RETURNING id, instance_id, action, embedding_name, status, started_at, finished_at,
                 heartbeat_at, abort_requested_at, counts, failures, error, metadata
       `,
-      [jobId, counts === undefined ? null : JSON.stringify(counts), failures === undefined ? null : JSON.stringify(failures)]
+      [
+        jobId,
+        counts === undefined ? null : JSON.stringify(counts),
+        failures === undefined ? null : JSON.stringify(failures),
+      ]
     )
   );
 
@@ -373,7 +378,7 @@ function rowToStatus(row: LifecycleJobRow): LifecycleJobStatusPayload {
 
 function rowToAction(row: LifecycleJobRow): MaintenanceLifecycleActionResult {
   return {
-    action: row.action as LifecycleEmbeddingAction,
+    action: row.action,
     started_at: row.started_at,
     finished_at: row.finished_at ?? row.heartbeat_at,
     dry_run: Boolean(row.metadata?.dry_run),
@@ -417,7 +422,8 @@ function requireDatabaseUrl(config: FlashQueryConfig): LifecycleJobResult<string
       ok: false,
       error: {
         error: 'invalid_input',
-        message: 'Lifecycle maintenance jobs require supabase.databaseUrl for direct PostgreSQL access',
+        message:
+          'Lifecycle maintenance jobs require supabase.databaseUrl for direct PostgreSQL access',
         identifier: 'supabase.databaseUrl',
         details: { reason: 'direct_postgresql_required' },
       },

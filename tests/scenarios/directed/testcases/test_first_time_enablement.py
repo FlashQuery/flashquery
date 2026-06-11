@@ -13,10 +13,13 @@ from lifecycle_embedding_scenario_helpers import (  # noqa: E402
     clear_entry_vectors,
     cli_main,
     create_doc_and_memory,
+    db_url,
     first_action,
     lifecycle_context,
     parse_payload,
+    plugin_yaml,
     read_stamp_models,
+    register_plugin,
 )
 
 TEST_NAME = "test_first_time_enablement"
@@ -24,6 +27,7 @@ TEST_NAME = "test_first_time_enablement"
 
 def run_test(args: argparse.Namespace):
     from fqc_test_utils import TestRun, expectation_detail
+    import psycopg
 
     run = TestRun(TEST_NAME)
     with lifecycle_context(args) as ctx:
@@ -95,6 +99,68 @@ def run_test(args: argparse.Namespace):
             timing_ms=search.timing_ms,
             tool_result=search,
         )
+
+        plugin_id = f"first_time_plugin_{run.run_id.replace('-', '_')[:8]}"
+        plugin = register_plugin(ctx, plugin_id, plugin_yaml(plugin_id, "primary"), "primary")
+        run.step(
+            "recipe registers embedding-enabled records plugin",
+            passed=plugin.ok,
+            detail=expectation_detail(plugin) or plugin.error or plugin.text[:1000],
+            timing_ms=plugin.timing_ms,
+            tool_result=plugin,
+        )
+        if plugin.ok:
+            record = ctx.client.call_tool(
+                "write_record",
+                plugin_id=plugin_id,
+                plugin_instance="default",
+                table="notes",
+                fields={
+                    "title": f"Lifecycle plugin record first-time-{run.run_id}",
+                    "body": "Plugin record body for first-time embedding enablement.",
+                },
+            )
+            record_payload = parse_payload(record)
+            record_id = str(record_payload.get("id") or record_payload.get("record_id") or "")
+            table_name = f"fqcp_{plugin_id}_default_notes"
+            if record_id:
+                with psycopg.connect(db_url(ctx)) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            f"""
+                            UPDATE "{table_name}"
+                            SET embedding_primary = NULL,
+                                embedding_primary_model = NULL,
+                                embedding_primary_dimensions = NULL,
+                                embedding_primary_provider = NULL,
+                                embedding_primary_truncated = NULL
+                            WHERE id = %s
+                            """,
+                            (record_id,),
+                        )
+                    conn.commit()
+            records_backfill = ctx.client.call_tool(
+                "maintain_vault",
+                action="backfill_embeddings",
+                scope={"entity_types": ["records"], "records": {"plugin": plugin_id}},
+            )
+            model = None
+            if record_id:
+                with psycopg.connect(db_url(ctx)) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(f'SELECT embedding_primary_model FROM "{table_name}" WHERE id = %s', (record_id,))
+                        row = cur.fetchone()
+                        model = row[0] if row else None
+            run.step(
+                "recipe records backfill populates plugin record embedding columns",
+                passed=record.ok and records_backfill.ok and bool(model),
+                detail=expectation_detail(records_backfill) or records_backfill.error or json.dumps(
+                    {"record": record_payload, "model": model, "backfill": parse_payload(records_backfill)},
+                    sort_keys=True,
+                ),
+                timing_ms=records_backfill.timing_ms,
+                tool_result=records_backfill,
+            )
 
         if ctx.server:
             run.attach_server_logs(ctx.server.captured_logs)
