@@ -111,7 +111,7 @@ All 43 requirements are committed scope for v4.0. Each maps to exactly one phase
 - [ ] **REQ-038**: Per-entry concurrency lock keyed on `(instance_id, embedding_name)` with heartbeat crash safety; independent across entries (§6.6.4)
 - [ ] **REQ-039**: Background job `abort` action — stop at checkpoint, keep embedded rows, release lock, status `aborted` (§6.6.5)
 - [ ] **REQ-040**: `max_rows` contract — hard ceiling (refuse before work), `0` = unlimited, backfill-optional / rebuild-required / retire-invalid (§6.6.6)
-- [ ] **REQ-041**: Records-scope embedding resolution — per-plugin choice drives records; top-level `embedding_name` rejected for pure-records scope (§6.6.7)
+- [x] **REQ-041**: Records-scope embedding resolution — per-plugin choice drives records; top-level `embedding_name` rejected for pure-records scope (§6.6.7)
 
 ### Operator Recipes
 
@@ -203,7 +203,7 @@ Each requirement maps to exactly one roadmap phase. For incrementally-built REQs
 | REQ-038 | Phase 167 | Pending |
 | REQ-039 | Phase 167 | Pending |
 | REQ-040 | Phase 167 | Pending |
-| REQ-041 | Phase 167 | Pending |
+| REQ-041 | Phase 167 | Complete |
 | REQ-042 | Phase 167 | Pending |
 | REQ-043 | Phase 167 | Pending |
 

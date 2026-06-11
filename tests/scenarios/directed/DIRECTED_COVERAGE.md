@@ -2088,3 +2088,5 @@ Behaviors verifying the `call_model` and `get_llm_usage` MCP tools introduced in
 | D-108 | T-S-009 / REQ-036: `rebuild_embeddings` with `stale_only: true` regenerates rows stamped with non-current models. | test_rebuild_embeddings_stale_only | 2026-06-11 | 2026-06-11 |
 | D-109 | T-S-010 / REQ-036: `rebuild_embeddings` with mismatched `confirm` returns `invalid_input` with expected and received values. | test_rebuild_embeddings_confirm_mismatch | 2026-06-11 | 2026-06-11 |
 | D-110 | T-S-011 / REQ-036: `rebuild_embeddings` without `max_rows` returns `invalid_input` naming the required cap. | test_rebuild_embeddings_max_rows_required | 2026-06-11 | 2026-06-11 |
+| D-118 | T-S-019 / REQ-041: pure records lifecycle scope rejects top-level `embedding_name`, uses frozen plugin choices, and skips opted-out plugin rows. | test_records_scope_embedding_resolution | 2026-06-11 | 2026-06-11 |
+| D-119 | T-S-020 / REQ-041: mixed lifecycle scope applies top-level `embedding_name` to core rows while records use frozen plugin choices; pure-records rebuild derives/refuses confirm deterministically. | test_records_scope_mixed | 2026-06-11 | 2026-06-11 |
