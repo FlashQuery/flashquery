@@ -10,7 +10,7 @@ import { supabaseManager } from '../../../storage/supabase.js';
 import { embeddingProvider } from '../../../embedding/provider.js';
 import {
   documentEmbeddingTarget,
-  scheduleBackgroundEmbedding,
+  scheduleBackgroundEmbeddingsForActiveEntries,
 } from '../../../embedding/background-embed.js';
 import { logger } from '../../../logging/logger.js';
 import {
@@ -212,15 +212,17 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
               );
             }
 
-            const embedResult = await scheduleBackgroundEmbedding({
+            const embedResult = await scheduleBackgroundEmbeddingsForActiveEntries({
+              config,
               target: documentEmbeddingTarget({
                 instanceId: config.instance.id,
                 id: newFqcId,
                 label: copyRelativePath,
               }),
               embedText: `${copyTitle}\n\n${lockedParsed.content}`,
-              provider: embeddingProvider,
               supabase,
+              databaseUrl: config.supabase.databaseUrl,
+              legacyProvider: embeddingProvider,
             });
 
             const written = await vaultManager.readMarkdown(copyRelativePath);

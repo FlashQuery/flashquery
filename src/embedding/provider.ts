@@ -480,14 +480,24 @@ export class FallbackEmbeddingProvider implements EmbeddingProvider {
 
   async embed(text: string): Promise<number[]> {
     const failures: string[] = [];
+    const priorMetadata: EmbeddingCallMetadata = { truncated: false, warnings: [] };
     for (const { name, provider } of this.providers) {
       try {
         const vector = await provider.embed(text);
         this.lastProviderInfo = provider.getProviderInfo?.() ?? { provider: name, model: 'unknown' };
-        this.lastMetadata = provider.getLastEmbeddingMetadata?.() ?? { truncated: false, warnings: [] };
+        const metadata = provider.getLastEmbeddingMetadata?.() ?? { truncated: false, warnings: [] };
+        this.lastMetadata = {
+          truncated: priorMetadata.truncated || metadata.truncated,
+          warnings: [...new Set([...priorMetadata.warnings, ...metadata.warnings])],
+        };
         return vector;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        const metadata = provider.getLastEmbeddingMetadata?.();
+        if (metadata) {
+          priorMetadata.truncated = priorMetadata.truncated || metadata.truncated;
+          priorMetadata.warnings = [...new Set([...priorMetadata.warnings, ...metadata.warnings])];
+        }
         failures.push(`${name}: ${message}`);
         logger?.warn?.(`Embedding: ${name} failed, trying next fallback: ${message}`);
       }

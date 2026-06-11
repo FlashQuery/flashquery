@@ -72,6 +72,45 @@ describe.skipIf(!HAS_SUPABASE)('plugin search_records semantic routing', () => {
     expect(payload.results[0]?.data?.title).toBe('Needle');
   }, 90_000);
 
+  it('queries the switched entry after same-version re-registration', async () => {
+    harness = await createPluginRecordHarness();
+    const pluginId = 'plug_search_switch';
+    const tableName = `fqcp_${pluginId}_default_notes`;
+    harness.tablesToDrop.add(tableName);
+    await harness.registerPlugin({
+      schema_yaml: pluginRecordYaml(pluginId, '*'),
+      embedding_name: 'primary',
+    });
+    await harness.registerPlugin({
+      schema_yaml: pluginRecordYaml(pluginId, '*'),
+      embedding_name: 'analysis',
+    });
+    providerState.calls = [];
+
+    const writeResult = await harness.writeRecord({
+      mode: 'create',
+      plugin_id: pluginId,
+      table: 'notes',
+      data: { title: 'Switched Needle', body: 'Analysis route' },
+    }) as { isError?: boolean };
+    expect(writeResult.isError).toBeFalsy();
+    expect(providerState.calls).toEqual([{ entryName: 'analysis', text: 'Switched Needle\nAnalysis route' }]);
+    providerState.calls = [];
+
+    const searchResult = await harness.searchRecords({
+      plugin_id: pluginId,
+      table: 'notes',
+      query: 'Switched',
+      include: ['data'],
+    }) as { isError?: boolean };
+    expect(searchResult.isError).toBeFalsy();
+    const payload = JSON.parse(textOf(searchResult)) as { total: number; results: Array<{ score?: number; data?: Record<string, unknown> }> };
+    expect(providerState.calls).toEqual([{ entryName: 'analysis', text: 'Switched' }]);
+    expect(payload.total).toBe(1);
+    expect(payload.results[0]?.score).toEqual(expect.any(Number));
+    expect(payload.results[0]?.data?.title).toBe('Switched Needle');
+  }, 90_000);
+
   it('T-I-066 falls back to ILIKE for an opted-out plugin without semantic score', async () => {
     harness = await createPluginRecordHarness();
     const pluginId = 'plug_search_null';

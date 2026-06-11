@@ -1,6 +1,9 @@
 import { existsSync } from 'node:fs';
 import { relative, extname, normalize, basename, resolve, isAbsolute, join } from 'node:path';
-import { documentEmbeddingTarget, scheduleBackgroundEmbedding } from '../../../embedding/background-embed.js';
+import {
+  documentEmbeddingTarget,
+  scheduleBackgroundEmbeddingsForActiveEntries,
+} from '../../../embedding/background-embed.js';
 import type { ErrorEnvelope } from '../../utils/response-formats.js';
 import type { ScheduleDocumentEmbeddingInput } from '../../utils/document-output.js';
 
@@ -24,12 +27,18 @@ export async function scheduleDocumentEmbedding({
   embedText,
   provider,
   supabase,
+  config,
+  databaseUrl,
 }: ScheduleDocumentEmbeddingInput): Promise<void> {
-  await scheduleBackgroundEmbedding({
+  if (!config) return;
+
+  await scheduleBackgroundEmbeddingsForActiveEntries({
+    config,
     target: documentEmbeddingTarget({ instanceId, id, label }),
     embedText,
-    provider,
     supabase,
+    databaseUrl: databaseUrl ?? config.supabase.databaseUrl,
+    legacyProvider: provider,
   });
 }
 

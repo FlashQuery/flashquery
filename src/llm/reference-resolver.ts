@@ -20,7 +20,7 @@ import type { supabaseManager } from '../storage/supabase.js';
 import type { embeddingProvider } from '../embedding/provider.js';
 import {
   documentEmbeddingTarget,
-  scheduleBackgroundEmbedding,
+  scheduleBackgroundEmbeddingsForActiveEntries,
 } from '../embedding/background-embed.js';
 import {
   isReferenceFailureReason,
@@ -48,12 +48,18 @@ async function scheduleDocumentEmbedding({
   embedText,
   provider,
   supabase,
+  config,
+  databaseUrl,
 }: ScheduleDocumentEmbeddingInput): Promise<void> {
-  await scheduleBackgroundEmbedding({
+  if (!config) return;
+
+  await scheduleBackgroundEmbeddingsForActiveEntries({
+    config,
     target: documentEmbeddingTarget({ instanceId, id, label }),
     embedText,
-    provider,
     supabase,
+    databaseUrl: databaseUrl ?? config.supabase.databaseUrl,
+    legacyProvider: provider,
   });
 }
 

@@ -50,6 +50,8 @@ export interface ScheduleDocumentEmbeddingInput {
   embedText: string;
   provider: DocumentOutputEmbeddingProvider;
   supabase: SupabaseClient;
+  config?: FlashQueryConfig;
+  databaseUrl?: string;
 }
 
 export interface DocumentEnvelope {
@@ -478,6 +480,8 @@ export async function resolveAndBuildDocument(
         embedText: `${docTitle}\n\n${content}`,
         provider: ep,
         supabase: sm.getClient(),
+        config: cfg,
+        databaseUrl: cfg.supabase.databaseUrl,
       });
     }
   }

@@ -1,0 +1,15 @@
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+
+describe('catalog embedding routing guards', () => {
+  it.each([
+    ['copy_document', 'src/mcp/tools/documents/copy.ts'],
+    ['get_document stale re-embed helper', 'src/mcp/tools/documents/helpers.ts'],
+    ['reference resolver stale re-embed helper', 'src/llm/reference-resolver.ts'],
+  ])('%s routes document re-embeds through active catalog entries', (_label, path) => {
+    const source = readFileSync(path, 'utf8');
+
+    expect(source).toContain('scheduleBackgroundEmbeddingsForActiveEntries');
+    expect(source).not.toMatch(/scheduleBackgroundEmbedding\s*\(\s*\{/);
+  });
+});

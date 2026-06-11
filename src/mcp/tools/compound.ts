@@ -312,6 +312,61 @@ export function fuseRrfSearchResults(retrievers: RrfRetrieverHits[], limit: numb
     .slice(0, limit);
 }
 
+export function mergeRrfWithSupplementalResults(
+  results: SearchResultItem[],
+  limit: number
+): SearchResultItem[] {
+  const byKey = new Map<string, SearchResultItem>();
+
+  for (const result of results) {
+    const key = semanticResultKey(result);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, { ...result });
+      continue;
+    }
+
+    const existingRecord = existing as unknown as Record<string, unknown>;
+    const resultRecord = result as unknown as Record<string, unknown>;
+    const existingFused = typeof existingRecord.fused_score === 'number';
+    const resultFused = typeof resultRecord.fused_score === 'number';
+    const primary = existingFused || !resultFused ? existing : result;
+    const secondary = primary === existing ? result : existing;
+
+    byKey.set(key, {
+      ...secondary,
+      ...primary,
+      score: Math.max(primary.score ?? 0, secondary.score ?? 0),
+      match_source: [
+        ...new Set([...(primary.match_source ?? []), ...(secondary.match_source ?? [])]),
+      ],
+    });
+  }
+
+  return [...byKey.values()]
+    .sort((left, right) => {
+      const leftRecord = left as unknown as Record<string, unknown>;
+      const rightRecord = right as unknown as Record<string, unknown>;
+      const leftFused = typeof leftRecord.fused_score === 'number'
+        ? leftRecord.fused_score
+        : 0;
+      const rightFused = typeof rightRecord.fused_score === 'number'
+        ? rightRecord.fused_score
+        : 0;
+      const fusedDelta = rightFused - leftFused;
+      if (fusedDelta !== 0) return fusedDelta;
+      const leftRankSum = typeof leftRecord.rank_sum === 'number'
+        ? leftRecord.rank_sum
+        : Number.MAX_SAFE_INTEGER;
+      const rightRankSum = typeof rightRecord.rank_sum === 'number'
+        ? rightRecord.rank_sum
+        : Number.MAX_SAFE_INTEGER;
+      if (leftRankSum !== rightRankSum) return leftRankSum - rightRankSum;
+      return semanticIdentifier(left).localeCompare(semanticIdentifier(right));
+    })
+    .slice(0, limit);
+}
+
 async function searchDocumentsForEmbedding(input: {
   config: FlashQueryConfig;
   entry: ActiveEmbeddingEntry;
@@ -1656,26 +1711,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         }
 
         const results = catalogFusion === 'rrf'
-          ? [...allResults].sort((left, right) => {
-            const leftRecord = left as unknown as Record<string, unknown>;
-            const rightRecord = right as unknown as Record<string, unknown>;
-            const leftFused = typeof leftRecord.fused_score === 'number'
-              ? leftRecord.fused_score
-              : 0;
-            const rightFused = typeof rightRecord.fused_score === 'number'
-              ? rightRecord.fused_score
-              : 0;
-            const fusedDelta = rightFused - leftFused;
-            if (fusedDelta !== 0) return fusedDelta;
-            const leftRankSum = typeof leftRecord.rank_sum === 'number'
-              ? leftRecord.rank_sum
-              : Number.MAX_SAFE_INTEGER;
-            const rightRankSum = typeof rightRecord.rank_sum === 'number'
-              ? rightRecord.rank_sum
-              : Number.MAX_SAFE_INTEGER;
-            if (leftRankSum !== rightRankSum) return leftRankSum - rightRankSum;
-            return semanticIdentifier(left).localeCompare(semanticIdentifier(right));
-          }).slice(0, intent.limit)
+          ? mergeRrfWithSupplementalResults(allResults, intent.limit)
           : mergeSearchResults(allResults, intent.limit);
         return jsonToolResult({
           query: intent.query,

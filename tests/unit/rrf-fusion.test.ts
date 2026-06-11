@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { fuseRrfSearchResults, searchPrefetchSize } from '../../src/mcp/tools/compound.js';
+import {
+  fuseRrfSearchResults,
+  mergeRrfWithSupplementalResults,
+  searchPrefetchSize,
+} from '../../src/mcp/tools/compound.js';
 
 describe('RRF fusion', () => {
   it('T-U-023 computes sum(1 / (60 + rank)) per result', () => {
@@ -41,5 +45,36 @@ describe('RRF fusion', () => {
     expect(searchPrefetchSize(10)).toBe(20);
     expect(searchPrefetchSize(30)).toBe(60);
     expect(searchPrefetchSize(500)).toBe(100);
+  });
+
+  it('dedupes mixed-mode RRF semantic hits with filesystem hits while preserving fused metadata', () => {
+    const [result] = mergeRrfWithSupplementalResults([
+      {
+        entity_type: 'document',
+        identifier: 'Project Plan',
+        path: 'Projects/Plan.md',
+        fq_id: 'doc-1',
+        score: 0.93,
+        match_source: ['semantic'],
+        fused_score: 1 / 61,
+        rank_sum: 1,
+        per_embedding_ranks: { primary: 1 },
+      },
+      {
+        entity_type: 'document',
+        identifier: 'Projects/Plan.md',
+        path: 'Projects/Plan.md',
+        fq_id: 'doc-1',
+        match_source: ['filesystem'],
+      },
+    ], 10);
+
+    expect(result).toMatchObject({
+      fq_id: 'doc-1',
+      fused_score: 1 / 61,
+      rank_sum: 1,
+      per_embedding_ranks: { primary: 1 },
+      match_source: ['semantic', 'filesystem'],
+    });
   });
 });

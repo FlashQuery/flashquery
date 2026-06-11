@@ -2,7 +2,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { createCoreEmbeddingColumnSet, initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
-import { documentEmbeddingTarget, scheduleBackgroundEmbedding } from '../../../src/embedding/background-embed.js';
+import {
+  documentEmbeddingTarget,
+  scheduleBackgroundEmbedding,
+  scheduleBackgroundEmbeddingsForActiveEntries,
+} from '../../../src/embedding/background-embed.js';
 import { OpenAICompatibleProvider } from '../../../src/embedding/provider.js';
 import type { FlashQueryConfig } from '../../../src/config/types.js';
 import { initLogger } from '../../../src/logging/logger.js';
@@ -38,6 +42,31 @@ function makeConfig(): FlashQueryConfig {
     host: { mcpServers: [], toolSearch: 'disabled' },
     macro: { defaultTimeoutMs: 30_000 },
     logging: { level: 'error', output: 'stdout' },
+    llm: {
+      providers: [
+        {
+          name: 'openai-main',
+          type: 'openai-compatible',
+          endpoint: 'https://example.test',
+          apiKey: 'sk-test',
+        },
+      ],
+      models: [],
+      purposes: [],
+    },
+    embeddings: [
+      {
+        name: ENTRY_NAME,
+        dimensions: 3,
+        endpoints: [
+          {
+            providerName: 'openai-main',
+            model: 'model',
+            maxInputChars: 40,
+          },
+        ],
+      },
+    ],
   };
 }
 
@@ -57,11 +86,13 @@ describe.skipIf(!HAS_SUPABASE).sequential('truncation reactive fallback', () => 
   beforeEach(async () => {
     await client.query('DELETE FROM fqc_pending_embeds WHERE instance_id = $1', [TEST_INSTANCE_ID]);
     await client.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]);
+    await client.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]);
   });
 
   afterAll(async () => {
     await client?.query('DELETE FROM fqc_pending_embeds WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
+    await client?.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     for (const suffix of ['', '_model', '_dimensions', '_provider', '_truncated']) {
       await client?.query(
         `ALTER TABLE fqc_documents DROP COLUMN IF EXISTS ${pg.escapeIdentifier(`embedding_${ENTRY_NAME}${suffix}`)} CASCADE`
@@ -127,5 +158,55 @@ describe.skipIf(!HAS_SUPABASE).sequential('truncation reactive fallback', () => 
       }),
     ]);
     expect(pending.rows[0].last_error).toMatch(/input length exceeds/i);
+  });
+
+  it('persists embedding_<name>_truncated true from a real provider truncation', async () => {
+    await client.query(
+      `INSERT INTO fqc_embeddings (instance_id, name, dimensions, endpoints, source, status)
+       VALUES ($1, $2, 3, $3::jsonb, 'yaml', 'active')`,
+      [
+        TEST_INSTANCE_ID,
+        ENTRY_NAME,
+        JSON.stringify([
+          { providerName: 'openai-main', model: 'model', maxInputChars: 40 },
+        ]),
+      ]
+    );
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: [{ embedding: [0.1, 0.2, 0.3] }] }),
+    } as unknown as Response);
+    globalThis.fetch = fetchMock;
+    const documentId = randomUUID();
+    await client.query(
+      `INSERT INTO fqc_documents (id, instance_id, path, title)
+       VALUES ($1, $2, 'truncated.md', 'Truncated')`,
+      [documentId, TEST_INSTANCE_ID]
+    );
+
+    const result = await scheduleBackgroundEmbeddingsForActiveEntries({
+      config,
+      target: documentEmbeddingTarget({ instanceId: TEST_INSTANCE_ID, id: documentId, label: 'truncated.md' }),
+      embedText: 'Paragraph one has enough text to exceed the configured limit.\n\nParagraph two is omitted.',
+      supabase: supabaseManager.getClient(),
+      databaseUrl: TEST_DATABASE_URL,
+    });
+
+    expect(result.warnings).toEqual(['truncated_inputs']);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const document = await client.query(
+      `SELECT embedding_primary_truncated AS truncated,
+              embedding_primary_model AS model,
+              embedding_primary_provider AS provider
+       FROM fqc_documents
+       WHERE id = $1`,
+      [documentId]
+    );
+    expect(document.rows[0]).toEqual({
+      truncated: true,
+      model: 'model',
+      provider: 'openai-main',
+    });
   });
 });

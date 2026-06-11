@@ -251,4 +251,60 @@ describe.skipIf(SKIP)('plugin embedding column sets (integration)', () => {
     expect(await indexExists(client, `idx_${notesTable}_embedding_analysis`)).toBe(true);
     expect(await functionExists(client, `match_records_${notesTable}_analysis`)).toBe(true);
   }, 90_000);
+
+  it('adds the new entry column set when same-version re-registration switches embeddings', async () => {
+    await seedEmbeddingCatalog(client, [{ name: 'primary', dimensions: 3 }, { name: 'analysis', dimensions: 4 }]);
+    const pluginId = 'plug_cols_samever';
+    const notesTable = `fqcp_${pluginId}_default_notes`;
+    tablesToDrop.add(notesTable);
+    tablesToDrop.add(`fqcp_${pluginId}_default_audit`);
+
+    const first = await registerPlugin({
+      schema_yaml: pluginYaml(pluginId, '*', '1.0.0'),
+      embedding_name: 'primary',
+    }) as { isError?: boolean };
+    expect(first.isError).toBeFalsy();
+
+    const second = await registerPlugin({
+      schema_yaml: pluginYaml(pluginId, '*', '1.0.0'),
+      embedding_name: 'analysis',
+    }) as { isError?: boolean };
+    expect(second.isError).toBeFalsy();
+    expect(JSON.parse(textOf(second))).toMatchObject({ embedding_name: 'analysis' });
+
+    const notesColumns = await columnNames(client, notesTable);
+    expect(notesColumns).toEqual(expect.arrayContaining([
+      'embedding_primary',
+      'embedding_analysis',
+      'embedding_analysis_model',
+      'embedding_analysis_dimensions',
+      'embedding_analysis_provider',
+      'embedding_analysis_truncated',
+    ]));
+    expect(await indexExists(client, `idx_${notesTable}_embedding_analysis`)).toBe(true);
+    expect(await functionExists(client, `match_records_${notesTable}_analysis`)).toBe(true);
+  }, 90_000);
+
+  it('refuses plugin registration when an orphaned plugin embedding base column exists', async () => {
+    await seedEmbeddingCatalog(client, [{ name: 'primary', dimensions: 3 }]);
+    const pluginId = 'plug_cols_orphan';
+    const notesTable = `fqcp_${pluginId}_default_notes`;
+    tablesToDrop.add(notesTable);
+    tablesToDrop.add(`fqcp_${pluginId}_default_audit`);
+    await client.query(
+      `CREATE TABLE ${pg.escapeIdentifier(notesTable)} (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        instance_id TEXT NOT NULL,
+        embedding_primary vector(3)
+      )`
+    );
+
+    const result = await registerPlugin({
+      schema_yaml: pluginYaml(pluginId, '*'),
+      embedding_name: 'primary',
+    }) as { isError?: boolean; content: Array<{ text: string }> };
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/orphaned embedding column.*embedding_primary/i);
+  }, 90_000);
 });

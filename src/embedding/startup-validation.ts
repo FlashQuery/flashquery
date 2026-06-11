@@ -12,7 +12,21 @@ function isDestructiveEmbeddingRepairEnabled(): boolean {
 export async function verifyStartupEmbeddingCatalog(config: FlashQueryConfig): Promise<void> {
   if (!config.embeddings || config.embeddings.length === 0) return;
 
-  const client = createPgClientIPv4(config.supabase.databaseUrl);
+  const databaseUrl = config.supabase.databaseUrl?.trim();
+  if (!databaseUrl) {
+    if (isDestructiveEmbeddingRepairEnabled()) {
+      logger.warn(
+        'Skipping FQ_EMBEDDING_REPAIR because embedding catalog startup validation needs supabase.database_url for direct pg access'
+      );
+    } else {
+      logger.info(
+        'Skipping embedding catalog dimension drift validation because supabase.database_url is not configured'
+      );
+    }
+    return;
+  }
+
+  const client = createPgClientIPv4(databaseUrl);
   await client.connect();
   try {
     const repairEnabled = isDestructiveEmbeddingRepairEnabled();
