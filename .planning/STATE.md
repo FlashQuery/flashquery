@@ -9,8 +9,8 @@ progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 7
-  completed_plans: 3
-  percent: 43
+  completed_plans: 4
+  percent: 57
 ---
 
 # FlashQuery Core — State
@@ -25,26 +25,26 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 ## Current Position
 
 Phase: 166 — Embedding Pipeline
-Plan: 166-01 — Write Path: Best-Effort Per-Entry + Pending Queue
-Status: Planned; ready to execute Phase 166 Plan 01
-Last activity: 2026-06-11 — Phase 166 planned with four executable plans for write path, rate limiting, search/RRF, and plugin-table integration
+Plan: 166-02 — Rate Limiting + 429 Backoff
+Status: Phase 166 Plan 01 complete; ready to execute Phase 166 Plan 02
+Last activity: 2026-06-11 — Phase 166 Plan 01 completed write fan-out, per-entry pending queue/retry, warning surface, and oversized-input truncation
 
-Progress: ████░░░░░░ 43% (3/7 milestone plans complete)
+Progress: ██████░░░░ 57% (4/7 milestone plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 3 (this milestone)
-- Average duration: ~30 min
-- Total execution time: ~1h 30m
+- Total plans completed: 4 (this milestone)
+- Average duration: ~29 min
+- Total execution time: ~1h 56m
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 165 | 3 | ~1h 30m | ~30m |
-| 166 | 0/4 | - | - |
+| 166 | 1/4 | 26m | 26m |
 | 167 | ? | - | - |
 
 *Updated after each plan completion*
@@ -71,10 +71,13 @@ Progress: ████░░░░░░ 43% (3/7 milestone plans complete)
 - Phase 165 Plan 03 keeps legacy singular embedding compatibility explicit via `getLegacyEmbeddingDimensions` while catalog-driven embeddings use strict entry dimensions.
 - Per-entry stamping is opt-in through `embeddingName` during Phase 165; Phase 166 will wire catalog fan-out and pending queue shape.
 - Leaf embedding providers reject wrong-width vectors before callers can write them; OpenAI-compatible request bodies no longer include `dimensions`.
+- Phase 166 Plan 01 completed the core write path slice: `fqc_pending_embeds.embedding_name`, per-active-entry fan-out for core writes/scanner, suffixed `embedding_deferred:<name>` warnings, per-entry pending retry with deactivated skip and retired-row cleanup, and `max_input_chars` truncation with one 75% reactive retry.
+- REQ-006 remains partially complete after Plan 01: write-skip and pending-worker-skip paths are implemented; search-exclude and plugin-registration-refuse remain in later Phase 166 plans.
+- `gsd-sdk` was unavailable on PATH during Plan 166-01 execution, so state/roadmap tracking was updated manually.
 
 ### Todos
 
-- Execute Phase 166 Plan 01: Write Path: Best-Effort Per-Entry + Pending Queue
+- Execute Phase 166 Plan 02: Rate Limiting + 429 Backoff
 
 ### Blockers
 
@@ -82,8 +85,8 @@ None
 
 ## Session Continuity
 
-**Last session:** 2026-06-11 — Phase 166 planned
-**Next action:** Execute `.planning/phases/166-embedding-pipeline/166-01-PLAN.md`
+**Last session:** 2026-06-11 — Phase 166 Plan 01 executed
+**Next action:** Execute `.planning/phases/166-embedding-pipeline/166-02-PLAN.md`
 **Context needed:** Phase 166 execution should build on `.planning/phases/166-embedding-pipeline/166-CONTEXT.md`, `.planning/phases/165-foundation-infrastructure/165-01-SUMMARY.md`, `165-02-SUMMARY.md`, and `165-03-SUMMARY.md`, plus the two external source-of-truth docs named in every Phase 166 plan.
 
 ## v4.0 Deferred Items
