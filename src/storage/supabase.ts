@@ -451,6 +451,7 @@ CREATE TABLE IF NOT EXISTS fqc_pending_embeds (
   target_kind TEXT NOT NULL,
   target_table TEXT NOT NULL,
   target_id TEXT NOT NULL,
+  embedding_name TEXT NOT NULL,
   target_label TEXT,
   embed_text TEXT NOT NULL,
   attempt_count INTEGER NOT NULL DEFAULT 0,
@@ -474,8 +475,13 @@ BEGIN
   END IF;
 END $$;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_fqc_pending_embeds_target_unique
-  ON fqc_pending_embeds(instance_id, target_kind, target_table, target_id);
+ALTER TABLE IF EXISTS fqc_pending_embeds ADD COLUMN IF NOT EXISTS embedding_name TEXT;
+UPDATE fqc_pending_embeds SET embedding_name = 'legacy' WHERE embedding_name IS NULL;
+ALTER TABLE IF EXISTS fqc_pending_embeds ALTER COLUMN embedding_name SET NOT NULL;
+
+DROP INDEX IF EXISTS idx_fqc_pending_embeds_target_unique;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fqc_pending_embeds_target_entry_unique
+  ON fqc_pending_embeds(instance_id, target_kind, target_table, target_id, embedding_name);
 
 CREATE INDEX IF NOT EXISTS idx_fqc_pending_embeds_retry
   ON fqc_pending_embeds(instance_id, status, next_retry_at);

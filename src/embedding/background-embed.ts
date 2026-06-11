@@ -5,7 +5,7 @@ import { queryPgPool } from '../utils/pg-client.js';
 
 export const EMBEDDING_DEFERRED_WARNING = 'embedding_deferred' as const;
 
-export type EmbeddingWarning = typeof EMBEDDING_DEFERRED_WARNING;
+export type EmbeddingWarning = typeof EMBEDDING_DEFERRED_WARNING | `embedding_deferred:${string}`;
 export type BackgroundEmbeddingTargetKind = 'document' | 'memory' | 'record';
 
 export interface BackgroundEmbeddingTarget {
@@ -133,7 +133,7 @@ export async function scheduleBackgroundEmbedding(
           }
         : undefined
     );
-    await clearPendingEmbedding(options.supabase, options.target);
+    await clearPendingEmbedding(options.supabase, options.target, options.embeddingName);
     return { warnings: [] };
   } catch (err) {
     const message = errorMessage(err);
@@ -143,8 +143,12 @@ export async function scheduleBackgroundEmbedding(
       logPendingEmbeddingLost(log, options.target, message, errorMessage(pendingErr));
     }
     logBackgroundEmbedFailure(log, options.target, options.provider, options.embedText, message);
-    return { warnings: [EMBEDDING_DEFERRED_WARNING] };
+    return { warnings: [deferredEmbeddingWarning(options.embeddingName)] };
   }
+}
+
+export function deferredEmbeddingWarning(embeddingName?: string): EmbeddingWarning {
+  return embeddingName ? `embedding_deferred:${embeddingName}` : EMBEDDING_DEFERRED_WARNING;
 }
 
 export async function updateTargetEmbedding(
@@ -247,7 +251,7 @@ async function upsertPendingEmbedding(
   options: ScheduleBackgroundEmbeddingOptions,
   lastError: string
 ): Promise<void> {
-  const attemptCount = await nextAttemptCount(options.supabase, options.target);
+  const attemptCount = await nextAttemptCount(options.supabase, options.target, options.embeddingName);
   const now = new Date();
   const nextRetryAt = new Date(now.getTime() + 60_000).toISOString();
 
@@ -257,6 +261,7 @@ async function upsertPendingEmbedding(
       target_kind: options.target.kind,
       target_table: options.target.targetTable,
       target_id: options.target.targetId,
+      embedding_name: options.embeddingName ?? 'legacy',
       target_label: options.target.targetLabel ?? null,
       embed_text: options.embedText,
       attempt_count: attemptCount,
@@ -266,7 +271,7 @@ async function upsertPendingEmbedding(
       status: 'pending',
       updated_at: now.toISOString(),
     },
-    { onConflict: 'instance_id,target_kind,target_table,target_id' }
+    { onConflict: 'instance_id,target_kind,target_table,target_id,embedding_name' }
   );
 
   if (error) {
@@ -276,14 +281,21 @@ async function upsertPendingEmbedding(
 
 async function clearPendingEmbedding(
   supabase: SupabaseLike,
-  target: BackgroundEmbeddingTarget
+  target: BackgroundEmbeddingTarget,
+  embeddingName?: string
 ): Promise<void> {
-  const { error } = await (supabase.from('fqc_pending_embeds') as TableQuery)
+  let query = (supabase.from('fqc_pending_embeds') as TableQuery)
     .delete()
     .eq('instance_id', target.instanceId)
     .eq('target_kind', target.kind)
     .eq('target_table', target.targetTable)
     .eq('target_id', target.targetId);
+
+  if (embeddingName) {
+    query = query.eq('embedding_name', embeddingName);
+  }
+
+  const { error } = await query;
 
   if (error) {
     throw new Error(`Failed to clear pending embedding: ${error.message}`);
@@ -292,14 +304,21 @@ async function clearPendingEmbedding(
 
 async function nextAttemptCount(
   supabase: SupabaseLike,
-  target: BackgroundEmbeddingTarget
+  target: BackgroundEmbeddingTarget,
+  embeddingName?: string
 ): Promise<number> {
-  const { data, error } = await (supabase.from('fqc_pending_embeds') as TableQuery)
+  let query = (supabase.from('fqc_pending_embeds') as TableQuery)
     .select('attempt_count')
     .eq('instance_id', target.instanceId)
     .eq('target_kind', target.kind)
     .eq('target_table', target.targetTable)
     .eq('target_id', target.targetId);
+
+  if (embeddingName) {
+    query = query.eq('embedding_name', embeddingName);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     return 1;
