@@ -8,7 +8,7 @@ import { supabaseManager } from '../../storage/supabase.js';
 import { embeddingProvider, NullEmbeddingProvider } from '../../embedding/provider.js';
 import {
   documentEmbeddingTarget,
-  scheduleBackgroundEmbedding,
+  scheduleBackgroundEmbeddingsForActiveEntries,
 } from '../../embedding/background-embed.js';
 import { logger } from '../../logging/logger.js';
 import { pluginManager } from '../../plugins/manager.js';
@@ -1365,15 +1365,17 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
         const docTitle = typeof frontmatter[FM.TITLE] === 'string' ? frontmatter[FM.TITLE] as string : relativePath;
         const embedResult = fqcId
-          ? await scheduleBackgroundEmbedding({
+          ? await scheduleBackgroundEmbeddingsForActiveEntries({
+              config,
               target: documentEmbeddingTarget({
                 instanceId: config.instance.id,
                 id: fqcId,
                 label: relativePath,
               }),
               embedText: `${docTitle}\n\n${modifiedBody}`,
-              provider: embeddingProvider,
               supabase: supabaseManager.getClient(),
+              databaseUrl: config.supabase.databaseUrl,
+              legacyProvider: embeddingProvider,
             })
           : { warnings: [] };
 
@@ -1577,15 +1579,17 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           }
 
           const docTitle = typeof document.data[FM.TITLE] === 'string' ? document.data[FM.TITLE] as string : resolved.relativePath;
-          const embedResult = await scheduleBackgroundEmbedding({
+          const embedResult = await scheduleBackgroundEmbeddingsForActiveEntries({
+            config,
             target: documentEmbeddingTarget({
               instanceId: config.instance.id,
               id: resolved.fqcId,
               label: resolved.relativePath,
             }),
             embedText: `${docTitle}\n\n${newContent}`,
-            provider: embeddingProvider,
             supabase: supabaseManager.getClient(),
+            databaseUrl: config.supabase.databaseUrl,
+            legacyProvider: embeddingProvider,
           });
           embeddingWarnings = embedResult.warnings;
         }

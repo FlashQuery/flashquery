@@ -18,7 +18,7 @@ import { extractTemplateMeta } from '../llm/template-meta.js';
 import {
   EMBEDDING_DEFERRED_WARNING,
   documentEmbeddingTarget,
-  scheduleBackgroundEmbedding,
+  scheduleBackgroundEmbeddingsForActiveEntries,
 } from '../embedding/background-embed.js';
 import { withAncestorDirectoryLocksShared, withDocumentLock } from './document-lock.js';
 
@@ -501,19 +501,21 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
     logPrefix: string;
   }) => {
     embedPromises.push(
-      scheduleBackgroundEmbedding({
+      scheduleBackgroundEmbeddingsForActiveEntries({
+        config,
         target: documentEmbeddingTarget({
           instanceId,
           id: input.id,
           label: input.path,
         }),
         embedText: `${input.title}\n\n${input.content}`,
-        provider: embeddingProvider,
         supabase,
         logger,
+        databaseUrl: config.supabase.databaseUrl,
+        legacyProvider: embeddingProvider,
       })
         .then((result) => {
-          if (result.warnings.includes(EMBEDDING_DEFERRED_WARNING)) {
+          if (result.warnings.some((warning) => warning.startsWith(EMBEDDING_DEFERRED_WARNING))) {
             scannerEmbedDeferred = true;
           }
         })
@@ -1165,19 +1167,21 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
         }
 
         embedPromises.push(
-          scheduleBackgroundEmbedding({
+          scheduleBackgroundEmbeddingsForActiveEntries({
+            config,
             target: documentEmbeddingTarget({
               instanceId,
               id: docId,
               label: docPath,
             }),
             embedText,
-            provider: embeddingProvider,
             supabase,
             logger,
+            databaseUrl: config.supabase.databaseUrl,
+            legacyProvider: embeddingProvider,
           })
             .then((result) => {
-              if (result.warnings.includes(EMBEDDING_DEFERRED_WARNING)) {
+              if (result.warnings.some((warning) => warning.startsWith(EMBEDDING_DEFERRED_WARNING))) {
                 scannerEmbedDeferred = true;
               }
             })

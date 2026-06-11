@@ -1,5 +1,10 @@
 import pg from 'pg';
-import type { EmbeddingProvider } from './provider.js';
+import {
+  createEmbeddingProviderForCatalogEntry,
+  type EmbeddingCatalogProviderEntry,
+  type EmbeddingProvider,
+} from './provider.js';
+import type { FlashQueryConfig } from '../config/types.js';
 import { logger as defaultLogger } from '../logging/logger.js';
 import { queryPgPool } from '../utils/pg-client.js';
 
@@ -31,6 +36,21 @@ export interface ScheduleBackgroundEmbeddingResult {
   warnings: EmbeddingWarning[];
 }
 
+export interface ActiveEmbeddingEntry extends EmbeddingCatalogProviderEntry {
+  status: 'active';
+}
+
+export interface ScheduleActiveCatalogEmbeddingsOptions {
+  config: FlashQueryConfig;
+  target: BackgroundEmbeddingTarget;
+  embedText: string;
+  supabase: SupabaseLike;
+  logger?: StructuredLogger;
+  databaseUrl?: string;
+  providerFactory?: (entry: ActiveEmbeddingEntry) => EmbeddingProvider;
+  legacyProvider?: EmbeddingProvider;
+}
+
 export interface EmbeddingWriteStamp {
   embeddingName: string;
   model: string;
@@ -54,7 +74,7 @@ interface QueryBuilder<Row = Record<string, unknown>> extends PromiseLike<QueryR
 interface TableQuery {
   update(payload: Record<string, unknown>): QueryBuilder;
   upsert(payload: Record<string, unknown>, options?: Record<string, unknown>): PromiseLike<QueryResult>;
-  select(columns: string): QueryBuilder<{ attempt_count?: number }>;
+  select<Row = { attempt_count?: number }>(columns: string): QueryBuilder<Row>;
   delete(): QueryBuilder;
 }
 
@@ -62,10 +82,47 @@ interface SupabaseLike {
   from(table: string): unknown;
 }
 
+interface ActiveEmbeddingEntryRow {
+  name: string;
+  dimensions: number;
+  endpoints: unknown;
+  status: 'active';
+}
+
 const TARGET_TABLES = {
   document: 'fqc_documents',
   memory: 'fqc_memory',
 } as const;
+
+async function selectActiveEmbeddingEntries(
+  supabase: SupabaseLike,
+  config: FlashQueryConfig
+): Promise<ActiveEmbeddingEntry[]> {
+  const { data, error } = await (supabase.from('fqc_embeddings') as TableQuery)
+    .select<ActiveEmbeddingEntryRow>('name, dimensions, endpoints, status')
+    .eq('instance_id', config.instance.id)
+    .eq('status', 'active');
+
+  if (error) {
+    throw new Error(`Embedding catalog query failed: ${error.message}`);
+  }
+
+  const rows = Array.isArray(data) ? data : data ? [data] : [];
+  const order = new Map((config.embeddings ?? []).map((entry, index) => [entry.name, index]));
+  return rows
+    .map((row) => ({
+      name: row.name,
+      dimensions: row.dimensions,
+      endpoints: Array.isArray(row.endpoints) ? row.endpoints : [],
+      status: 'active' as const,
+    }))
+    .sort((left, right) => {
+      const leftOrder = order.get(left.name) ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = order.get(right.name) ?? Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+      return left.name.localeCompare(right.name);
+    });
+}
 
 export function documentEmbeddingTarget(input: {
   instanceId: string;
@@ -149,6 +206,45 @@ export async function scheduleBackgroundEmbedding(
 
 export function deferredEmbeddingWarning(embeddingName?: string): EmbeddingWarning {
   return embeddingName ? `embedding_deferred:${embeddingName}` : EMBEDDING_DEFERRED_WARNING;
+}
+
+export async function scheduleBackgroundEmbeddingsForActiveEntries(
+  options: ScheduleActiveCatalogEmbeddingsOptions
+): Promise<ScheduleBackgroundEmbeddingResult> {
+  const entries = await selectActiveEmbeddingEntries(options.supabase, options.config);
+  if (entries.length === 0) {
+    if ((options.config.embeddings?.length ?? 0) === 0 && options.legacyProvider) {
+      return scheduleBackgroundEmbedding({
+        target: options.target,
+        embedText: options.embedText,
+        provider: options.legacyProvider,
+        supabase: options.supabase,
+        logger: options.logger,
+        databaseUrl: options.databaseUrl,
+      });
+    }
+    return { warnings: [] };
+  }
+
+  const providerFactory =
+    options.providerFactory ??
+    ((entry: ActiveEmbeddingEntry) => createEmbeddingProviderForCatalogEntry(options.config, entry));
+
+  const results = await Promise.all(
+    entries.map((entry) =>
+      scheduleBackgroundEmbedding({
+        target: options.target,
+        embedText: options.embedText,
+        provider: providerFactory(entry),
+        supabase: options.supabase,
+        logger: options.logger,
+        databaseUrl: options.databaseUrl,
+        embeddingName: entry.name,
+      })
+    )
+  );
+
+  return { warnings: [...new Set(results.flatMap((result) => result.warnings))] };
 }
 
 export async function updateTargetEmbedding(

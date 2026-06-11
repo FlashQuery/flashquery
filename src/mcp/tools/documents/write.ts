@@ -10,7 +10,7 @@ import { supabaseManager } from '../../../storage/supabase.js';
 import { embeddingProvider } from '../../../embedding/provider.js';
 import {
   documentEmbeddingTarget,
-  scheduleBackgroundEmbedding,
+  scheduleBackgroundEmbeddingsForActiveEntries,
 } from '../../../embedding/background-embed.js';
 import { logger } from '../../../logging/logger.js';
 import {
@@ -241,15 +241,17 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
                 }
               }
 
-              const embedResult = await scheduleBackgroundEmbedding({
+              const embedResult = await scheduleBackgroundEmbeddingsForActiveEntries({
+                config,
                 target: documentEmbeddingTarget({
                   instanceId: config.instance.id,
                   id: fqcId,
                   label: relativePath,
                 }),
                 embedText: `${effectiveTitle}\n\n${body}`,
-                provider: embeddingProvider,
                 supabase,
+                databaseUrl: config.supabase.databaseUrl,
+                legacyProvider: embeddingProvider,
               });
 
               return jsonToolResult(
@@ -422,15 +424,17 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
                     );
                   }
 
-                  const embedResult = await scheduleBackgroundEmbedding({
+                  const embedResult = await scheduleBackgroundEmbeddingsForActiveEntries({
+                    config,
                     target: documentEmbeddingTarget({
                       instanceId: config.instance.id,
                       id: fqcId,
                       label: resolved.relativePath,
                     }),
                     embedText: `${effectiveTitle}\n\n${effectiveBody}`,
-                    provider: embeddingProvider,
                     supabase,
+                    databaseUrl: config.supabase.databaseUrl,
+                    legacyProvider: embeddingProvider,
                   });
 
                   return {

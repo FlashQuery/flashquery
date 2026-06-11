@@ -241,10 +241,11 @@ export function withWarnings<T extends object>(
   payload: T,
   warnings: WarningCode[]
 ): T & { warnings?: WarningCode[] } {
-  if (warnings.length === 0) {
+  const deduped = [...new Set(warnings)];
+  if (deduped.length === 0) {
     return payload;
   }
-  return { ...payload, warnings };
+  return { ...payload, warnings: deduped };
 }
 
 export function batchResult(results: unknown[]): unknown[] {

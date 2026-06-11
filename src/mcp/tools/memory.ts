@@ -5,7 +5,7 @@ import { supabaseManager } from '../../storage/supabase.js';
 import { embeddingProvider } from '../../embedding/provider.js';
 import {
   memoryEmbeddingTarget,
-  scheduleBackgroundEmbedding,
+  scheduleBackgroundEmbeddingsForActiveEntries,
 } from '../../embedding/background-embed.js';
 import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
@@ -276,15 +276,17 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
           if (error) throw new Error(error.message);
 
           const row = data as MemoryRow;
-          const embedResult = await scheduleBackgroundEmbedding({
+          const embedResult = await scheduleBackgroundEmbeddingsForActiveEntries({
+            config,
             target: memoryEmbeddingTarget({
               instanceId: config.instance.id,
               id: row.id,
               label: row.id,
             }),
             embedText: params.content as string,
-            provider: embeddingProvider,
             supabase,
+            databaseUrl: config.supabase.databaseUrl,
+            legacyProvider: embeddingProvider,
           });
 
           return jsonToolResult(withWarnings(buildMemoryResult(row, include), embedResult.warnings));
@@ -346,15 +348,17 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
         if (!inserted) throw new Error('fqc_memory_create_version returned no row');
 
         const insertedRow = inserted;
-        const embedResult = await scheduleBackgroundEmbedding({
+        const embedResult = await scheduleBackgroundEmbeddingsForActiveEntries({
+          config,
           target: memoryEmbeddingTarget({
             instanceId: config.instance.id,
             id: insertedRow.id,
             label: insertedRow.id,
           }),
           embedText: nextContent,
-          provider: embeddingProvider,
           supabase,
+          databaseUrl: config.supabase.databaseUrl,
+          legacyProvider: embeddingProvider,
         });
 
         return jsonToolResult(withWarnings(buildMemoryResult(insertedRow, include), embedResult.warnings));

@@ -13,6 +13,21 @@ export interface EmbeddingProvider {
   getProviderInfo?(): { provider: string; model: string };
 }
 
+export interface EmbeddingCatalogEndpoint {
+  provider_name?: string;
+  providerName?: string;
+  model: string;
+  max_input_chars?: number;
+  maxInputChars?: number;
+  rate_limit?: { min_delay_ms?: number };
+}
+
+export interface EmbeddingCatalogProviderEntry {
+  name: string;
+  dimensions: number;
+  endpoints: EmbeddingCatalogEndpoint[];
+}
+
 export function assertEmbeddingVectorDimensions(input: {
   vector: number[];
   expectedDimensions: number;
@@ -211,6 +226,7 @@ export class NullEmbeddingProvider implements EmbeddingProvider {
 export class FallbackEmbeddingProvider implements EmbeddingProvider {
   private providers: Array<{ name: string; provider: EmbeddingProvider }>;
   private dimensions: number;
+  private lastProviderInfo?: { provider: string; model: string };
 
   constructor(providers: Array<{ name: string; provider: EmbeddingProvider }>, dimensions: number) {
     this.providers = providers;
@@ -221,7 +237,9 @@ export class FallbackEmbeddingProvider implements EmbeddingProvider {
     const failures: string[] = [];
     for (const { name, provider } of this.providers) {
       try {
-        return await provider.embed(text);
+        const vector = await provider.embed(text);
+        this.lastProviderInfo = provider.getProviderInfo?.() ?? { provider: name, model: 'unknown' };
+        return vector;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         failures.push(`${name}: ${message}`);
@@ -236,11 +254,70 @@ export class FallbackEmbeddingProvider implements EmbeddingProvider {
   }
 
   getProviderInfo(): { provider: string; model: string } {
+    if (this.lastProviderInfo) {
+      return this.lastProviderInfo;
+    }
     return {
       provider: this.providers.map(({ name }) => name).join(' fallback chain'),
       model: 'fallback embedding chain',
     };
   }
+}
+
+export function createEmbeddingProviderForCatalogEntry(
+  config: FlashQueryConfig,
+  entry: EmbeddingCatalogProviderEntry
+): EmbeddingProvider {
+  const providers = entry.endpoints.map((endpoint) => {
+    const providerName = endpoint.provider_name ?? endpoint.providerName;
+    if (!providerName) {
+      return {
+        name: 'unknown',
+        provider: new NullEmbeddingProvider(entry.dimensions),
+      };
+    }
+
+    const providerConfig = config.llm?.providers.find((provider) => provider.name === providerName);
+    if (!providerConfig) {
+      return {
+        name: providerName,
+        provider: new NullEmbeddingProvider(entry.dimensions),
+      };
+    }
+
+    if (providerConfig.type === 'ollama') {
+      return {
+        name: providerName,
+        provider: new OllamaProvider(providerConfig.endpoint, endpoint.model, entry.dimensions),
+      };
+    }
+
+    if (!providerConfig.apiKey?.trim()) {
+      return {
+        name: providerName,
+        provider: new NullEmbeddingProvider(entry.dimensions),
+      };
+    }
+
+    return {
+      name: providerName,
+      provider: new OpenAICompatibleProvider(
+        providerConfig.endpoint,
+        endpoint.model,
+        providerConfig.apiKey,
+        entry.dimensions,
+        providerName
+      ),
+    };
+  });
+
+  if (providers.length === 0) {
+    return new NullEmbeddingProvider(entry.dimensions);
+  }
+  if (providers.length === 1) {
+    return providers[0]!.provider;
+  }
+  return new FallbackEmbeddingProvider(providers, entry.dimensions);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
