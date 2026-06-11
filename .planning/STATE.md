@@ -9,8 +9,8 @@ progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 7
-  completed_plans: 4
-  percent: 57
+  completed_plans: 5
+  percent: 71
 ---
 
 # FlashQuery Core — State
@@ -25,26 +25,26 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 ## Current Position
 
 Phase: 166 — Embedding Pipeline
-Plan: 166-02 — Rate Limiting + 429 Backoff
-Status: Phase 166 Plan 01 complete; ready to execute Phase 166 Plan 02
-Last activity: 2026-06-11 — Phase 166 Plan 01 completed write fan-out, per-entry pending queue/retry, warning surface, and oversized-input truncation
+Plan: 166-03 — Search + RRF Fusion
+Status: Phase 166 Plan 02 complete; ready to execute Phase 166 Plan 03
+Last activity: 2026-06-11 — Phase 166 Plan 02 completed endpoint rate_limit parsing, proactive min_delay_ms throttling, same-endpoint 429 backoff, and non-429 immediate failover preservation
 
-Progress: ██████░░░░ 57% (4/7 milestone plans complete)
+Progress: ███████░░░ 71% (5/7 milestone plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 4 (this milestone)
-- Average duration: ~29 min
-- Total execution time: ~1h 56m
+- Total plans completed: 5 (this milestone)
+- Average duration: ~25 min
+- Total execution time: ~2h 05m
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 165 | 3 | ~1h 30m | ~30m |
-| 166 | 1/4 | 26m | 26m |
+| 166 | 2/4 | 35m | ~18m |
 | 167 | ? | - | - |
 
 *Updated after each plan completion*
@@ -74,10 +74,12 @@ Progress: ██████░░░░ 57% (4/7 milestone plans complete)
 - Phase 166 Plan 01 completed the core write path slice: `fqc_pending_embeds.embedding_name`, per-active-entry fan-out for core writes/scanner, suffixed `embedding_deferred:<name>` warnings, per-entry pending retry with deactivated skip and retired-row cleanup, and `max_input_chars` truncation with one 75% reactive retry.
 - REQ-006 remains partially complete after Plan 01: write-skip and pending-worker-skip paths are implemented; search-exclude and plugin-registration-refuse remain in later Phase 166 plans.
 - `gsd-sdk` was unavailable on PATH during Plan 166-01 execution, so state/roadmap tracking was updated manually.
+- Phase 166 Plan 02 completed REQ-017: endpoint `rate_limit` settings are parsed/preserved, OpenAI-compatible and Ollama leaf providers enforce in-process `min_delay_ms`, HTTP 429 retries on the same endpoint with exponential backoff before failover, and non-429 failures still fail over immediately.
+- `gsd-sdk` remained unavailable on PATH during Plan 166-02 execution, so state/roadmap/requirements tracking was updated manually.
 
 ### Todos
 
-- Execute Phase 166 Plan 02: Rate Limiting + 429 Backoff
+- Execute Phase 166 Plan 03: Search + RRF Fusion
 
 ### Blockers
 
@@ -85,8 +87,8 @@ None
 
 ## Session Continuity
 
-**Last session:** 2026-06-11 — Phase 166 Plan 01 executed
-**Next action:** Execute `.planning/phases/166-embedding-pipeline/166-02-PLAN.md`
+**Last session:** 2026-06-11 — Phase 166 Plan 02 executed
+**Next action:** Execute `.planning/phases/166-embedding-pipeline/166-03-PLAN.md`
 **Context needed:** Phase 166 execution should build on `.planning/phases/166-embedding-pipeline/166-CONTEXT.md`, `.planning/phases/165-foundation-infrastructure/165-01-SUMMARY.md`, `165-02-SUMMARY.md`, and `165-03-SUMMARY.md`, plus the two external source-of-truth docs named in every Phase 166 plan.
 
 ## v4.0 Deferred Items

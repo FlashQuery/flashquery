@@ -78,7 +78,7 @@ All 43 requirements are committed scope for v4.0. Each maps to exactly one phase
 - [x] **REQ-014**: Write tools surface `embedding_deferred:<name>` warnings, one per deferred entry, deduplicated (§6.3.3)
 - [x] **REQ-015**: Pending-worker retries per-entry using each entry's endpoint chain; skips deactivated, deletes retired (§6.3.4)
 - [x] **REQ-016**: Oversized-input truncation at paragraph/sentence boundary with `_truncated` stamping, warning, and reactive 75% retry (§6.3.5)
-- [ ] **REQ-017**: Per-endpoint rate limiting (`min_delay_ms`) and 429 exponential backoff before failover (§6.3.6)
+- [x] **REQ-017**: Per-endpoint rate limiting (`min_delay_ms`) and 429 exponential backoff before failover (§6.3.6)
 - [x] **REQ-018**: Runtime vector-length guard inside each leaf provider's `embed()` (§6.3.7)
 - [x] **REQ-019**: Remove the `includeDimensions` heuristic entirely; never send `dimensions` to embedding APIs (§6.3.8)
 
@@ -179,7 +179,7 @@ Each requirement maps to exactly one roadmap phase. For incrementally-built REQs
 | REQ-014 | Phase 166 | Complete |
 | REQ-015 | Phase 166 | Complete |
 | REQ-016 | Phase 166 | Complete |
-| REQ-017 | Phase 166 | Pending |
+| REQ-017 | Phase 166 | Complete |
 | REQ-018 | Phase 165 | Complete |
 | REQ-019 | Phase 165 | Complete |
 | REQ-020 | Phase 166 | Pending |
