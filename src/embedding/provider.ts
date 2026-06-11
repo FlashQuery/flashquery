@@ -38,6 +38,8 @@ export interface EmbeddingCatalogEndpoint {
 }
 
 export const DEFAULT_MAX_INPUT_CHARS = 24_000;
+const DEFAULT_RATE_LIMIT_BACKOFF_RETRIES = 3;
+const DEFAULT_RATE_LIMIT_BACKOFF_BASE_MS = 1000;
 
 interface EndpointRateLimit {
   minDelayMs?: number;
@@ -98,6 +100,18 @@ function normalizeEndpointRateLimit(endpoint: EmbeddingCatalogEndpoint): Endpoin
       : {}),
     ...(rateLimit.backoffBaseMs !== undefined ? { backoffBaseMs: rateLimit.backoffBaseMs } : {}),
   };
+}
+
+function hasRetryableRateLimit(rateLimit: EndpointRateLimit | undefined): rateLimit is EndpointRateLimit {
+  return rateLimit !== undefined;
+}
+
+function maxBackoffRetries(rateLimit: EndpointRateLimit): number {
+  return rateLimit.maxBackoffRetries ?? DEFAULT_RATE_LIMIT_BACKOFF_RETRIES;
+}
+
+function backoffBaseMs(rateLimit: EndpointRateLimit): number {
+  return rateLimit.backoffBaseMs ?? DEFAULT_RATE_LIMIT_BACKOFF_BASE_MS;
 }
 
 export interface EmbeddingCatalogProviderEntry {
@@ -164,7 +178,7 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
       truncated: initial.truncated,
       warnings: initial.truncated ? ['truncated_inputs'] : [],
     };
-    let response = await this.postEmbedding(initial.text);
+    let response = await this.postEmbeddingWithRateLimitRetry(initial.text);
     if (!response.ok) {
       const body = await response.text().catch(() => '');
       if (isProviderOverLimitError(response.status, body)) {
@@ -173,7 +187,7 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
           truncated: true,
           warnings: ['truncated_inputs'],
         };
-        response = await this.postEmbedding(retry.text);
+        response = await this.postEmbeddingWithRateLimitRetry(retry.text);
         if (!response.ok) {
           const retryBody = await response.text().catch(() => '');
           throw this.errorForResponse(response.status, retryBody);
@@ -215,6 +229,32 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
         `Embedding error: Could not reach ${this.providerName} API. Check your internet connection.`
       );
     }
+  }
+
+  private async postEmbeddingWithRateLimitRetry(input: string): Promise<Response> {
+    const rateLimit = this.rateLimit;
+    if (!hasRetryableRateLimit(rateLimit)) {
+      return this.postEmbedding(input);
+    }
+
+    const retries = maxBackoffRetries(rateLimit);
+    const baseMs = backoffBaseMs(rateLimit);
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const response = await this.postEmbedding(input);
+      if (response.status !== 429 || response.ok) {
+        return response;
+      }
+      if (attempt === retries) {
+        this.lastMetadata = {
+          truncated: this.lastMetadata.truncated,
+          warnings: [...new Set([...this.lastMetadata.warnings, 'rate_limit_events'])],
+        };
+        return response;
+      }
+      await sleep(baseMs * (2 ** attempt));
+    }
+
+    return this.postEmbedding(input);
   }
 
   private async throttleBeforeRequest(): Promise<void> {
@@ -294,7 +334,7 @@ export class OllamaProvider implements EmbeddingProvider {
       truncated: initial.truncated,
       warnings: initial.truncated ? ['truncated_inputs'] : [],
     };
-    let response = await this.postEmbedding(initial.text);
+    let response = await this.postEmbeddingWithRateLimitRetry(initial.text);
     if (!response.ok) {
       const body = await response.text().catch(() => '');
       if (isProviderOverLimitError(response.status, body)) {
@@ -303,7 +343,7 @@ export class OllamaProvider implements EmbeddingProvider {
           truncated: true,
           warnings: ['truncated_inputs'],
         };
-        response = await this.postEmbedding(retry.text);
+        response = await this.postEmbeddingWithRateLimitRetry(retry.text);
         if (!response.ok) {
           const retryBody = await response.text().catch(() => '');
           throw new Error(`Embedding error: Ollama API returned ${response.status}${retryBody.trim() ? `: ${retryBody.trim()}` : ''}.`);
@@ -340,6 +380,32 @@ export class OllamaProvider implements EmbeddingProvider {
         'Embedding error: Could not reach Ollama API. Check your internet connection.'
       );
     }
+  }
+
+  private async postEmbeddingWithRateLimitRetry(prompt: string): Promise<Response> {
+    const rateLimit = this.rateLimit;
+    if (!hasRetryableRateLimit(rateLimit)) {
+      return this.postEmbedding(prompt);
+    }
+
+    const retries = maxBackoffRetries(rateLimit);
+    const baseMs = backoffBaseMs(rateLimit);
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const response = await this.postEmbedding(prompt);
+      if (response.status !== 429 || response.ok) {
+        return response;
+      }
+      if (attempt === retries) {
+        this.lastMetadata = {
+          truncated: this.lastMetadata.truncated,
+          warnings: [...new Set([...this.lastMetadata.warnings, 'rate_limit_events'])],
+        };
+        return response;
+      }
+      await sleep(baseMs * (2 ** attempt));
+    }
+
+    return this.postEmbedding(prompt);
   }
 
   private async throttleBeforeRequest(): Promise<void> {
