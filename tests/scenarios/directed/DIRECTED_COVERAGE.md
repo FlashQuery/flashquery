@@ -2076,3 +2076,15 @@ Behaviors verifying the `call_model` and `get_llm_usage` MCP tools introduced in
 | D-101 | T-S-002 / REQ-030: plugin manifest specific embedding name not present in the catalog returns `not_found` with available active names. | test_plugin_registration_specific_not_found | 2026-06-11 | 2026-06-11 |
 | D-102 | T-S-003 / REQ-006 / REQ-030: plugin registration against a deactivated embedding entry returns `unsupported` with a reactivation or retire remediation hint. | test_plugin_registration_deactivated | 2026-06-11 | 2026-06-11 |
 | D-103 | T-S-004 / REQ-033: plugin re-registration against a new active embedding updates the frozen plugin choice and returns the new `embedding_name`. | test_plugin_re_register_switch_entry | 2026-06-11 | 2026-06-11 |
+
+## Phase 167 Embedding Lifecycle Backfill and Rebuild
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| D-104 | T-S-005 / REQ-035: `backfill_embeddings` against documents and memories populates NULL rows and matches dry-run `would_process`. | test_backfill_embeddings_full_scope | 2026-06-11 | 2026-06-11 |
+| D-105 | T-S-006 / REQ-035: `backfill_embeddings` dry-run returns `would_process`, estimates, and no vector/stamp side effects. | test_backfill_embeddings_dry_run | 2026-06-11 | 2026-06-11 |
+| D-106 | T-S-007 / REQ-035: background `backfill_embeddings` returns an accepted job and status polling reaches completed counts. | test_backfill_embeddings_background | 2026-06-11 | 2026-06-11 |
+| D-107 | T-S-008 / REQ-035: `backfill_embeddings` row/provider failures are reported in `failures[]` with row identity and error text. | test_backfill_embeddings_failures | 2026-06-11 | 2026-06-11 |
+| D-108 | T-S-009 / REQ-036: `rebuild_embeddings` with `stale_only: true` regenerates rows stamped with non-current models. | test_rebuild_embeddings_stale_only | 2026-06-11 | 2026-06-11 |
+| D-109 | T-S-010 / REQ-036: `rebuild_embeddings` with mismatched `confirm` returns `invalid_input` with expected and received values. | test_rebuild_embeddings_confirm_mismatch | 2026-06-11 | 2026-06-11 |
+| D-110 | T-S-011 / REQ-036: `rebuild_embeddings` without `max_rows` returns `invalid_input` naming the required cap. | test_rebuild_embeddings_max_rows_required | 2026-06-11 | 2026-06-11 |
