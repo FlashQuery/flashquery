@@ -1465,18 +1465,15 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
               const successful = retrievers.filter((result) => result.failure === undefined);
               const failed = retrievers.filter((result) => result.failure !== undefined);
               if (successful.length === 0) {
-                if (intent.requested_mode === 'semantic') {
-                  return jsonExpectedError({
-                    error: 'unsupported',
-                    message: 'Semantic search is unavailable',
-                    identifier: 'search',
-                    details: {
-                      reason: 'embedding_unavailable',
-                      retriever_failures: failed.map((result) => result.failure),
-                    },
-                  });
-                }
-                warnings.push('embedding_unavailable');
+                return jsonRuntimeError({
+                  error: 'runtime_error',
+                  message: 'All selected embedding retrievers failed',
+                  identifier: 'search',
+                  details: {
+                    reason: 'all_retrievers_failed',
+                    retriever_failures: failed.map((result) => result.failure),
+                  },
+                });
               } else {
                 for (const failedResult of failed) {
                   warnings.push(`partial_retriever_failure:${failedResult.entry.name}`);
