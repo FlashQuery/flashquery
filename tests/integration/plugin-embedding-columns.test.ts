@@ -59,12 +59,12 @@ function createMockServer() {
   return { server, getHandler: (name: string) => handlers[name]! };
 }
 
-function pluginYaml(pluginId: string, embedding: string | null): string {
+function pluginYaml(pluginId: string, embedding: string | null, version = '1.0.0'): string {
   const embeddingLine = embedding === null ? 'embedding: null' : `embedding: "${embedding}"`;
   return `
 id: ${pluginId}
 name: ${pluginId}
-version: 1.0.0
+version: ${version}
 ${embeddingLine}
 tables:
   - name: notes
@@ -217,5 +217,38 @@ describe.skipIf(SKIP)('plugin embedding column sets (integration)', () => {
     expect(notesColumns).toContain('embedding_primary');
     expect(notesColumns).not.toContain('embedding_analysis');
     expect(await functionExists(client, `match_records_${notesTable}_analysis`)).toBe(false);
+  }, 90_000);
+
+  it('adds the new entry column set when versioned re-registration switches embeddings', async () => {
+    await seedEmbeddingCatalog(client, [{ name: 'primary', dimensions: 3 }, { name: 'analysis', dimensions: 4 }]);
+    const pluginId = 'plug_cols_reregister';
+    const notesTable = `fqcp_${pluginId}_default_notes`;
+    tablesToDrop.add(notesTable);
+    tablesToDrop.add(`fqcp_${pluginId}_default_audit`);
+
+    const first = await registerPlugin({
+      schema_yaml: pluginYaml(pluginId, '*', '1.0.0'),
+      embedding_name: 'primary',
+    }) as { isError?: boolean };
+    expect(first.isError).toBeFalsy();
+
+    const second = await registerPlugin({
+      schema_yaml: pluginYaml(pluginId, '*', '1.1.0'),
+      embedding_name: 'analysis',
+    }) as { isError?: boolean };
+    expect(second.isError).toBeFalsy();
+    expect(JSON.parse(textOf(second))).toMatchObject({ embedding_name: 'analysis' });
+
+    const notesColumns = await columnNames(client, notesTable);
+    expect(notesColumns).toEqual(expect.arrayContaining([
+      'embedding_primary',
+      'embedding_analysis',
+      'embedding_analysis_model',
+      'embedding_analysis_dimensions',
+      'embedding_analysis_provider',
+      'embedding_analysis_truncated',
+    ]));
+    expect(await indexExists(client, `idx_${notesTable}_embedding_analysis`)).toBe(true);
+    expect(await functionExists(client, `match_records_${notesTable}_analysis`)).toBe(true);
   }, 90_000);
 });

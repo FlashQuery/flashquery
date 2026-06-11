@@ -302,11 +302,14 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
               });
             }
 
-            // Apply safe changes via DDL
-            if (safe.length > 0) {
+            // Apply safe changes and embedding DDL together. The registry must not
+            // point at a resolved embedding before existing plugin tables can store it.
+            if (safe.length > 0 || resolvedEmbedding) {
               const pgClient = createPgClientIPv4(config.supabase.databaseUrl);
+              let committed = false;
               try {
                 await pgClient.connect();
+                await pgClient.query('BEGIN');
 
                 for (const change of safe) {
                   if (change.type === 'table_added') {
@@ -335,10 +338,23 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
                   }
                 }
 
+                if (resolvedEmbedding) {
+                  for (const table of schema.tables) {
+                    if (!table.embed_fields || table.embed_fields.length === 0) continue;
+                    const fullTableName = resolveTableName(schema.plugin.id, instanceName, table.name);
+                    await pgClient.query(buildPluginEmbeddingColumnSetDDL(fullTableName, resolvedEmbedding));
+                  }
+                }
+
+                await pgClient.query('COMMIT');
+                committed = true;
                 // Notify PostgREST to reload schema cache
                 await pgClient.query(`SELECT pg_notify('pgrst', 'reload schema')`);
                 await new Promise((resolve) => setTimeout(resolve, 300));
               } catch (err) {
+                if (!committed) {
+                  await pgClient.query('ROLLBACK').catch(() => undefined);
+                }
                 logger.error(`Failed to apply safe schema changes: ${err instanceof Error ? err.message : String(err)}`);
                 return jsonRuntimeError(`Error applying safe schema changes: ${err instanceof Error ? err.message : String(err)}`);
               } finally {
