@@ -32,6 +32,12 @@ function makeConfig(): FlashQueryConfig {
           endpoint: 'https://api.openai.test',
           apiKey: 'sk-test',
         },
+        {
+          name: 'backup',
+          type: 'openai-compatible',
+          endpoint: 'https://backup.openai.test',
+          apiKey: 'sk-backup',
+        },
       ],
       models: [],
       purposes: [],
@@ -100,5 +106,91 @@ describe('embedding endpoint rate limiting', () => {
     await provider.embed('second');
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('T-U-020 retries HTTP 429 with exponential backoff on the same endpoint before failover', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: async () => 'too many requests',
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: [{ embedding: [0.1, 0.2, 0.3] }] }),
+      } as unknown as Response);
+    globalThis.fetch = fetchMock;
+    const provider = createEmbeddingProviderForCatalogEntry(makeConfig(), {
+      name: 'primary',
+      dimensions: 3,
+      endpoints: [
+        {
+          providerName: 'openai',
+          model: 'text-embedding-3-small',
+          rateLimit: { maxBackoffRetries: 2, backoffBaseMs: 50 },
+        },
+        {
+          providerName: 'backup',
+          model: 'text-embedding-3-small',
+        },
+      ],
+    });
+
+    const result = provider.embed('hello');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(49);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(result).resolves.toEqual([0.1, 0.2, 0.3]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'https://api.openai.test/v1/embeddings',
+      'https://api.openai.test/v1/embeddings',
+    ]);
+  });
+
+  it('T-U-021 fails over immediately on non-429 endpoint errors', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: async () => 'server unavailable',
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: [{ embedding: [0.1, 0.2, 0.3] }] }),
+      } as unknown as Response);
+    globalThis.fetch = fetchMock;
+    const provider = createEmbeddingProviderForCatalogEntry(makeConfig(), {
+      name: 'primary',
+      dimensions: 3,
+      endpoints: [
+        {
+          providerName: 'openai',
+          model: 'text-embedding-3-small',
+          rateLimit: { maxBackoffRetries: 2, backoffBaseMs: 50 },
+        },
+        {
+          providerName: 'backup',
+          model: 'text-embedding-3-small',
+        },
+      ],
+    });
+
+    await expect(provider.embed('hello')).resolves.toEqual([0.1, 0.2, 0.3]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'https://api.openai.test/v1/embeddings',
+      'https://backup.openai.test/v1/embeddings',
+    ]);
   });
 });
