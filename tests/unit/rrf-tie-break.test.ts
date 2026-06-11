@@ -59,7 +59,7 @@ describe('RRF deterministic tie breaks', () => {
   });
 
   it('T-U-029 limits fused results after deterministic sorting', () => {
-    const results = fuseRrfSearchResults([
+    const retrieverResults = [
       {
         embeddingName: 'primary',
         hits: [
@@ -67,8 +67,12 @@ describe('RRF deterministic tie breaks', () => {
           { entity_type: 'document', identifier: 'doc-a', path: 'a.md', fq_id: 'doc-a', rank: 1, match_source: ['semantic'] },
         ],
       },
-    ], 1);
+    ];
+    const first = fuseRrfSearchResults(retrieverResults, 1);
+    const second = fuseRrfSearchResults(retrieverResults, 1);
 
-    expect(results.map((result) => result.identifier)).toEqual(['doc-a']);
+    expect(first.map((result) => result.identifier)).toEqual(['doc-a']);
+    expect(second.map((result) => result.identifier)).toEqual(['doc-a']);
+    expect(second).toEqual(first);
   });
 });

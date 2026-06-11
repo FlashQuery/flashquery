@@ -158,7 +158,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('parallel per-entry embedding attempts
   });
 
   it('T-I-035 starts per-entry embed calls in parallel', async () => {
-    const started: string[] = [];
+    const startTimes = new Map<string, number>();
     const documentId = randomUUID();
     await client.query(
       `INSERT INTO fqc_documents (id, instance_id, path, title)
@@ -172,9 +172,18 @@ describe.skipIf(!HAS_SUPABASE).sequential('parallel per-entry embedding attempts
       embedText: 'parallel timing body',
       supabase: supabaseManager.getClient(),
       databaseUrl: TEST_DATABASE_URL,
-      providerFactory: (entry) => providerFor(entry.name, { onStart: (name) => started.push(name), waitMs: 100 }),
+      providerFactory: (entry) => ({
+        embed: vi.fn(async () => {
+          startTimes.set(entry.name, performance.now());
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          return entry.name === 'primary' ? [0.1, 0.2, 0.3] : [0.4, 0.5, 0.6];
+        }),
+        getDimensions: () => 3,
+        getProviderInfo: () => ({ provider: `provider-${entry.name}`, model: `model-${entry.name}` }),
+      }),
     });
 
-    expect(started).toEqual(['primary', 'analysis']);
+    expect([...startTimes.keys()].sort()).toEqual(['analysis', 'primary']);
+    expect(Math.abs(startTimes.get('analysis')! - startTimes.get('primary')!)).toBeLessThan(50);
   });
 });
