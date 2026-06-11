@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Embedding Management & Multi-Provider Support
 status: in_progress
-last_updated: "2026-06-11T13:27:25.000Z"
+last_updated: "2026-06-11T13:37:31.000Z"
 last_activity: 2026-06-11
 progress:
   total_phases: 3
   completed_phases: 2
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 8
+  completed_plans: 8
   percent: 67
 ---
 
@@ -25,19 +25,19 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 ## Current Position
 
 Phase: 166 — Embedding Pipeline
-Plan: 167-02 — Lifecycle Operations and Validation
-Status: Phase 167 in progress; Plan 167-01 complete
-Last activity: 2026-06-11 — Phase 167 Plan 01 completed the public maintain_vault lifecycle input contract, max_rows validation foundation, lifecycle action-array refusal, and pure-records rebuild confirm contract
+Plan: 167-03 — Lifecycle Operations and Validation
+Status: Phase 167 in progress; Plan 167-02 complete
+Last activity: 2026-06-11 — Phase 167 Plan 02 added durable lifecycle jobs, per-entry running-job locks, heartbeat recovery, pollable status, and abort dispatch through maintain_vault
 
-Progress: ███████░░░ 67% (2/3 milestone phases complete; 7/7 currently planned phase plans complete)
+Progress: ███████░░░ 67% (2/3 milestone phases complete; 8/8 currently executed milestone plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 7 (this milestone)
-- Average duration: ~39 min
-- Total execution time: ~4h 35m
+- Total plans completed: 8 (this milestone)
+- Average duration: ~35 min
+- Total execution time: ~4h 42m
 
 **By Phase:**
 
@@ -45,7 +45,7 @@ Progress: ███████░░░ 67% (2/3 milestone phases complete; 7/7
 |-------|-------|-------|----------|
 | 165 | 3 | ~1h 30m | ~30m |
 | 166 | 4/4 | ~3h 05m | ~46m |
-| 167 | ? | - | - |
+| 167 | 2/? | ~15m | ~8m |
 
 *Updated after each plan completion*
 
@@ -84,6 +84,9 @@ Progress: ███████░░░ 67% (2/3 milestone phases complete; 7/7
 - `gsd-sdk query state.load` again produced no output during Plan 166-04 execution, so state/roadmap/requirements tracking was updated manually.
 - Phase 167 Plan 01 completed the lifecycle contract foundation: `maintain_vault` accepts lifecycle action names and parameters, lifecycle actions are rejected inside action arrays before work, `max_rows` pure validation covers T-U-036 through T-U-040, and pure-records rebuild confirm derivation is explicit for later processors.
 - `gsd-sdk` was unavailable on PATH during Plan 167-01 execution, so SUMMARY and STATE were updated manually. ROADMAP.md was intentionally not updated per execution instruction.
+- Phase 167 Plan 02 completed REQ-038 and REQ-039 foundation: `fqc_maintenance_jobs` now persists lifecycle status, heartbeat, abort, partial counts, failures, and errors; same-entry lifecycle actions are guarded by a partial unique running-job index; stale heartbeat recovery marks abandoned jobs failed; and `maintain_vault` status/abort routes through durable jobs while preserving legacy sync/repair status behavior.
+- Durable lifecycle helpers require `supabase.databaseUrl` and return an expected `invalid_input` configuration envelope before mutation when direct PostgreSQL access is unavailable.
+- `.env.test` loaded during Plan 167-02 verification, but direct PostgreSQL integration branches skipped because `HAS_DIRECT_DATABASE_URL` was false in the shared test helper; required targeted integration and typecheck commands still exited 0.
 
 ### Todos
 
@@ -95,7 +98,7 @@ None
 
 ## Session Continuity
 
-**Last session:** 2026-06-11 — Phase 167 Plan 01 executed
+**Last session:** 2026-06-11 — Phase 167 Plan 02 executed
 **Next action:** Execute remaining Phase 167 lifecycle operations and validation plans
 **Context needed:** Phase 167 should build on `.planning/phases/166-embedding-pipeline/166-01-SUMMARY.md`, `166-02-SUMMARY.md`, `166-03-SUMMARY.md`, `166-04-SUMMARY.md`, plus the external source-of-truth requirements and test plan.
 
