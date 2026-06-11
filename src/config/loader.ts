@@ -211,6 +211,8 @@ const EmbeddingEndpointSchema = z
     rate_limit: z
       .object({
         min_delay_ms: z.number().int().positive().optional(),
+        max_backoff_retries: z.number().int().min(0).optional(),
+        backoff_base_ms: z.number().int().positive().optional(),
       })
       .strip()
       .optional(),

@@ -71,7 +71,11 @@ export interface FlashQueryConfig {
     endpoints: Array<{
       providerName: string;
       model: string;
-      rateLimit?: { minDelayMs?: number };
+      rateLimit?: {
+        minDelayMs?: number;
+        maxBackoffRetries?: number;
+        backoffBaseMs?: number;
+      };
       maxInputChars?: number;
     }>;
   }>;

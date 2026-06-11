@@ -12,7 +12,11 @@ export interface EmbeddingCatalogSyncResult {
 interface CatalogEndpointRow {
   provider_name: string;
   model: string;
-  rate_limit?: { min_delay_ms?: number };
+  rate_limit?: {
+    min_delay_ms?: number;
+    max_backoff_retries?: number;
+    backoff_base_ms?: number;
+  };
   max_input_chars?: number;
 }
 
@@ -28,7 +32,21 @@ function endpointToRow(endpoint: NonNullable<FlashQueryConfig['embeddings']>[num
   return {
     provider_name: endpoint.providerName,
     model: endpoint.model,
-    ...(endpoint.rateLimit ? { rate_limit: { min_delay_ms: endpoint.rateLimit.minDelayMs } } : {}),
+    ...(endpoint.rateLimit
+      ? {
+          rate_limit: {
+            ...(endpoint.rateLimit.minDelayMs !== undefined
+              ? { min_delay_ms: endpoint.rateLimit.minDelayMs }
+              : {}),
+            ...(endpoint.rateLimit.maxBackoffRetries !== undefined
+              ? { max_backoff_retries: endpoint.rateLimit.maxBackoffRetries }
+              : {}),
+            ...(endpoint.rateLimit.backoffBaseMs !== undefined
+              ? { backoff_base_ms: endpoint.rateLimit.backoffBaseMs }
+              : {}),
+          },
+        }
+      : {}),
     ...(endpoint.maxInputChars !== undefined ? { max_input_chars: endpoint.maxInputChars } : {}),
   };
 }
@@ -61,6 +79,12 @@ function describeEndpointChanges(existing: CatalogEndpointRow[], incoming: Catal
     if (oldEndpoint.model !== newEndpoint.model) changes.add(`${prefix}.model`);
     if (oldEndpoint.rate_limit?.min_delay_ms !== newEndpoint.rate_limit?.min_delay_ms) {
       changes.add(`${prefix}.rate_limit.min_delay_ms`);
+    }
+    if (oldEndpoint.rate_limit?.max_backoff_retries !== newEndpoint.rate_limit?.max_backoff_retries) {
+      changes.add(`${prefix}.rate_limit.max_backoff_retries`);
+    }
+    if (oldEndpoint.rate_limit?.backoff_base_ms !== newEndpoint.rate_limit?.backoff_base_ms) {
+      changes.add(`${prefix}.rate_limit.backoff_base_ms`);
     }
     if (oldEndpoint.max_input_chars !== newEndpoint.max_input_chars) changes.add(`${prefix}.max_input_chars`);
   }
