@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { FlashQueryConfig } from '../config/loader.js';
+import {
+  getLifecycleJobStatus,
+  requestLifecycleAbort,
+} from '../embedding/lifecycle/jobs.js';
 import type { LifecycleAction, LifecycleBaseInput, LifecycleScope } from '../embedding/lifecycle/types.js';
 import { isLifecycleAction, validateLifecycleActionParameters } from '../embedding/lifecycle/scope.js';
 import { logger } from '../logging/logger.js';
@@ -66,6 +70,7 @@ interface MaintenanceJobRecord extends MaintenanceStatusPayload {
 let maintenanceInProgress = false;
 const jobs = new Map<string, MaintenanceJobRecord>();
 let hostTemplateRefreshHook: ((config: FlashQueryConfig) => Promise<HostTemplateRefreshSummary>) | undefined;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function setHostTemplateRefreshHook(
   hook: ((config: FlashQueryConfig) => Promise<HostTemplateRefreshSummary>) | undefined
@@ -94,11 +99,11 @@ export async function maintainVault(
         parameter: 'background',
       });
     }
-    return getMaintenanceJobStatus(input.job_id ?? '');
+    return await getMaintenanceJobStatusForInput(config, input.job_id ?? '');
   }
 
   if (isLifecycleAction(input.action)) {
-    return validateLifecycleDispatch(input);
+    return await validateLifecycleDispatch(config, input);
   }
 
   const normalized = normalizeMaintenanceActions(input.action);
@@ -172,6 +177,23 @@ export function getMaintenanceJobStatus(jobId: string): MaintenanceResult<Mainte
   };
 }
 
+async function getMaintenanceJobStatusForInput(
+  config: FlashQueryConfig,
+  jobId: string
+): Promise<MaintenanceResult<MaintenanceStatusPayload>> {
+  if (
+    UUID_PATTERN.test(jobId) &&
+    config.supabase.databaseUrl !== undefined &&
+    config.supabase.databaseUrl.length > 0
+  ) {
+    const lifecycleStatus = await getLifecycleJobStatus(config, jobId);
+    if (lifecycleStatus.ok) return lifecycleStatus;
+    if (lifecycleStatus.error.error !== 'not_found') return lifecycleStatus;
+  }
+
+  return getMaintenanceJobStatus(jobId);
+}
+
 function normalizeMaintenanceActions(
   action: MaintenanceRequestedAction
 ): MaintenanceResult<Array<'sync' | 'repair'>> {
@@ -219,10 +241,17 @@ function normalizeMaintenanceActions(
   });
 }
 
-function validateLifecycleDispatch(input: MaintainVaultInput): MaintenanceResult<never> {
+async function validateLifecycleDispatch(
+  config: FlashQueryConfig,
+  input: MaintainVaultInput
+): Promise<MaintenanceResult<MaintenanceStatusPayload>> {
   const validation = validateLifecycleActionParameters(input as LifecycleBaseInput);
   if (!validation.ok) {
     return { ok: false, error: validation.error };
+  }
+
+  if (input.action === 'abort') {
+    return await requestLifecycleAbort(config, input.job_id ?? '');
   }
 
   return {
