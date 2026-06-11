@@ -16,7 +16,7 @@ const LIFECYCLE_ACTION_SET = new Set<LifecycleAction>([
 ]);
 
 const RECORDS_EMBEDDING_CHOICE_MESSAGE =
-  'plugin embedding choice is per-registration, not per-action; use register_plugin to change the choice';
+  'plugin embedding choice is per-registration, not per-action; use `register_plugin` to change the choice';
 
 export function isLifecycleAction(action: unknown): action is LifecycleAction {
   return typeof action === 'string' && LIFECYCLE_ACTION_SET.has(action as LifecycleAction);
