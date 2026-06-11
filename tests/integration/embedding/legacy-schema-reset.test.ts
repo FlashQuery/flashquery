@@ -44,8 +44,12 @@ function legacyStartupConfig(): FlashQueryConfig {
 
 async function ensureLegacyColumns(client: pg.Client): Promise<void> {
   for (const table of ['fqc_documents', 'fqc_memory']) {
-    await client.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS embedding vector(${TEST_EMBEDDING_DIMENSIONS})`);
+    await ensureLegacyEmbeddingColumn(client, table);
   }
+}
+
+async function ensureLegacyEmbeddingColumn(client: pg.Client, table: 'fqc_documents' | 'fqc_memory'): Promise<void> {
+  await client.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS embedding vector(${TEST_EMBEDDING_DIMENSIONS})`);
 }
 
 function testVector(): string {
@@ -127,6 +131,19 @@ describe.skipIf(SKIP).sequential('REQ-043 legacy schema reset coverage', () => {
       await dropLegacyColumns(harness.client);
       await expect(legacyColumns(harness.client)).resolves.toEqual([]);
 
+      await ensureLegacyEmbeddingColumn(harness.client, 'fqc_memory');
+      const memoryIdResult = await harness.client.query<{ id: string }>(
+        `
+        INSERT INTO fqc_memory(instance_id, content, tags, status, embedding)
+        VALUES ($1, 'Legacy reset memory row for post-reset backfill.', ARRAY['legacy-reset-memory'], 'active', $2::vector)
+        RETURNING id
+        `,
+        [harness.instanceId, testVector()]
+      );
+      const memoryId = memoryIdResult.rows[0]!.id;
+      await dropLegacyColumns(harness.client);
+      await expect(legacyColumns(harness.client)).resolves.toEqual([]);
+
       const pluginId = `legacy_reset_plugin_${randomUUID().slice(0, 8)}`;
       const tableName = `fqcp_${pluginId}_default_notes`;
       harness.tablesToDrop.add(tableName);
@@ -161,12 +178,36 @@ describe.skipIf(SKIP).sequential('REQ-043 legacy schema reset coverage', () => {
         [recordId]
       );
 
+      const memoryBackfilled = await maintainVault(harness.config, {
+        action: 'backfill_embeddings',
+        embedding_name: 'primary',
+        scope: { entity_types: ['memory'] },
+        max_rows: 0,
+      });
+      expect(memoryBackfilled.ok).toBe(true);
+
       const backfilled = await maintainVault(harness.config, {
         action: 'backfill_embeddings',
         scope: { entity_types: ['records'], records: { plugin: pluginId } },
         max_rows: 0,
       });
       expect(backfilled.ok).toBe(true);
+
+      const memoryStamp = await harness.client.query(
+        `SELECT embedding_primary IS NOT NULL AS has_embedding_primary,
+                embedding_primary_model,
+                embedding_primary_dimensions,
+                embedding_primary_provider
+         FROM fqc_memory
+         WHERE id = $1`,
+        [memoryId]
+      );
+      expect(memoryStamp.rows[0]).toMatchObject({
+        has_embedding_primary: true,
+        embedding_primary_model: 'primary-model',
+        embedding_primary_dimensions: 3,
+        embedding_primary_provider: 'catalog_provider',
+      });
 
       const stamp = await harness.client.query(
         `SELECT embedding_primary_model, embedding_primary_dimensions, embedding_primary_provider

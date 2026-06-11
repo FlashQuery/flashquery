@@ -53,3 +53,10 @@ steps:
         entity_types: [documents, memories]
       expect_path: "embedding/first-time-enable.md"
       expect_contains: "Calypso enablement recipe memory"
+      expect_json_contains:
+        path: results
+        value:
+          match_source: [semantic]
+      expect_json_equals:
+        path: embeddings_queried
+        value: [primary]
