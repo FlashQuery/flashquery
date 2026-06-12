@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { maintainVault } from '../../../src/services/maintenance.js';
 import { verifyStartupEmbeddingCatalog } from '../../../src/embedding/startup-validation.js';
 import { initLogger } from '../../../src/logging/logger.js';
-import { initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
+import { initSupabase, supabaseManager, createCoreEmbeddingColumnSet } from '../../../src/storage/supabase.js';
 import type { FlashQueryConfig } from '../../../src/config/loader.js';
 import { HAS_SUPABASE, TEST_DATABASE_URL, TEST_EMBEDDING_DIMENSIONS } from '../../helpers/test-env.js';
 import {
@@ -49,7 +49,13 @@ async function ensureLegacyColumns(client: pg.Client): Promise<void> {
 }
 
 async function ensureLegacyEmbeddingColumn(client: pg.Client, table: 'fqc_documents' | 'fqc_memory'): Promise<void> {
-  await client.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS embedding vector(${TEST_EMBEDDING_DIMENSIONS})`);
+  // Force the legacy singular column to the test width regardless of any
+  // pre-existing `embedding` column the base schema created (it is sized from
+  // config.embedding.dimensions, which may differ from TEST_EMBEDDING_DIMENSIONS).
+  // ADD COLUMN IF NOT EXISTS cannot widen an existing column, so drop and recreate.
+  await client.query(`DROP INDEX IF EXISTS idx_${table}_embedding`);
+  await client.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS embedding`);
+  await client.query(`ALTER TABLE ${table} ADD COLUMN embedding vector(${TEST_EMBEDDING_DIMENSIONS})`);
 }
 
 function testVector(): string {
@@ -61,6 +67,20 @@ async function dropLegacyColumns(client: pg.Client): Promise<void> {
     await client.query(`DROP INDEX IF EXISTS idx_${table}_embedding`);
     await client.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS embedding`);
     await client.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS embedding_model`);
+  }
+}
+
+// The core per-entry columns (e.g. `embedding_primary`) live on the SHARED
+// fqc_documents/fqc_memory tables. Other tests/scenarios size the same entry
+// name to different widths (the first-time-enablement scenario uses primary@768),
+// so reset to a known-clean state before creating, and drop again on cleanup,
+// to keep this test self-isolating and avoid drift collisions downstream.
+async function resetCoreEmbeddingColumns(client: pg.Client, name: string): Promise<void> {
+  for (const table of ['fqc_documents', 'fqc_memory']) {
+    await client.query(`DROP INDEX IF EXISTS idx_${table}_embedding_${name}`);
+    for (const suffix of ['', '_model', '_dimensions', '_provider', '_truncated']) {
+      await client.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS embedding_${name}${suffix}`);
+    }
   }
 }
 
@@ -178,6 +198,12 @@ describe.skipIf(SKIP).sequential('REQ-043 legacy schema reset coverage', () => {
         [recordId]
       );
 
+      // The plugin-record harness seeds catalog rows but does not create the
+      // core per-entry column set; create it (at this test's width) so the
+      // memory backfill has a target `embedding_primary` column on fqc_memory.
+      await resetCoreEmbeddingColumns(harness.client, 'primary');
+      await createCoreEmbeddingColumnSet(harness.config, { name: 'primary', dimensions: 3 });
+
       const memoryBackfilled = await maintainVault(harness.config, {
         action: 'backfill_embeddings',
         embedding_name: 'primary',
@@ -223,6 +249,9 @@ describe.skipIf(SKIP).sequential('REQ-043 legacy schema reset coverage', () => {
       await expect(legacyColumns(harness.client)).resolves.toEqual([]);
     } finally {
       vi.unstubAllGlobals();
+      // Drop the shared core per-entry columns this test created so it does not
+      // leave a primary@3 column that collides with other tests' expected widths.
+      await resetCoreEmbeddingColumns(harness.client, 'primary').catch(() => undefined);
       await destroyPluginRecordHarness(harness);
     }
   }, 120_000);
