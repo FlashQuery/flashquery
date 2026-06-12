@@ -863,11 +863,13 @@ describe.sequential('MCP protocol E2E', () => {
     expect(batchPayload).toHaveLength(2);
     expect(batchPayload[0]).toMatchObject({
       fq_id: archiveFqId,
-      status: 'archived',
+      status: 'succeeded',
+      result_status: 'archived',
       archived_at: archivePayload.archived_at,
     });
     expect(batchPayload[1]).toMatchObject({
-      error: 'not_found',
+      status: 'failed',
+      error: expect.objectContaining({ error: 'not_found' }),
       identifier: 'e2e-json/missing-archive.md',
     });
   }, 30000);
@@ -994,7 +996,7 @@ describe.sequential('MCP protocol E2E', () => {
     });
   }, 30000);
 
-  it('remove_document returns JSON archived removal results, mixed batch errors, and bulk warnings', async () => {
+  it('remove_document returns JSON archived removal results and batch errors', async () => {
     const singleCreate = await client.callTool({
       name: 'write_document',
       arguments: {
@@ -1043,15 +1045,17 @@ describe.sequential('MCP protocol E2E', () => {
 
     expect(mixedBatch.isError).toBeFalsy();
     const mixedPayload = JSON.parse(getText(mixedBatch));
-    expect(mixedPayload.results).toEqual([
+    expect(mixedPayload).toEqual([
       expect.objectContaining({
         identifier: batchCreated.path,
         path: batchCreated.path,
-        status: 'archived',
+        status: 'succeeded',
+        result_status: 'archived',
         archived_at: expect.any(String),
       }),
       expect.objectContaining({
-        error: 'not_found',
+        status: 'failed',
+        error: expect.objectContaining({ error: 'not_found' }),
         identifier: 'e2e-phase127/missing-remove.md',
       }),
     ]);
@@ -1078,8 +1082,7 @@ describe.sequential('MCP protocol E2E', () => {
 
     expect(bulkRemove.isError).toBeFalsy();
     const bulkPayload = JSON.parse(getText(bulkRemove));
-    expect(bulkPayload.results).toHaveLength(6);
-    expect(bulkPayload.warnings).toEqual(['bulk_removal: 6 items']);
+    expect(bulkPayload).toHaveLength(6);
   }, 30000);
 
   // ── T-04: Error handling — missing required param ─────────────────────────

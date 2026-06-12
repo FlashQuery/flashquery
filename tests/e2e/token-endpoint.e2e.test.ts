@@ -12,6 +12,7 @@ import { spawn, ChildProcess } from 'child_process';
 import * as http from 'http';
 import * as path from 'path';
 import * as fs from 'fs';
+import { HAS_SUPABASE, TEST_DATABASE_URL, TEST_SUPABASE_KEY, TEST_SUPABASE_URL } from '../helpers/test-env.js';
 
 // Mock the logger to suppress output
 vi.mock('../../src/logging/logger.js', () => ({
@@ -117,7 +118,7 @@ function waitForServerReady(
 /**
  * Test Suite: Token Endpoint E2E Tests (sequential to avoid port conflicts)
  */
-describe('Token Endpoint E2E Tests', { sequential: true }, () => {
+describe.skipIf(!HAS_SUPABASE)('Token Endpoint E2E Tests', { sequential: true }, () => {
   let childProcess: ChildProcess;
   let baseUrl: string;
   let authSecret: string;
@@ -144,10 +145,9 @@ describe('Token Endpoint E2E Tests', { sequential: true }, () => {
       env: {
         ...process.env,
         TEST_AUTH_SECRET: authSecret,
-        // Suppress Supabase connection errors for E2E (we're testing token endpoint only)
-        SUPABASE_URL: process.env.SUPABASE_URL || 'http://localhost:54321',
-        SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || 'test-key',
-        DATABASE_URL: process.env.DATABASE_URL || 'postgres://localhost:54322/test',
+        SUPABASE_URL: TEST_SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY: TEST_SUPABASE_KEY,
+        DATABASE_URL: TEST_DATABASE_URL,
       },
     });
 
@@ -164,12 +164,12 @@ describe('Token Endpoint E2E Tests', { sequential: true }, () => {
 
     // Wait for server to be ready
     try {
-      await waitForServerReady(childProcess, baseUrl, 15000);
+      await waitForServerReady(childProcess, baseUrl, 30000);
     } catch (err) {
       childProcess.kill();
       throw err;
     }
-  }, 30000); // 30 second timeout for beforeAll
+  }, 45000);
 
   afterAll(() => {
     return new Promise<void>((resolve) => {

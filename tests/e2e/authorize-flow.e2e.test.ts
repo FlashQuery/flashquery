@@ -18,6 +18,7 @@ import { spawn, ChildProcess } from 'child_process';
 import * as http from 'http';
 import * as path from 'path';
 import * as fs from 'fs';
+import { HAS_SUPABASE, TEST_DATABASE_URL, TEST_SUPABASE_KEY, TEST_SUPABASE_URL } from '../helpers/test-env.js';
 
 // Mock the logger to suppress output
 vi.mock('../../src/logging/logger.js', () => ({
@@ -123,7 +124,7 @@ function waitForServerReady(
 /**
  * Test Suite: Authorization Code Flow E2E Tests (Claude Code startup simulation)
  */
-describe('Authorization Code Flow E2E Tests', { sequential: true }, () => {
+describe.skipIf(!HAS_SUPABASE)('Authorization Code Flow E2E Tests', { sequential: true }, () => {
   let childProcess: ChildProcess;
   let baseUrl: string;
   let authSecret: string;
@@ -151,17 +152,15 @@ describe('Authorization Code Flow E2E Tests', { sequential: true }, () => {
       env: {
         ...process.env,
         TEST_AUTH_SECRET: authSecret,
-        // Suppress Supabase connection errors for E2E (we're testing auth flow only)
-        SUPABASE_URL: process.env.SUPABASE_URL || 'http://localhost:54321',
-        SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || 'test-key',
-        DATABASE_URL: process.env.DATABASE_URL || 'postgres://localhost:54322/test',
+        SUPABASE_URL: TEST_SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY: TEST_SUPABASE_KEY,
+        DATABASE_URL: TEST_DATABASE_URL,
       },
-      timeout: 15000,
     });
 
     // Wait for server to be ready
-    await waitForServerReady(childProcess, baseUrl, 15000);
-  }, 30000);
+    await waitForServerReady(childProcess, baseUrl, 30000);
+  }, 45000);
 
   afterAll(() => {
     if (childProcess && !childProcess.killed) {
