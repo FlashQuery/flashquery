@@ -827,32 +827,36 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         const activeEmbedding = await resolvePluginActiveEmbedding(entry, config.instance.id);
         if (hasEmbedFields && activeEmbedding) {
           const queryEmbedding = await createEmbeddingProviderForCatalogEntry(config, activeEmbedding).embed(queryText);
-          const escapedTable = pg.escapeIdentifier(fullTableName);
           const embeddingColumn = `embedding_${activeEmbedding.name}`;
+          const rpcName = `match_records_${fullTableName}_${activeEmbedding.name}`;
+          const candidateLimit = filters ? 2147483647 : maxResults;
 
           // Build filter clauses
           const params: unknown[] = [
             `[${queryEmbedding.join(',')}]`,
             config.instance.id,
+            candidateLimit,
             maxResults,
           ];
           let filterSql = '';
           if (filters) {
             for (const [key, value] of Object.entries(filters)) {
               params.push(value);
-              filterSql += ` AND ${pg.escapeIdentifier(key)} = $${params.length}`;
+              filterSql += ` AND rpc_matches.${pg.escapeIdentifier(key)} = $${params.length}`;
             }
           }
 
           const sql = `
-            SELECT *, 1 - (${pg.escapeIdentifier(embeddingColumn)} <=> $1::vector) AS similarity
-            FROM ${escapedTable}
-            WHERE instance_id = $2
-              AND status = 'active'
-              AND ${pg.escapeIdentifier(embeddingColumn)} IS NOT NULL
+            WITH rpc_matches AS (
+              SELECT *
+              FROM ${pg.escapeIdentifier(rpcName)}($1::vector, 0, $3, $2)
+            )
+            SELECT rpc_matches.*, 1 - (rpc_matches.${pg.escapeIdentifier(embeddingColumn)} <=> $1::vector) AS similarity
+            FROM rpc_matches
+            WHERE true
               ${filterSql}
-            ORDER BY ${pg.escapeIdentifier(embeddingColumn)} <=> $1::vector
-            LIMIT $3
+            ORDER BY rpc_matches.${pg.escapeIdentifier(embeddingColumn)} <=> $1::vector
+            LIMIT $4
           `;
 
           const queryStart = performance.now();

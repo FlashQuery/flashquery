@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HAS_SUPABASE } from '../helpers/test-env.js';
 
 const providerState = vi.hoisted(() => ({ calls: [] as Array<{ entryName: string; text: string }> }));
+const pgClientState = vi.hoisted(() => ({ sql: [] as string[] }));
 
 vi.mock('../../src/embedding/provider.js', async () => {
   const actual = await vi.importActual<typeof import('../../src/embedding/provider.js')>('../../src/embedding/provider.js');
@@ -18,6 +19,17 @@ vi.mock('../../src/embedding/provider.js', async () => {
   };
 });
 
+vi.mock('../../src/utils/pg-client.js', async () => {
+  const actual = await vi.importActual<typeof import('../../src/utils/pg-client.js')>('../../src/utils/pg-client.js');
+  return {
+    ...actual,
+    queryPgPool: vi.fn(async (connectionString: string, sql: string, params?: unknown[]) => {
+      pgClientState.sql.push(sql);
+      return actual.queryPgPool(connectionString, sql, params);
+    }),
+  };
+});
+
 import {
   createPluginRecordHarness,
   destroyPluginRecordHarness,
@@ -31,6 +43,7 @@ describe.skipIf(!HAS_SUPABASE)('plugin search_records semantic routing', () => {
 
   afterEach(async () => {
     providerState.calls = [];
+    pgClientState.sql = [];
     if (harness) {
       await destroyPluginRecordHarness(harness);
       harness = undefined;
@@ -70,6 +83,41 @@ describe.skipIf(!HAS_SUPABASE)('plugin search_records semantic routing', () => {
     expect(payload.total).toBe(1);
     expect(payload.results[0]?.score).toEqual(expect.any(Number));
     expect(payload.results[0]?.data?.title).toBe('Needle');
+  }, 90_000);
+
+  it('routes semantic search through the generated per-table record RPC', async () => {
+    harness = await createPluginRecordHarness();
+    const pluginId = 'plug_search_rpc';
+    const tableName = `fqcp_${pluginId}_default_notes`;
+    harness.tablesToDrop.add(tableName);
+    await harness.registerPlugin({
+      schema_yaml: pluginRecordYaml(pluginId, '*'),
+      embedding_name: 'primary',
+    });
+
+    await harness.writeRecord({
+      mode: 'create',
+      plugin_id: pluginId,
+      table: 'notes',
+      data: { title: 'RPC Needle', body: 'Semantic route' },
+    });
+    pgClientState.sql = [];
+
+    const searchResult = await harness.searchRecords({
+      plugin_id: pluginId,
+      table: 'notes',
+      query: 'RPC Needle',
+      include: ['data'],
+    }) as { isError?: boolean };
+
+    expect(searchResult.isError).toBeFalsy();
+    expect(pgClientState.sql.some((sql) =>
+      sql.includes('match_records_fqcp_plug_search_rpc_default_notes_primary')
+    )).toBe(true);
+    const payload = JSON.parse(textOf(searchResult)) as { total: number; results: Array<{ score?: number; data?: Record<string, unknown> }> };
+    expect(payload.total).toBe(1);
+    expect(payload.results[0]?.score).toEqual(expect.any(Number));
+    expect(payload.results[0]?.data?.title).toBe('RPC Needle');
   }, 90_000);
 
   it('queries the switched entry after same-version re-registration', async () => {

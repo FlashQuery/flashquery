@@ -21,6 +21,10 @@ vi.mock('../../../../src/utils/pg-client.js', async () => {
 });
 
 vi.mock('../../../../src/embedding/provider.js', () => ({
+  createEmbeddingProviderForCatalogEntry: vi.fn(() => ({
+    embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
+    getLastEmbeddingMetadata: vi.fn(() => ({ provider: 'test', model: 'test-model', truncated: false })),
+  })),
   embeddingProvider: {
     embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
   },
@@ -54,7 +58,7 @@ vi.mock('../../../../src/plugins/manager.js', () => ({
     getTableSpec: vi.fn(() => ({
       fullTableName: 'fqcp_crm_default_contacts',
       tableSpec,
-      entry: {},
+      entry: { embedding_name: 'primary' },
     })),
   },
   resolveTableName: vi.fn(() => 'fqcp_crm_default_contacts'),
@@ -83,7 +87,9 @@ function makeSupabase() {
             eq: () => ({
               eq: () => ({
                 eq: () => ({
-                  eq: () => Promise.resolve(makeQueryResult(null)),
+                  eq: () => ({
+                    eq: () => Promise.resolve(makeQueryResult(null)),
+                  }),
                 }),
               }),
             }),
@@ -98,6 +104,22 @@ function makeSupabase() {
             }),
           }),
           upsert: vi.fn().mockResolvedValue(makeQueryResult(null)),
+        };
+      }
+      if (table === 'fqc_embeddings') {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                maybeSingle: () => Promise.resolve(makeQueryResult({
+                  name: 'primary',
+                  dimensions: 3,
+                  endpoints: [{ provider_name: 'test', model: 'test-model' }],
+                  status: 'active',
+                })),
+              }),
+            }),
+          }),
         };
       }
       return {
@@ -208,7 +230,7 @@ describe('record pooled pg vector SQL', () => {
     expect(pgClientMock.createPgClientIPv4).not.toHaveBeenCalled();
   });
 
-  it('T-I-008 semantic search_records uses pooled vector SQL and returns scored rows', async () => {
+  it('T-I-008 semantic search_records uses pooled record RPC SQL and returns scored rows', async () => {
     const { server, getHandler } = createMockServer();
     registerRecordTools(server, makeConfig());
 
@@ -229,9 +251,30 @@ describe('record pooled pg vector SQL', () => {
     ]);
     expect(pgClientMock.queryPgPool).toHaveBeenCalledWith(
       'postgres://user:pass@localhost:5432/fq',
-      expect.stringContaining('embedding <=> $1::vector'),
-      expect.arrayContaining(['[0.1,0.2,0.3]', 'records-pool-test', 10])
+      expect.stringContaining('match_records_fqcp_crm_default_contacts'),
+      expect.arrayContaining(['[0.1,0.2,0.3]', 'records-pool-test', 10, 10])
     );
     expect(pgClientMock.createPgClientIPv4).not.toHaveBeenCalled();
+  });
+
+  it('does not pre-limit semantic RPC candidates before applying record filters', async () => {
+    const { server, getHandler } = createMockServer();
+    registerRecordTools(server, makeConfig());
+
+    parseResult(
+      await getHandler('search_records')({
+        plugin_id: 'crm',
+        table: 'contacts',
+        query: 'TypeScript engineer',
+        filters: { name: 'Alice Engineer' },
+        include: ['data'],
+      })
+    );
+
+    expect(pgClientMock.queryPgPool).toHaveBeenCalledWith(
+      'postgres://user:pass@localhost:5432/fq',
+      expect.stringContaining('match_records_fqcp_crm_default_contacts'),
+      expect.arrayContaining(['[0.1,0.2,0.3]', 'records-pool-test', 2147483647, 10, 'Alice Engineer'])
+    );
   });
 });
