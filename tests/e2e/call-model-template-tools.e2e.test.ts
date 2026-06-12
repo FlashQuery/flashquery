@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import * as http from 'node:http';
 import { describe, expect, it } from 'vitest';
 import { ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
+import { withE2EHeartbeat } from '../helpers/e2e-heartbeat.js';
 
 type MockResponse = { status?: number; body: Record<string, unknown> };
 const OPENAI_TOOL_NAME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
@@ -122,6 +123,7 @@ async function withManagedMcp<T>(
   options: ManagedMcpOptions = {}
 ): Promise<T> {
   const tempDir = await mkdtemp(join(tmpdir(), 'fqc-template-tools-e2e-'));
+  const tempName = tempDir.split('/').at(-1) ?? tempDir;
   const configPath = join(tempDir, 'flashquery.yml');
   const vaultPath = join(tempDir, 'vault');
   const entryPoint = resolve('src/index.ts');
@@ -215,28 +217,50 @@ llm:
   });
   const client = new Client({ name: 'template-tools-e2e', version: '1.0.0' });
   try {
-    await client.connect(transport);
-    const sync = await client.callTool({ name: 'maintain_vault', arguments: { action: 'sync' } }) as { isError?: boolean };
+    await withE2EHeartbeat(
+      'call-model-template-tools client.connect',
+      () => client.connect(transport),
+      { metadata: { temp: tempName } }
+    );
+    const sync = await withE2EHeartbeat(
+      'call-model-template-tools maintain_vault sync',
+      () => client.callTool({ name: 'maintain_vault', arguments: { action: 'sync' } }) as Promise<{ isError?: boolean }>,
+      { metadata: { temp: tempName } }
+    );
     expect(sync.isError).toBeFalsy();
     return await fn(client, vaultPath);
   } finally {
-    await client.close().catch(() => undefined);
-    await transport.close().catch(() => undefined);
+    await withE2EHeartbeat(
+      'call-model-template-tools client.close',
+      () => client.close().catch(() => undefined),
+      { metadata: { temp: tempName } }
+    );
+    await withE2EHeartbeat(
+      'call-model-template-tools transport.close',
+      () => transport.close().catch(() => undefined),
+      { metadata: { temp: tempName } }
+    );
     await rm(tempDir, { recursive: true, force: true });
   }
 }
 
 async function callModel(client: Client, args: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const result = await client.callTool({ name: 'call_model', arguments: args }) as {
+  const purpose = typeof args.purpose === 'string' ? args.purpose : 'unknown-purpose';
+  const result = await withE2EHeartbeat(
+    `call-model-template-tools call_model ${purpose}`,
+    () => client.callTool({ name: 'call_model', arguments: args }) as Promise<{
     content: Array<{ type: string; text: string }>;
     isError?: boolean;
-  };
+  }>);
   expect(result.isError).toBeFalsy();
   return JSON.parse(result.content[0].text) as Record<string, unknown>;
 }
 
 async function syncVault(client: Client): Promise<void> {
-  const result = await client.callTool({ name: 'maintain_vault', arguments: { action: 'sync' } }) as { isError?: boolean };
+  const result = await withE2EHeartbeat(
+    'call-model-template-tools maintain_vault sync',
+    () => client.callTool({ name: 'maintain_vault', arguments: { action: 'sync' } }) as Promise<{ isError?: boolean }>
+  );
   expect(result.isError).toBeFalsy();
 }
 
