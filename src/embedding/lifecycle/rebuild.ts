@@ -166,7 +166,11 @@ export async function runRebuildEmbeddings(
       };
     }
 
-    const recordsResult = await executeRebuildRecordsWithOptionalJob(config, resolved.payload);
+    const recordsResult = await executeRebuildRecordsWithOptionalJob(
+      config,
+      resolved.payload,
+      backgroundJob
+    );
     if (!recordsResult.ok) return { ok: false, error: recordsResult.error };
     const records = recordsResult.payload;
     if (records.affected_tables.size > 0) {

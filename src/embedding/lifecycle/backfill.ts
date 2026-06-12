@@ -84,7 +84,11 @@ export async function runBackfillEmbeddings(
       };
     }
 
-    const recordsResult = await executeBackfillRecordsWithOptionalJob(config, resolved.payload);
+    const recordsResult = await executeBackfillRecordsWithOptionalJob(
+      config,
+      resolved.payload,
+      backgroundJob
+    );
     if (!recordsResult.ok) return { ok: false, error: recordsResult.error };
     const records = recordsResult.payload;
     if (records.affected_tables.size > 0) {
