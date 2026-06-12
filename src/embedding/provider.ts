@@ -583,7 +583,7 @@ export function createEmbeddingProviderForCatalogEntry(
     return new NullEmbeddingProvider(entry.dimensions);
   }
   if (providers.length === 1) {
-    return providers[0]!.provider;
+    return providers[0].provider;
   }
   return new FallbackEmbeddingProvider(providers, entry.dimensions);
 }

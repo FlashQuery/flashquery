@@ -257,7 +257,7 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
           const insertRow = {
             id: memoryId,
             instance_id: config.instance.id,
-            content: params.content as string,
+            content: params.content,
             tags: tagsValidation.normalized,
             plugin_scope: resolvedScope.scope,
             status: 'active',

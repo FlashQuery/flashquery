@@ -157,7 +157,7 @@ async function fetchCatalogEmbeddingEntries(instanceId: string): Promise<Catalog
   return (data ?? []).map((row) => ({
     name: String((row as { name: unknown }).name),
     dimensions: Number((row as { dimensions: unknown }).dimensions),
-    status: ((row as { status: unknown }).status === 'deactivated' ? 'deactivated' : 'active') as 'active' | 'deactivated',
+    status: (row as { status: unknown }).status === 'deactivated' ? 'deactivated' : 'active',
   }));
 }
 

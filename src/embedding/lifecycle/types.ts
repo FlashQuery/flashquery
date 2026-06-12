@@ -1,22 +1,18 @@
 import type { ErrorEnvelope } from '../../mcp/utils/response-formats.js';
 
-export const LIFECYCLE_ACTIONS = [
-  'backfill_embeddings',
-  'rebuild_embeddings',
-  'retire_embedding',
-  'abort',
-] as const;
-
-export type LifecycleAction = (typeof LIFECYCLE_ACTIONS)[number];
-export type LifecycleEmbeddingAction = Exclude<LifecycleAction, 'abort'>;
+export type LifecycleAction =
+  | 'backfill_embeddings'
+  | 'rebuild_embeddings'
+  | 'retire_embedding'
+  | 'abort';
 export type LifecycleRunnableAction =
   | 'backfill_embeddings'
   | 'rebuild_embeddings'
   | 'retire_embedding';
 
-export type LifecycleEntityType = 'documents' | 'memory' | 'records';
+type LifecycleEntityType = 'documents' | 'memory' | 'records';
 
-export interface LifecycleRecordsScope {
+interface LifecycleRecordsScope {
   plugin?: string | string[];
   targets?: string[];
 }
@@ -42,11 +38,6 @@ export interface LifecycleBaseInput {
   job_id?: string;
 }
 
-export interface LifecycleCountResult {
-  rows_in_scope: number;
-  max_rows: number;
-}
-
 export interface LifecycleFailure {
   entity_type: LifecycleEntityType;
   identifier: string;
@@ -59,12 +50,6 @@ export interface LifecycleEstimate {
   cost_usd?: number | null;
   wall_time_seconds?: number;
   cost_basis?: string;
-}
-
-export interface LifecycleJobRef {
-  job_id: string;
-  action: LifecycleAction;
-  embedding_name?: string;
 }
 
 export interface BackfillLifecycleCounts {
@@ -87,24 +72,6 @@ export interface RetireLifecycleCounts {
   columns_dropped: number;
   indexes_dropped: number;
   catalog_rows_deleted: number;
-}
-
-export type LifecycleCounts =
-  | BackfillLifecycleCounts
-  | RebuildLifecycleCounts
-  | RetireLifecycleCounts;
-
-export interface LifecycleActionResultBase {
-  action: LifecycleAction;
-  started_at: string;
-  finished_at: string;
-  dry_run: boolean;
-  embedding_name?: string;
-  counts: LifecycleCounts;
-  failures?: LifecycleFailure[];
-  would_process?: number;
-  estimated?: LifecycleEstimate;
-  error?: ErrorEnvelope;
 }
 
 export interface MaxRowsValidationSuccess {

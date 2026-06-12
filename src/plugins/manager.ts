@@ -620,7 +620,7 @@ async function migrateLegacyPluginEmbedding(input: {
     );
   } else if (active.length === 1) {
     logger.info(
-      `Plugins: legacy registration '${input.pluginId}' instance '${input.pluginInstance}' resolved embedding_name='${active[0]!.name}' from the only active embedding`
+      `Plugins: legacy registration '${input.pluginId}' instance '${input.pluginInstance}' resolved embedding_name='${active[0].name}' from the only active embedding`
     );
   } else if (active.length > 1) {
     logger.warn(

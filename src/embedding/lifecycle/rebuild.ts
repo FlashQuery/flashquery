@@ -202,8 +202,6 @@ export async function runRebuildEmbeddings(
   });
 }
 
-export type RebuildEmbeddingsResult = MaintenanceLifecycleActionResult;
-
 async function executeRebuildRecordsWithOptionalJob(
   config: FlashQueryConfig,
   resolution: RecordLifecycleResolution,

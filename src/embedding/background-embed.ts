@@ -208,7 +208,7 @@ export async function scheduleBackgroundEmbedding(
   }
 }
 
-export function deferredEmbeddingWarning(embeddingName?: string): EmbeddingWarning {
+function deferredEmbeddingWarning(embeddingName?: string): EmbeddingWarning {
   return embeddingName ? `embedding_deferred:${embeddingName}` : EMBEDDING_DEFERRED_WARNING;
 }
 

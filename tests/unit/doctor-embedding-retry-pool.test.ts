@@ -38,9 +38,13 @@ describe('doctor embedding retry diagnostics pg usage', () => {
 
   it('uses the shared pg pool for document, memory, and record gap queries', async () => {
     pgClientMock.queryPgPool
+      .mockResolvedValueOnce({ rows: [{ name: 'primary' }], rowCount: 1 })
       .mockResolvedValueOnce({ rows: [{ id: 'doc-1' }], rowCount: 1 })
       .mockResolvedValueOnce({ rows: [], rowCount: 0 })
-      .mockResolvedValueOnce({ rows: [{ table_name: 'fqcp_doctor_records' }], rowCount: 1 })
+      .mockResolvedValueOnce({
+        rows: [{ table_name: 'fqcp_doctor_records', embedding_name: 'primary', column_name: 'embedding_primary' }],
+        rowCount: 1,
+      })
       .mockResolvedValueOnce({ rows: [{ id: 'rec-1' }], rowCount: 1 });
 
     const result = await checkEmbeddingRetryGaps(makeConfig());
@@ -49,29 +53,36 @@ describe('doctor embedding retry diagnostics pg usage', () => {
     expect(result.issue).toContain('documents=1 [doc-1]');
     expect(result.issue).toContain('records=1 [fqcp_doctor_records:rec-1]');
     expect(pgClientMock.createPgClientIPv4).not.toHaveBeenCalled();
-    expect(pgClientMock.queryPgPool).toHaveBeenCalledTimes(4);
+    expect(pgClientMock.queryPgPool).toHaveBeenCalledTimes(5);
     expect(pgClientMock.queryPgPool).toHaveBeenNthCalledWith(
       1,
       'postgres://user:pass@localhost:5432/fq',
-      expect.stringContaining('FROM fqc_documents d'),
+      expect.stringContaining('FROM fqc_embeddings'),
       ['doctor-pool-test']
     );
     expect(pgClientMock.queryPgPool).toHaveBeenNthCalledWith(
       2,
       'postgres://user:pass@localhost:5432/fq',
-      expect.stringContaining('FROM fqc_memory m'),
-      ['doctor-pool-test']
+      expect.stringContaining('FROM fqc_documents d'),
+      ['doctor-pool-test', 'primary']
     );
     expect(pgClientMock.queryPgPool).toHaveBeenNthCalledWith(
       3,
       'postgres://user:pass@localhost:5432/fq',
-      expect.stringContaining('information_schema.columns')
+      expect.stringContaining('FROM fqc_memory m'),
+      ['doctor-pool-test', 'primary']
     );
     expect(pgClientMock.queryPgPool).toHaveBeenNthCalledWith(
       4,
       'postgres://user:pass@localhost:5432/fq',
+      expect.stringContaining('information_schema.columns'),
+      [['embedding_primary']]
+    );
+    expect(pgClientMock.queryPgPool).toHaveBeenNthCalledWith(
+      5,
+      'postgres://user:pass@localhost:5432/fq',
       expect.stringContaining('FROM "fqcp_doctor_records" t'),
-      ['doctor-pool-test', 'fqcp_doctor_records']
+      ['doctor-pool-test', 'fqcp_doctor_records', 'primary']
     );
   });
 

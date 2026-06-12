@@ -158,9 +158,10 @@ export async function checkEmbeddingRetryGaps(config: FlashQueryConfig): Promise
   }
 
   try {
-    const documents = await queryDocumentEmbeddingGaps(databaseUrl, config.instance.id);
-    const memories = await queryMemoryEmbeddingGaps(databaseUrl, config.instance.id);
-    const records = await queryRecordEmbeddingGaps(databaseUrl, config.instance.id);
+    const embeddingNames = await queryActiveEmbeddingNames(databaseUrl, config.instance.id);
+    const documents = await queryDocumentEmbeddingGaps(databaseUrl, config.instance.id, embeddingNames);
+    const memories = await queryMemoryEmbeddingGaps(databaseUrl, config.instance.id, embeddingNames);
+    const records = await queryRecordEmbeddingGaps(databaseUrl, config.instance.id, embeddingNames);
 
     const total = documents.length + memories.length + records.length;
     if (total === 0) {
@@ -186,72 +187,186 @@ export async function checkEmbeddingRetryGaps(config: FlashQueryConfig): Promise
   }
 }
 
-async function queryDocumentEmbeddingGaps(databaseUrl: string, instanceId: string): Promise<string[]> {
+async function queryActiveEmbeddingNames(databaseUrl: string, instanceId: string): Promise<string[]> {
+  const { rows } = await queryPgPool<{ name: string }>(
+    databaseUrl,
+    `
+    SELECT name
+    FROM fqc_embeddings
+    WHERE instance_id = $1
+      AND status = 'active'
+    ORDER BY name
+    `,
+    [instanceId]
+  );
+  return rows.map((row) => row.name);
+}
+
+async function queryDocumentEmbeddingGaps(
+  databaseUrl: string,
+  instanceId: string,
+  embeddingNames: string[]
+): Promise<string[]> {
+  if (embeddingNames.length === 0) {
+    return queryLegacyCoreEmbeddingGaps(databaseUrl, instanceId, 'fqc_documents', 'd', 'document');
+  }
+
+  const gaps: string[] = [];
+  for (const embeddingName of embeddingNames) {
+    assertSafeEmbeddingName(embeddingName);
+    const column = pg.escapeIdentifier(`embedding_${embeddingName}`);
+    const { rows } = await queryPgPool<{ id: string }>(
+      databaseUrl,
+      `
+      SELECT d.id::text AS id
+      FROM fqc_documents d
+      LEFT JOIN fqc_pending_embeds p
+        ON p.instance_id = d.instance_id
+       AND p.target_kind = 'document'
+       AND p.target_table = 'fqc_documents'
+       AND p.target_id = d.id::text
+       AND p.embedding_name = $2
+       AND p.status = 'pending'
+      WHERE d.instance_id = $1
+        AND d.status = 'active'
+        AND d.${column} IS NULL
+        AND p.id IS NULL
+      ORDER BY d.id
+      LIMIT 20
+      `,
+      [instanceId, embeddingName]
+    );
+    gaps.push(...rows.map((row) => formatEmbeddingGapId(row.id, embeddingName, embeddingNames.length)));
+  }
+  return gaps;
+}
+
+async function queryMemoryEmbeddingGaps(
+  databaseUrl: string,
+  instanceId: string,
+  embeddingNames: string[]
+): Promise<string[]> {
+  if (embeddingNames.length === 0) {
+    return queryLegacyCoreEmbeddingGaps(databaseUrl, instanceId, 'fqc_memory', 'm', 'memory');
+  }
+
+  const gaps: string[] = [];
+  for (const embeddingName of embeddingNames) {
+    assertSafeEmbeddingName(embeddingName);
+    const column = pg.escapeIdentifier(`embedding_${embeddingName}`);
+    const { rows } = await queryPgPool<{ id: string }>(
+      databaseUrl,
+      `
+      SELECT m.id::text AS id
+      FROM fqc_memory m
+      LEFT JOIN fqc_pending_embeds p
+        ON p.instance_id = m.instance_id
+       AND p.target_kind = 'memory'
+       AND p.target_table = 'fqc_memory'
+       AND p.target_id = m.id::text
+       AND p.embedding_name = $2
+       AND p.status = 'pending'
+      WHERE m.instance_id = $1
+        AND m.status = 'active'
+        AND m.${column} IS NULL
+        AND p.id IS NULL
+      ORDER BY m.id
+      LIMIT 20
+      `,
+      [instanceId, embeddingName]
+    );
+    gaps.push(...rows.map((row) => formatEmbeddingGapId(row.id, embeddingName, embeddingNames.length)));
+  }
+  return gaps;
+}
+
+async function queryLegacyCoreEmbeddingGaps(
+  databaseUrl: string,
+  instanceId: string,
+  tableName: 'fqc_documents' | 'fqc_memory',
+  alias: 'd' | 'm',
+  kind: 'document' | 'memory'
+): Promise<string[]> {
+  const escapedTable = pg.escapeIdentifier(tableName);
   const { rows } = await queryPgPool<{ id: string }>(
     databaseUrl,
     `
-    SELECT d.id::text AS id
-    FROM fqc_documents d
+    SELECT ${alias}.id::text AS id
+    FROM ${escapedTable} ${alias}
     LEFT JOIN fqc_pending_embeds p
-      ON p.instance_id = d.instance_id
-     AND p.target_kind = 'document'
-     AND p.target_table = 'fqc_documents'
-     AND p.target_id = d.id::text
+      ON p.instance_id = ${alias}.instance_id
+     AND p.target_kind = $2
+     AND p.target_table = $3
+     AND p.target_id = ${alias}.id::text
      AND p.status = 'pending'
-    WHERE d.instance_id = $1
-      AND d.status = 'active'
-      AND d.embedding IS NULL
+    WHERE ${alias}.instance_id = $1
+      AND ${alias}.status = 'active'
+      AND ${alias}.embedding IS NULL
       AND p.id IS NULL
-    ORDER BY d.id
+    ORDER BY ${alias}.id
     LIMIT 20
     `,
-    [instanceId]
+    [instanceId, kind, tableName]
   );
   return rows.map((row) => row.id);
 }
 
-async function queryMemoryEmbeddingGaps(databaseUrl: string, instanceId: string): Promise<string[]> {
-  const { rows } = await queryPgPool<{ id: string }>(
+async function queryRecordEmbeddingGaps(
+  databaseUrl: string,
+  instanceId: string,
+  embeddingNames: string[]
+): Promise<string[]> {
+  const tableResult = await queryPgPool<{ table_name: string; embedding_name: string; column_name: string }>(
     databaseUrl,
-    `
-    SELECT m.id::text AS id
-    FROM fqc_memory m
-    LEFT JOIN fqc_pending_embeds p
-      ON p.instance_id = m.instance_id
-     AND p.target_kind = 'memory'
-     AND p.target_table = 'fqc_memory'
-     AND p.target_id = m.id::text
-     AND p.status = 'pending'
-    WHERE m.instance_id = $1
-      AND m.status = 'active'
-      AND m.embedding IS NULL
-      AND p.id IS NULL
-    ORDER BY m.id
-    LIMIT 20
-    `,
-    [instanceId]
-  );
-  return rows.map((row) => row.id);
-}
-
-async function queryRecordEmbeddingGaps(databaseUrl: string, instanceId: string): Promise<string[]> {
-  const tableResult = await queryPgPool<{ table_name: string }>(
-    databaseUrl,
-    `
-    SELECT table_name
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name LIKE 'fqcp\\_%' ESCAPE '\\'
-      AND column_name IN ('id', 'instance_id', 'status', 'embedding')
-    GROUP BY table_name
-    HAVING COUNT(DISTINCT column_name) = 4
-    ORDER BY table_name
-    `
+    embeddingNames.length === 0
+      ? `
+        SELECT table_name, 'legacy' AS embedding_name, 'embedding' AS column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name LIKE 'fqcp\\_%' ESCAPE '\\'
+          AND column_name IN ('id', 'instance_id', 'status', 'embedding')
+        GROUP BY table_name
+        HAVING COUNT(DISTINCT column_name) = 4
+        ORDER BY table_name
+        `
+      : `
+        SELECT c.table_name,
+               replace(c.column_name, 'embedding_', '') AS embedding_name,
+               c.column_name
+        FROM information_schema.columns c
+        WHERE c.table_schema = 'public'
+          AND c.table_name LIKE 'fqcp\\_%' ESCAPE '\\'
+          AND c.column_name = ANY($1::text[])
+          AND EXISTS (
+            SELECT 1 FROM information_schema.columns id_col
+            WHERE id_col.table_schema = 'public'
+              AND id_col.table_name = c.table_name
+              AND id_col.column_name = 'id'
+          )
+          AND EXISTS (
+            SELECT 1 FROM information_schema.columns inst_col
+            WHERE inst_col.table_schema = 'public'
+              AND inst_col.table_name = c.table_name
+              AND inst_col.column_name = 'instance_id'
+          )
+          AND EXISTS (
+            SELECT 1 FROM information_schema.columns status_col
+            WHERE status_col.table_schema = 'public'
+              AND status_col.table_name = c.table_name
+              AND status_col.column_name = 'status'
+          )
+        ORDER BY c.table_name, c.column_name
+        `,
+    embeddingNames.length === 0 ? [] : [embeddingNames.map((name) => `embedding_${name}`)]
   );
 
   const gaps: string[] = [];
-  for (const { table_name: tableName } of tableResult.rows) {
+  for (const { table_name: tableName, embedding_name: embeddingName, column_name: columnName } of tableResult.rows) {
+    if (embeddingName !== 'legacy') {
+      assertSafeEmbeddingName(embeddingName);
+    }
     const escapedTable = pg.escapeIdentifier(tableName);
+    const escapedColumn = pg.escapeIdentifier(columnName);
     const { rows } = await queryPgPool<{ id: string }>(
       databaseUrl,
       `
@@ -262,20 +377,38 @@ async function queryRecordEmbeddingGaps(databaseUrl: string, instanceId: string)
        AND p.target_kind = 'record'
        AND p.target_table = $2
        AND p.target_id = t.id::text
+       AND p.embedding_name = $3
        AND p.status = 'pending'
       WHERE t.instance_id = $1
         AND t.status = 'active'
-        AND t.embedding IS NULL
+        AND t.${escapedColumn} IS NULL
         AND p.id IS NULL
       ORDER BY t.id
       LIMIT 20
       `,
-      [instanceId, tableName]
+      [instanceId, tableName, embeddingName]
     );
-    gaps.push(...rows.map((row) => `${tableName}:${row.id}`));
+    gaps.push(...rows.map((row) => formatRecordEmbeddingGapId(tableName, row.id, embeddingName, embeddingNames.length)));
   }
 
   return gaps;
+}
+
+function formatEmbeddingGapId(id: string, embeddingName: string, activeCount: number): string {
+  return activeCount > 1 ? `${embeddingName}:${id}` : id;
+}
+
+function formatRecordEmbeddingGapId(tableName: string, id: string, embeddingName: string, activeCount: number): string {
+  if (embeddingName === 'legacy' || activeCount <= 1) {
+    return `${tableName}:${id}`;
+  }
+  return `${tableName}:${embeddingName}:${id}`;
+}
+
+function assertSafeEmbeddingName(name: string): void {
+  if (!/^[a-z][a-z0-9_]*$/.test(name)) {
+    throw new Error(`Invalid embedding name in diagnostic query: ${name}`);
+  }
 }
 
 async function checkGitRepo(config: FlashQueryConfig): Promise<CheckResult> {

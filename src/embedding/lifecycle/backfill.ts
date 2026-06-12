@@ -189,8 +189,6 @@ export async function runBackfillEmbeddings(
   });
 }
 
-export type BackfillEmbeddingsResult = MaintenanceLifecycleActionResult;
-
 async function executeBackfillRecordsWithOptionalJob(
   config: FlashQueryConfig,
   resolution: RecordLifecycleResolution,

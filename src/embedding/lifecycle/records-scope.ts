@@ -26,7 +26,7 @@ import { heartbeatLifecycleJob, isLifecycleAbortRequested, type LifecycleJobRef 
 
 export type RecordLifecycleKind = 'backfill_embeddings' | 'rebuild_embeddings';
 
-export interface RecordLifecycleWorkRow {
+interface RecordLifecycleWorkRow {
   id: string;
   fields: Record<string, unknown>;
 }

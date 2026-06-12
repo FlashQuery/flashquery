@@ -1,4 +1,4 @@
-import type { EmbeddingProvider } from './provider.js';
+import type { EmbeddingCatalogEndpoint, EmbeddingProvider } from './provider.js';
 import { createEmbeddingProviderForCatalogEntry } from './provider.js';
 import {
   type ActiveEmbeddingEntry,
@@ -49,6 +49,10 @@ interface PendingEmbedRow {
 interface StructuredLogger {
   warn(message: string, fields?: Record<string, unknown>): void;
   error(message: string, fields?: Record<string, unknown>): void;
+}
+
+function isEmbeddingCatalogEndpoint(value: unknown): value is EmbeddingCatalogEndpoint {
+  return typeof value === 'object' && value !== null && typeof (value as { model?: unknown }).model === 'string';
 }
 
 interface QueryResult<Row = Record<string, unknown>> {
@@ -219,7 +223,7 @@ async function resolvePendingEmbeddingEntry(
   return {
     name: entry.name,
     dimensions: entry.dimensions,
-    endpoints: Array.isArray(entry.endpoints) ? entry.endpoints : [],
+    endpoints: Array.isArray(entry.endpoints) ? entry.endpoints.filter(isEmbeddingCatalogEndpoint) : [],
     status: 'active',
   };
 }

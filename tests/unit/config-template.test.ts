@@ -85,6 +85,20 @@ function extractCommentedLlmBlock(raw: string): string {
   return out.join('\n');
 }
 
+function extractActiveTopLevelBlock(raw: string, key: string): string {
+  const lines = raw.split('\n');
+  const startIdx = lines.findIndex(l => l === `${key}:`);
+  if (startIdx === -1) throw new Error(`${key}: header not found in template`);
+
+  const out: string[] = [];
+  for (let i = startIdx; i < lines.length; i++) {
+    const line = lines[i];
+    if (i !== startIdx && /^\S/.test(line) && !line.startsWith('#')) break;
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
 function withTemplateEnv<T>(fn: () => T): T {
   const prevOpenAiKey = process.env['OPENAI_API_KEY'];
   const prevOllamaUrl = process.env['OLLAMA_URL'];
@@ -107,7 +121,8 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
     const examplePath = resolve(process.cwd(), 'flashquery.example.yml');
     const rawYaml = readFileSync(examplePath, 'utf-8');
     const llmBlock = extractCommentedLlmBlock(rawYaml);
-    const combined = BASE_CONFIG_YAML + llmBlock;
+    const embeddingsBlock = extractActiveTopLevelBlock(rawYaml, 'embeddings');
+    const combined = BASE_CONFIG_YAML + llmBlock + '\n' + embeddingsBlock;
     const tmpFile = join(tmpdir(), `fqc-tmpl-test-parse-${Date.now()}.yml`);
     writeFileSync(tmpFile, combined);
     try {
@@ -124,7 +139,8 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
     const examplePath = resolve(process.cwd(), 'flashquery.example.yml');
     const rawYaml = readFileSync(examplePath, 'utf-8');
     const llmBlock = extractCommentedLlmBlock(rawYaml);
-    const combined = BASE_CONFIG_YAML + llmBlock;
+    const embeddingsBlock = extractActiveTopLevelBlock(rawYaml, 'embeddings');
+    const combined = BASE_CONFIG_YAML + llmBlock + '\n' + embeddingsBlock;
     const tmpFile = join(tmpdir(), `fqc-tmpl-test-provname-${Date.now()}.yml`);
     writeFileSync(tmpFile, combined);
     try {
@@ -134,8 +150,7 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
       // Raw extracted block must contain provider_name: and NOT have a bare "provider:" line
       expect(llmBlock).toMatch(/provider_name:/);
       expect(llmBlock).not.toMatch(/^\s*-?\s*provider:\s/m);
-      // After 105-01: there must be exactly 2 models. Current template has 1 model (gpt-4o) — fails today.
-      expect(config.llm?.models).toHaveLength(2);
+      expect(config.llm?.models).toHaveLength(1);
     } finally {
       unlinkSync(tmpFile);
     }
@@ -145,7 +160,8 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
     const examplePath = resolve(process.cwd(), 'flashquery.example.yml');
     const rawYaml = readFileSync(examplePath, 'utf-8');
     const llmBlock = extractCommentedLlmBlock(rawYaml);
-    const combined = BASE_CONFIG_YAML + llmBlock;
+    const embeddingsBlock = extractActiveTopLevelBlock(rawYaml, 'embeddings');
+    const combined = BASE_CONFIG_YAML + llmBlock + '\n' + embeddingsBlock;
     const tmpFile = join(tmpdir(), `fqc-tmpl-test-providers-${Date.now()}.yml`);
     writeFileSync(tmpFile, combined);
     try {
@@ -170,25 +186,18 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
     }
   });
 
-  it('[TMPL-01] flashquery.example.yml has exactly 2 default local models: embeddings (nomic-embed-text, embedding) and fast (granite4, language)', () => {
+  it('[TMPL-01] flashquery.example.yml has one default language model and a top-level embedding catalog entry', () => {
     const examplePath = resolve(process.cwd(), 'flashquery.example.yml');
     const rawYaml = readFileSync(examplePath, 'utf-8');
     const llmBlock = extractCommentedLlmBlock(rawYaml);
-    const combined = BASE_CONFIG_YAML + llmBlock;
+    const embeddingsBlock = extractActiveTopLevelBlock(rawYaml, 'embeddings');
+    const combined = BASE_CONFIG_YAML + llmBlock + '\n' + embeddingsBlock;
     const tmpFile = join(tmpdir(), `fqc-tmpl-test-models-${Date.now()}.yml`);
     writeFileSync(tmpFile, combined);
     try {
       const config = withTemplateEnv(() => loadConfig(tmpFile));
-      expect(config.llm?.models).toHaveLength(2);
-      // First model: embeddings
-      const embedModel = config.llm?.models.find(m => m.name === 'embeddings');
-      expect(embedModel).toBeDefined();
-      expect(embedModel?.providerName).toBe('local-ollama');
-      expect(embedModel?.model).toBe('nomic-embed-text');
-      expect(embedModel?.type).toBe('embedding');
-      expect(embedModel?.costPerMillion.input).toBe(0.00);
-      expect(embedModel?.costPerMillion.output).toBe(0.00);
-      // Second model: fast
+      expect(config.llm?.models).toHaveLength(1);
+
       const fastModel = config.llm?.models.find(m => m.name === 'fast');
       expect(fastModel).toBeDefined();
       expect(fastModel?.providerName).toBe('local-ollama');
@@ -196,12 +205,24 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
       expect(fastModel?.type).toBe('language');
       expect(fastModel?.costPerMillion.input).toBe(0.00);
       expect(fastModel?.costPerMillion.output).toBe(0.00);
+
+      expect(config.embeddings).toHaveLength(1);
+      expect(config.embeddings?.[0]).toMatchObject({
+        name: 'primary',
+        dimensions: 768,
+        endpoints: [
+          expect.objectContaining({
+            providerName: 'local-ollama',
+            model: 'nomic-embed-text',
+          }),
+        ],
+      });
     } finally {
       unlinkSync(tmpFile);
     }
   });
 
-  it('[TMPL-01] flashquery.example.yml has exactly 2 default purposes: embedding and general — no default purpose', () => {
+  it('[TMPL-01] flashquery.example.yml has one default language purpose and no legacy embedding purpose', () => {
     const examplePath = resolve(process.cwd(), 'flashquery.example.yml');
     const rawYaml = readFileSync(examplePath, 'utf-8');
     const llmBlock = extractCommentedLlmBlock(rawYaml);
@@ -210,11 +231,12 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
     writeFileSync(tmpFile, combined);
     try {
       const config = withTemplateEnv(() => loadConfig(tmpFile));
-      expect(config.llm?.purposes).toHaveLength(2);
+      expect(config.llm?.purposes).toHaveLength(1);
       const names = config.llm?.purposes.map(p => p.name).sort();
-      expect(names).toEqual(['embedding', 'general']);
+      expect(names).toEqual(['general']);
       // No 'default' purpose
       expect(llmBlock).not.toMatch(/purposes:[\s\S]*?name:\s*default\b/);
+      expect(llmBlock).not.toMatch(/purposes:[\s\S]*?name:\s*embedding\b/);
     } finally {
       unlinkSync(tmpFile);
     }

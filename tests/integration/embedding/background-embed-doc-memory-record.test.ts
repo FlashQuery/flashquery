@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import pg from 'pg';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { buildSchemaDDL, initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
+import { buildSchemaDDL, createCoreEmbeddingColumnSet, initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
 import { verifySchema } from '../../../src/storage/schema-verify.js';
 import { initLogger } from '../../../src/logging/logger.js';
 import { initVault } from '../../../src/storage/vault.js';
@@ -33,6 +33,8 @@ import {
 const TEST_INSTANCE_ID = 'phase-146-background-embed';
 const TEST_PLUGIN_ID = 'phase146_embed_records';
 const TEST_PLUGIN_TABLE = `fqcp_${TEST_PLUGIN_ID}_default_contacts`;
+const ENTRY_NAME = 'primary';
+const ENTRY_DEFERRED_WARNING = `${EMBEDDING_DEFERRED_WARNING}:${ENTRY_NAME}`;
 
 vi.mock('../../../src/services/plugin-reconciliation.js', () => ({
   reconcilePluginDocuments: vi.fn().mockResolvedValue({
@@ -59,6 +61,13 @@ vi.mock('../../../src/embedding/provider.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../src/embedding/provider.js')>();
   return {
     ...actual,
+    createEmbeddingProviderForCatalogEntry: vi.fn(() => ({
+      embed: vi.fn(async () => {
+        throw new Error('forced provider failure');
+      }),
+      getDimensions: vi.fn(() => 1536),
+      getProviderInfo: vi.fn(() => ({ provider: 'mock-provider', model: 'mock-model' })),
+    })),
     embeddingProvider: {
       embed: vi.fn(async () => {
         throw new Error('forced provider failure');
@@ -75,6 +84,7 @@ const REQUIRED_PENDING_COLUMNS = [
   'target_table',
   'target_id',
   'target_label',
+  'embedding_name',
   'embed_text',
   'attempt_count',
   'last_error',
@@ -90,6 +100,7 @@ plugin:
   id: ${TEST_PLUGIN_ID}
   name: Phase 146 Embed Records
   version: 1
+embedding: ${ENTRY_NAME}
 tables:
   - name: contacts
     embed_fields:
@@ -116,14 +127,20 @@ function makeConfig(): FlashQueryConfig {
       id: TEST_INSTANCE_ID,
       vault: { path: '/tmp/phase-146-background-embed', markdownExtensions: ['.md'] },
     },
-    supabase: {
-      url: TEST_SUPABASE_URL,
-      serviceRoleKey: TEST_SUPABASE_KEY,
-      databaseUrl: TEST_DATABASE_URL,
-      skipDdl: false,
-    },
-    embedding: { provider: 'none', model: '', apiKey: '', dimensions: 1536 },
-    logging: { level: 'error', output: 'stdout' },
+	    supabase: {
+	      url: TEST_SUPABASE_URL,
+	      serviceRoleKey: TEST_SUPABASE_KEY,
+	      databaseUrl: TEST_DATABASE_URL,
+	      skipDdl: false,
+	    },
+	    llm: {
+	      providers: [{ name: 'mock-provider', type: 'local-ollama', baseUrl: 'http://localhost:11434' }],
+	      models: [{ name: 'mock-model', providerName: 'mock-provider', model: 'mock-model', type: 'embedding' }],
+	      purposes: [],
+	    },
+	    embedding: { provider: 'none', model: '', apiKey: '', dimensions: 1536 },
+	    embeddings: [{ name: ENTRY_NAME, dimensions: 1536, endpoints: [{ providerName: 'mock-provider', model: 'mock-model' }] }],
+	    logging: { level: 'error', output: 'stdout' },
     locking: { enabled: false },
   } as unknown as FlashQueryConfig;
 }
@@ -161,7 +178,7 @@ describe('pending embedding schema foundation', () => {
     expect(ddl).toContain('target_kind');
     expect(ddl).toContain('attempt_count');
     expect(ddl).toContain('last_attempt_at');
-    expect(ddl).toMatch(/UNIQUE INDEX IF NOT EXISTS .*fqc_pending_embeds.*instance_id.*target_kind.*target_table.*target_id/s);
+	    expect(ddl).toMatch(/UNIQUE INDEX IF NOT EXISTS .*fqc_pending_embeds.*instance_id.*target_kind.*target_table.*target_id.*embedding_name/s);
     expect(ddl).toMatch(/INDEX IF NOT EXISTS .*fqc_pending_embeds.*instance_id.*status.*next_retry_at/s);
     expect(ddl).toMatch(/INDEX IF NOT EXISTS .*fqc_pending_embeds.*instance_id.*target_kind.*target_id/s);
   });
@@ -179,14 +196,28 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding schema bootstrap (integration)
     initLogger(config);
     await initSupabase(config);
     await initVault(config);
-    await initPlugins(config);
-    client = new pg.Client({ connectionString: TEST_DATABASE_URL });
-    await client.connect();
-  }, 60_000);
+	    await initPlugins(config);
+	    client = new pg.Client({ connectionString: TEST_DATABASE_URL });
+	    await client.connect();
+	    await client.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]);
+	    await createCoreEmbeddingColumnSet(config, { name: ENTRY_NAME, dimensions: 1536 });
+	    await client.query(
+	      `
+	      INSERT INTO fqc_embeddings (instance_id, name, dimensions, endpoints, source, status)
+	      VALUES ($1, $2, 1536, $3::jsonb, 'yaml', 'active')
+	      `,
+	      [
+	        TEST_INSTANCE_ID,
+	        ENTRY_NAME,
+	        JSON.stringify([{ providerName: 'mock-provider', model: 'mock-model' }]),
+	      ]
+	    );
+	  }, 60_000);
 
   afterAll(async () => {
-    await client?.query('DELETE FROM fqc_pending_embeds WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
-    await client?.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
+	    await client?.query('DELETE FROM fqc_pending_embeds WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
+	    await client?.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
+	    await client?.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.query('DELETE FROM fqc_memory WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.query(`DROP TABLE IF EXISTS ${pg.escapeIdentifier(TEST_PLUGIN_TABLE)}`).catch(() => undefined);
     try {
@@ -304,7 +335,7 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding schema bootstrap (integration)
 
     expect(payload).toMatchObject({
       memory_id: expect.any(String),
-      warnings: [EMBEDDING_DEFERRED_WARNING],
+	      warnings: [ENTRY_DEFERRED_WARNING],
     });
 
     const { rows } = await client.query(
@@ -345,7 +376,7 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding schema bootstrap (integration)
     expect(payload).toMatchObject({
       path: 'phase-146/deferred-warning.md',
       fq_id: expect.any(String),
-      warnings: [EMBEDDING_DEFERRED_WARNING],
+	      warnings: [ENTRY_DEFERRED_WARNING],
     });
 
     const { rows } = await client.query(
@@ -395,7 +426,7 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding schema bootstrap (integration)
     expect(payload).toMatchObject({
       path: 'phase-146/compound-warning.md',
       fq_id: created.fq_id,
-      warnings: [EMBEDDING_DEFERRED_WARNING],
+	      warnings: [ENTRY_DEFERRED_WARNING],
     });
 
     const { rows } = await client.query(
@@ -442,7 +473,7 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding schema bootstrap (integration)
       id: expect.any(String),
       plugin_id: TEST_PLUGIN_ID,
       table: 'contacts',
-      warnings: [EMBEDDING_DEFERRED_WARNING],
+	      warnings: [ENTRY_DEFERRED_WARNING],
     });
 
     const { rows } = await client.query(
