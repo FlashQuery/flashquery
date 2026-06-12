@@ -110,6 +110,16 @@ function setupLifecycleMocks(): void {
   });
   mocks.resolveSingleRecordLifecycleEmbeddingName.mockReturnValue({ ok: true, payload: 'primary' });
   mocks.acquireLifecycleJob.mockResolvedValue({ ok: true, payload: hiddenJob });
+  mocks.completeLifecycleJob.mockResolvedValue({
+    ok: true,
+    payload: {
+      job_id: publicJob.job_id,
+      status: 'completed',
+      started_at: publicJob.started_at,
+      heartbeat_at: '2026-06-12T17:32:00.000Z',
+      actions: [],
+    },
+  });
   mocks.executeRecordLifecycleWorkUnits.mockResolvedValue({
     aborted: false,
     rows_examined: 1,
@@ -162,6 +172,45 @@ describe('mixed core+records background lifecycle job ownership', () => {
     );
   });
 
+  it('REQ-035 completes mixed backfill public job only after core and records counts are combined', async () => {
+    setupLifecycleMocks();
+    const { runBackfillEmbeddings } = await import('../../src/embedding/lifecycle/backfill.js');
+
+    await runBackfillEmbeddings(
+      makeConfig(),
+      {
+        action: 'backfill_embeddings',
+        embedding_name: 'primary',
+        scope: { entity_types: ['documents', 'records'] },
+        max_rows: 0,
+      },
+      publicJob
+    );
+
+    expect(mocks.runCoreLifecycle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backgroundJob: publicJob,
+        finalizeJob: false,
+      })
+    );
+    expect(mocks.executeRecordLifecycleWorkUnits).toHaveBeenCalledWith(
+      expect.objectContaining({ job: publicJob })
+    );
+    expect(mocks.completeLifecycleJob).toHaveBeenCalledTimes(1);
+    expect(mocks.completeLifecycleJob).toHaveBeenCalledWith(
+      expect.anything(),
+      publicJob.job_id,
+      expect.objectContaining({
+        rows_examined: 2,
+        rows_embedded: 2,
+        rows_failed: 0,
+        rows_skipped_already_present: 0,
+        rows_skipped_no_embedding: 0,
+      }),
+      []
+    );
+  });
+
   it('REQ-036 keeps mixed rebuild records work inside the returned public job boundary', async () => {
     setupLifecycleMocks();
     mocks.runCoreLifecycle.mockResolvedValueOnce({
@@ -201,6 +250,61 @@ describe('mixed core+records background lifecycle job ownership', () => {
       expect.anything(),
       publicJob.job_id,
       expect.anything(),
+      []
+    );
+  });
+
+  it('REQ-036 completes mixed rebuild public job only after core and records counts are combined', async () => {
+    setupLifecycleMocks();
+    mocks.runCoreLifecycle.mockResolvedValueOnce({
+      ok: true,
+      payload: {
+        action: 'rebuild_embeddings',
+        started_at: '2026-06-12T17:30:00.000Z',
+        finished_at: '2026-06-12T17:30:01.000Z',
+        dry_run: false,
+        embedding_name: 'primary',
+        counts: {
+          rows_examined: 1,
+          rows_embedded: 1,
+          rows_failed: 0,
+          rows_skipped_no_embedding: 0,
+        },
+      },
+    });
+    const { runRebuildEmbeddings } = await import('../../src/embedding/lifecycle/rebuild.js');
+
+    await runRebuildEmbeddings(
+      makeConfig(),
+      {
+        action: 'rebuild_embeddings',
+        embedding_name: 'primary',
+        confirm: 'primary',
+        scope: { entity_types: ['documents', 'records'] },
+        max_rows: 10,
+      },
+      publicJob
+    );
+
+    expect(mocks.runCoreLifecycle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backgroundJob: publicJob,
+        finalizeJob: false,
+      })
+    );
+    expect(mocks.executeRecordLifecycleWorkUnits).toHaveBeenCalledWith(
+      expect.objectContaining({ job: publicJob })
+    );
+    expect(mocks.completeLifecycleJob).toHaveBeenCalledTimes(1);
+    expect(mocks.completeLifecycleJob).toHaveBeenCalledWith(
+      expect.anything(),
+      publicJob.job_id,
+      expect.objectContaining({
+        rows_examined: 2,
+        rows_embedded: 2,
+        rows_failed: 0,
+        rows_skipped_no_embedding: 0,
+      }),
       []
     );
   });

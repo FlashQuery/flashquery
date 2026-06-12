@@ -34,7 +34,7 @@ export function registerScanTools(server: McpServer, config: FlashQueryConfig): 
     {
       description:
         'Run administrative vault maintenance jobs. Use this when files changed outside FlashQuery and the vault index needs sync, repair, lifecycle embedding maintenance, or job-status inspection.\n\n' +
-        'Use action: "sync" to scan external filesystem changes. Use action: "repair" to reconcile tracked document state. Use ["repair","sync"] when both are needed; repair runs before sync. Lifecycle actions backfill_embeddings, rebuild_embeddings, retire_embedding, and abort must be sent as single actions and cannot be combined in action arrays. Use background: true only for sync until lifecycle processors are implemented, and use action: "status" with job_id to inspect a background job.\n\n' +
+        'Use action: "sync" to scan external filesystem changes. Use action: "repair" to reconcile tracked document state. Use ["repair","sync"] when both are needed; repair runs before sync. Lifecycle actions backfill_embeddings, rebuild_embeddings, retire_embedding, and abort must be sent as single actions and cannot be combined in action arrays. Use background: true for sync or supported lifecycle actions, and use action: "status" with job_id to inspect a background job.\n\n' +
         'Do not use this as part of normal read/write workflows or for caller-side staleness checks; normal tools return current authoritative state. Do not expect scanner internals such as queue depth, hashes, or per-document sync versions in the response.\n\n' +
         'Example: maintain_vault({ "action": ["repair", "sync"], "dry_run": false })',
       inputSchema: {

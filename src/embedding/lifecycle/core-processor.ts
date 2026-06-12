@@ -47,6 +47,7 @@ export interface CoreLifecycleOptions {
   input: LifecycleBaseInput & { action: CoreLifecycleKind };
   mode: CoreLifecycleKind;
   backgroundJob?: LifecycleJobRef;
+  finalizeJob?: boolean;
 }
 
 export type CoreLifecycleResult =
@@ -215,7 +216,11 @@ export async function runCoreLifecycle(
       await reindexAffectedTables(config, embeddingName, affectedTables);
     }
 
-    await completeLifecycleJob(config, job.job_id, countsRecord(counts), failures);
+    if (options.finalizeJob !== false) {
+      await completeLifecycleJob(config, job.job_id, countsRecord(counts), failures);
+    } else {
+      await heartbeatLifecycleJob(config, job.job_id, countsRecord(counts), failures);
+    }
     return {
       ok: true,
       payload: {

@@ -131,8 +131,10 @@ export async function runRebuildEmbeddings(
       input: coreInput,
       mode: 'rebuild_embeddings',
       ...(backgroundJob === undefined ? {} : { backgroundJob }),
+      ...(backgroundJob === undefined ? {} : { finalizeJob: false }),
     });
     if (!core.ok) return core;
+    if (core.aborted) return core;
     if (input.dry_run === true) {
       const coreCounts = asRebuildCounts(core.payload.counts);
       return {
@@ -169,7 +171,8 @@ export async function runRebuildEmbeddings(
     const recordsResult = await executeRebuildRecordsWithOptionalJob(
       config,
       resolved.payload,
-      backgroundJob
+      backgroundJob,
+      backgroundJob === undefined
     );
     if (!recordsResult.ok) return { ok: false, error: recordsResult.error };
     const records = recordsResult.payload;
@@ -179,17 +182,22 @@ export async function runRebuildEmbeddings(
     const coreCounts = asRebuildCounts(core.payload.counts);
     const failures = [...(core.payload.failures ?? []), ...records.failures];
     const warnings = [...new Set([...(core.payload.warnings ?? []), ...records.warnings])];
+    const counts = {
+      rows_examined: coreCounts.rows_examined + records.rows_examined,
+      rows_embedded: coreCounts.rows_embedded + records.rows_embedded,
+      rows_failed: coreCounts.rows_failed + records.rows_failed,
+      rows_skipped_no_embedding: records.rows_skipped_no_embedding,
+    };
+    if (backgroundJob !== undefined && !records.aborted) {
+      const completed = await completeLifecycleJob(config, backgroundJob.job_id, counts, failures);
+      if (!completed.ok) return { ok: false, error: completed.error };
+    }
     return {
       ok: true,
       payload: {
         ...core.payload,
         finished_at: new Date().toISOString(),
-        counts: {
-          rows_examined: coreCounts.rows_examined + records.rows_examined,
-          rows_embedded: coreCounts.rows_embedded + records.rows_embedded,
-          rows_failed: coreCounts.rows_failed + records.rows_failed,
-          rows_skipped_no_embedding: records.rows_skipped_no_embedding,
-        },
+        counts,
         ...(failures.length === 0 ? {} : { failures }),
         ...(warnings.length === 0 ? {} : { warnings }),
         plugin_breakdown: records.plugin_breakdown,
@@ -209,7 +217,8 @@ export async function runRebuildEmbeddings(
 async function executeRebuildRecordsWithOptionalJob(
   config: FlashQueryConfig,
   resolution: RecordLifecycleResolution,
-  backgroundJob?: LifecycleJobRef
+  backgroundJob?: LifecycleJobRef,
+  finalizeJob = true
 ): Promise<RecordExecutionOrError> {
   const jobName = resolveSingleRecordLifecycleEmbeddingName(resolution, 'rebuild_embeddings');
   if (!jobName.ok) return jobName;
@@ -243,7 +252,7 @@ async function executeRebuildRecordsWithOptionalJob(
       workUnits: resolution.work_units,
       job: jobRef,
     });
-    if (!records.aborted) {
+    if (!records.aborted && finalizeJob) {
       await completeLifecycleJob(
         config,
         jobRef.job_id,
