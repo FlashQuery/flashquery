@@ -366,6 +366,27 @@ CREATE TABLE IF NOT EXISTS fqc_documents (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Phase 168: deterministic document chunks for document semantic embeddings.
+CREATE TABLE IF NOT EXISTS fqc_chunks (
+  id UUID PRIMARY KEY,
+  instance_id TEXT NOT NULL,
+  document_id UUID NOT NULL REFERENCES fqc_documents(id) ON DELETE CASCADE,
+  heading_path TEXT[] NOT NULL DEFAULT '{}',
+  heading_level INT NOT NULL DEFAULT 0,
+  breadcrumb TEXT NOT NULL,
+  content TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  chunk_index INT NOT NULL DEFAULT 0,
+  parent_chunk_id UUID REFERENCES fqc_chunks(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(instance_id, document_id, heading_path, chunk_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fqc_chunks_document_id ON fqc_chunks(document_id);
+CREATE INDEX IF NOT EXISTS idx_fqc_chunks_instance_id ON fqc_chunks(instance_id);
+CREATE INDEX IF NOT EXISTS idx_fqc_chunks_heading_level ON fqc_chunks(heading_level);
+
 -- Phase 32: description column added here, but dropped in Phase 69 (SPEC-19) — omitted to prevent
 -- add/drop cycle that exhausts PostgreSQL's 1600 attnum slots over repeated test runs.
 
