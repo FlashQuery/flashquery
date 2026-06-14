@@ -61,6 +61,14 @@ vi.mock('../../src/embedding/provider.js', () => ({
   })),
 }));
 
+vi.mock('../../src/embedding/chunks/scheduler.js', () => ({
+  scheduleChangedDocumentChunks: vi.fn().mockResolvedValue({
+    warnings: [],
+    changedChunkCount: 1,
+    totalChunkCount: 1,
+  }),
+}));
+
 vi.mock('../../src/mcp/utils/resolve-document.js', () => ({
   resolveDocumentIdentifier: vi.fn().mockImplementation(async (_config: unknown, _supabase: unknown, identifier: string) => {
     const relativePath = identifier.endsWith('.md') ? identifier : `${identifier}.md`;
@@ -147,6 +155,7 @@ vi.mock('../../src/utils/pg-client.js', () => ({
 import { vaultManager } from '../../src/storage/vault.js';
 import { supabaseManager } from '../../src/storage/supabase.js';
 import { embeddingProvider } from '../../src/embedding/provider.js';
+import { scheduleChangedDocumentChunks } from '../../src/embedding/chunks/scheduler.js';
 import * as resolveDocumentModule from '../../src/mcp/utils/resolve-document.js';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
@@ -650,9 +659,12 @@ Other content`,
     const mockReadFile = vi.mocked(fsPromises.readFile);
     mockReadFile.mockResolvedValue('# Test\nNew content\n');
 
-    // Mock embeddingProvider.embed() (not queue) - implementation uses embed for fire-and-forget
-    const mockEmbed = vi.mocked(embeddingProvider.embed);
-    mockEmbed.mockResolvedValue([0.1, 0.2, 0.3, 0.4]);
+    const mockScheduleChunks = vi.mocked(scheduleChangedDocumentChunks);
+    mockScheduleChunks.mockResolvedValue({
+      warnings: [],
+      changedChunkCount: 1,
+      totalChunkCount: 1,
+    });
 
     const embeddingCatalogQuery = {
       select: vi.fn().mockReturnThis(),
@@ -685,8 +697,14 @@ Other content`,
       content: 'New content',
     });
 
-    // Verify embedding was called (fire-and-forget pattern)
-    expect(mockEmbed).toHaveBeenCalled();
+    expect(mockScheduleChunks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentId: 'test-fqc-id',
+        documentPath: 'test.md',
+        title: 'test.md',
+        body: '# Test\nNew content\n',
+      })
+    );
   });
 });
 

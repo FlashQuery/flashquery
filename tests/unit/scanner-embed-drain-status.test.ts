@@ -5,6 +5,7 @@ import { runScanOnce } from '../../src/services/scanner.js';
 const scannerState = vi.hoisted(() => ({
   vaultFiles: [] as string[],
   drainMode: 'ok' as 'ok' | 'error' | 'throw' | 'docs',
+  schedulerMode: 'ok' as 'ok' | 'deferred' | 'never',
   upserts: [] as Array<{ table: string; payload: Record<string, unknown> }>,
 }));
 
@@ -35,6 +36,26 @@ vi.mock('../../src/embedding/provider.js', () => ({
   embeddingProvider: {
     embed: vi.fn().mockResolvedValue([0.1]),
   },
+}));
+
+vi.mock('../../src/embedding/chunks/scheduler.js', () => ({
+  scheduleChangedDocumentChunks: vi.fn(() => {
+    if (scannerState.schedulerMode === 'never') {
+      return new Promise(() => undefined);
+    }
+    if (scannerState.schedulerMode === 'deferred') {
+      return Promise.resolve({
+        warnings: ['embedding_deferred'],
+        changedChunkCount: 1,
+        totalChunkCount: 1,
+      });
+    }
+    return Promise.resolve({
+      warnings: [],
+      changedChunkCount: 1,
+      totalChunkCount: 1,
+    });
+  }),
 }));
 
 vi.mock('../../src/embedding/pending-worker.js', () => ({
@@ -70,6 +91,7 @@ vi.mock('../../src/storage/supabase.js', () => ({
 }));
 
 import { embeddingProvider } from '../../src/embedding/provider.js';
+import { scheduleChangedDocumentChunks } from '../../src/embedding/chunks/scheduler.js';
 import { processPendingEmbeddings } from '../../src/embedding/pending-worker.js';
 import { logger } from '../../src/logging/logger.js';
 
@@ -91,10 +113,11 @@ function ok(data: unknown[] = []) {
 }
 
 function makeQuery(table: string) {
-  const state = { select: '' };
+  const state = { select: '', countHead: false };
   const query: Record<string, unknown> = {
-    select: vi.fn((columns: string) => {
+    select: vi.fn((columns: string, options?: { count?: string; head?: boolean }) => {
       state.select = columns;
+      state.countHead = Boolean(options?.count === 'exact' && options?.head);
       return query;
     }),
     eq: vi.fn(() => query),
@@ -122,7 +145,27 @@ function makeQuery(table: string) {
       }
       return Promise.resolve(ok());
     }),
-    then: (resolve: (value: unknown) => void) => resolve(ok()),
+    then: (resolve: (value: unknown) => void, reject?: (reason?: unknown) => void) => {
+      if (table === 'fqc_documents' && state.select === 'id, path, title') {
+        if (scannerState.drainMode === 'error') {
+          resolve({ data: null, error: { message: 'forced drain failure' } });
+          return;
+        }
+        if (scannerState.drainMode === 'throw') {
+          reject?.(new Error('forced drain throw'));
+          return;
+        }
+        if (scannerState.drainMode === 'docs') {
+          resolve({ data: [{ id: 'doc-1', path: 'doc.md', title: 'Doc' }], error: null });
+          return;
+        }
+      }
+      if (table === 'fqc_chunks' && state.countHead) {
+        resolve({ data: null, count: 0, error: null });
+        return;
+      }
+      resolve(ok());
+    },
   };
   return query;
 }
@@ -139,6 +182,7 @@ describe('runScanOnce EMBED-DRAIN status', () => {
     vi.useRealTimers();
     scannerState.vaultFiles = [];
     scannerState.drainMode = 'ok';
+    scannerState.schedulerMode = 'ok';
     scannerState.upserts = [];
     vi.mocked(embeddingProvider.embed).mockResolvedValue([0.1]);
   });
@@ -164,7 +208,7 @@ describe('runScanOnce EMBED-DRAIN status', () => {
   it('keeps timed_out precedence when drain embed promises do not settle', async () => {
     vi.useFakeTimers();
     scannerState.drainMode = 'docs';
-    vi.mocked(embeddingProvider.embed).mockReturnValue(new Promise(() => undefined));
+    scannerState.schedulerMode = 'never';
 
     const scan = runScanOnce(makeConfig());
     await vi.advanceTimersByTimeAsync(30_000);
@@ -188,23 +232,18 @@ describe('runScanOnce EMBED-DRAIN status', () => {
 
   it('records scanner-created document embedding failures as pending and reports partial status', async () => {
     scannerState.vaultFiles = ['new-doc.md'];
-    vi.mocked(embeddingProvider.embed).mockRejectedValue(new Error('provider offline'));
+    scannerState.schedulerMode = 'deferred';
 
     const result = await runScanOnce(makeConfig());
 
     expect(result.newFiles).toBe(1);
     expect(result.embeddingStatus).toBe('partial');
-    expect(scannerState.upserts).toContainEqual(
+    expect(scheduleChangedDocumentChunks).toHaveBeenCalledWith(
       expect.objectContaining({
-        table: 'fqc_pending_embeds',
-        payload: expect.objectContaining({
-          instance_id: 'test-instance-id',
-          target_kind: 'document',
-          target_table: 'fqc_documents',
-          embed_text: expect.stringContaining('Body'),
-          last_error: 'provider offline',
-          status: 'pending',
-        }),
+        documentId: expect.any(String),
+        documentPath: 'new-doc.md',
+        title: 'New Doc',
+        body: 'Body',
       })
     );
   });

@@ -6,10 +6,10 @@ describe('catalog embedding routing guards', () => {
     ['copy_document', 'src/mcp/tools/documents/copy.ts'],
     ['get_document stale re-embed helper', 'src/mcp/tools/documents/helpers.ts'],
     ['reference resolver stale re-embed helper', 'src/llm/reference-resolver.ts'],
-  ])('%s routes document re-embeds through active catalog entries', (_label, path) => {
+  ])('%s routes document re-embeds through the current document embedding path', (_label, path) => {
     const source = readFileSync(path, 'utf8');
 
-    expect(source).toContain('scheduleBackgroundEmbeddingsForActiveEntries');
+    expect(source).toMatch(/scheduleChangedDocumentChunks|scheduleBackgroundEmbeddingsForActiveEntries/);
     expect(source).not.toMatch(/scheduleBackgroundEmbedding\s*\(\s*\{/);
   });
 });
