@@ -12,10 +12,9 @@ import {
   type EmbeddingProvider,
 } from '../../embedding/provider.js';
 import {
-  documentEmbeddingTarget,
-  scheduleBackgroundEmbeddingsForActiveEntries,
   type ActiveEmbeddingEntry,
 } from '../../embedding/background-embed.js';
+import { scheduleChangedDocumentChunks } from '../../embedding/chunks/scheduler.js';
 import { logger } from '../../logging/logger.js';
 import { pluginManager } from '../../plugins/manager.js';
 import {
@@ -1899,17 +1898,14 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
         const docTitle = typeof frontmatter[FM.TITLE] === 'string' ? frontmatter[FM.TITLE] as string : relativePath;
         const embedResult = fqcId
-          ? await scheduleBackgroundEmbeddingsForActiveEntries({
+          ? await scheduleChangedDocumentChunks({
               config,
-              target: documentEmbeddingTarget({
-                instanceId: config.instance.id,
-                id: fqcId,
-                label: relativePath,
-              }),
-              embedText: `${docTitle}\n\n${modifiedBody}`,
               supabase: supabaseManager.getClient(),
-              databaseUrl: config.supabase.databaseUrl,
-              legacyProvider: embeddingProvider,
+              documentId: fqcId,
+              documentPath: relativePath,
+              title: docTitle,
+              body: modifiedBody,
+              logger,
             })
           : { warnings: [] };
 
@@ -2113,17 +2109,14 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           }
 
           const docTitle = typeof document.data[FM.TITLE] === 'string' ? document.data[FM.TITLE] as string : resolved.relativePath;
-          const embedResult = await scheduleBackgroundEmbeddingsForActiveEntries({
+          const embedResult = await scheduleChangedDocumentChunks({
             config,
-            target: documentEmbeddingTarget({
-              instanceId: config.instance.id,
-              id: resolved.fqcId,
-              label: resolved.relativePath,
-            }),
-            embedText: `${docTitle}\n\n${newContent}`,
             supabase: supabaseManager.getClient(),
-            databaseUrl: config.supabase.databaseUrl,
-            legacyProvider: embeddingProvider,
+            documentId: resolved.fqcId,
+            documentPath: resolved.relativePath,
+            title: docTitle,
+            body: newContent,
+            logger,
           });
           embeddingWarnings = embedResult.warnings;
         }

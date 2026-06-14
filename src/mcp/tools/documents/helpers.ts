@@ -1,9 +1,6 @@
 import { existsSync } from 'node:fs';
 import { relative, extname, normalize, basename, resolve, isAbsolute, join } from 'node:path';
-import {
-  documentEmbeddingTarget,
-  scheduleBackgroundEmbeddingsForActiveEntries,
-} from '../../../embedding/background-embed.js';
+import { scheduleChangedDocumentChunks } from '../../../embedding/chunks/scheduler.js';
 import type { ErrorEnvelope } from '../../utils/response-formats.js';
 import type { ScheduleDocumentEmbeddingInput } from '../../utils/document-output.js';
 
@@ -21,24 +18,22 @@ export function stringField(record: object, key: string, fallback: string): stri
 }
 
 export async function scheduleDocumentEmbedding({
-  instanceId,
   id,
   label,
   embedText,
-  provider,
   supabase,
   config,
-  databaseUrl,
 }: ScheduleDocumentEmbeddingInput): Promise<void> {
   if (!config) return;
+  const [title, ...bodyParts] = embedText.split(/\n\n/);
 
-  await scheduleBackgroundEmbeddingsForActiveEntries({
+  await scheduleChangedDocumentChunks({
     config,
-    target: documentEmbeddingTarget({ instanceId, id, label }),
-    embedText,
     supabase,
-    databaseUrl: databaseUrl ?? config.supabase.databaseUrl,
-    legacyProvider: provider,
+    documentId: id,
+    documentPath: label,
+    title: title || label,
+    body: bodyParts.join('\n\n'),
   });
 }
 

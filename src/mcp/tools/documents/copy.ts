@@ -7,11 +7,7 @@ import matter from 'gray-matter';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { vaultManager } from '../../../storage/vault.js';
 import { supabaseManager } from '../../../storage/supabase.js';
-import { embeddingProvider } from '../../../embedding/provider.js';
-import {
-  documentEmbeddingTarget,
-  scheduleBackgroundEmbeddingsForActiveEntries,
-} from '../../../embedding/background-embed.js';
+import { scheduleChangedDocumentChunks } from '../../../embedding/chunks/scheduler.js';
 import { logger } from '../../../logging/logger.js';
 import {
   LockTimeoutError,
@@ -217,17 +213,14 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
               );
             }
 
-            const embedResult = await scheduleBackgroundEmbeddingsForActiveEntries({
+            const embedResult = await scheduleChangedDocumentChunks({
               config,
-              target: documentEmbeddingTarget({
-                instanceId: config.instance.id,
-                id: newFqcId,
-                label: copyRelativePath,
-              }),
-              embedText: `${copyTitle}\n\n${lockedParsed.content}`,
               supabase,
-              databaseUrl: config.supabase.databaseUrl,
-              legacyProvider: embeddingProvider,
+              documentId: newFqcId,
+              documentPath: copyRelativePath,
+              title: copyTitle,
+              body: lockedParsed.content,
+              logger,
             });
 
             const written = await vaultManager.readMarkdown(copyRelativePath);

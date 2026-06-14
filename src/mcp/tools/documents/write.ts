@@ -7,11 +7,7 @@ import matter from 'gray-matter';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { vaultManager } from '../../../storage/vault.js';
 import { supabaseManager } from '../../../storage/supabase.js';
-import { embeddingProvider } from '../../../embedding/provider.js';
-import {
-  documentEmbeddingTarget,
-  scheduleBackgroundEmbeddingsForActiveEntries,
-} from '../../../embedding/background-embed.js';
+import { scheduleChangedDocumentChunks } from '../../../embedding/chunks/scheduler.js';
 import { logger } from '../../../logging/logger.js';
 import {
   LockTimeoutError,
@@ -243,17 +239,14 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
                 }
               }
 
-              const embedResult = await scheduleBackgroundEmbeddingsForActiveEntries({
+              const embedResult = await scheduleChangedDocumentChunks({
                 config,
-                target: documentEmbeddingTarget({
-                  instanceId: config.instance.id,
-                  id: fqcId,
-                  label: relativePath,
-                }),
-                embedText: `${effectiveTitle}\n\n${body}`,
                 supabase,
-                databaseUrl: config.supabase.databaseUrl,
-                legacyProvider: embeddingProvider,
+                documentId: fqcId,
+                documentPath: relativePath,
+                title: effectiveTitle,
+                body,
+                logger,
               });
 
               return jsonToolResult(
@@ -426,17 +419,14 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
                     );
                   }
 
-                  const embedResult = await scheduleBackgroundEmbeddingsForActiveEntries({
+                  const embedResult = await scheduleChangedDocumentChunks({
                     config,
-                    target: documentEmbeddingTarget({
-                      instanceId: config.instance.id,
-                      id: fqcId,
-                      label: resolved.relativePath,
-                    }),
-                    embedText: `${effectiveTitle}\n\n${effectiveBody}`,
                     supabase,
-                    databaseUrl: config.supabase.databaseUrl,
-                    legacyProvider: embeddingProvider,
+                    documentId: fqcId,
+                    documentPath: resolved.relativePath,
+                    title: effectiveTitle,
+                    body: effectiveBody,
+                    logger,
                   });
 
                   return {

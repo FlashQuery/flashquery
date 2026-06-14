@@ -17,9 +17,8 @@ import { FM } from '../constants/frontmatter-fields.js';
 import { extractTemplateMeta } from '../llm/template-meta.js';
 import {
   EMBEDDING_DEFERRED_WARNING,
-  documentEmbeddingTarget,
-  scheduleBackgroundEmbeddingsForActiveEntries,
 } from '../embedding/background-embed.js';
+import { scheduleChangedDocumentChunks } from '../embedding/chunks/scheduler.js';
 import { withAncestorDirectoryLocksShared, withDocumentLock } from './document-lock.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -501,18 +500,14 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
     logPrefix: string;
   }) => {
     embedPromises.push(
-      scheduleBackgroundEmbeddingsForActiveEntries({
+      scheduleChangedDocumentChunks({
         config,
-        target: documentEmbeddingTarget({
-          instanceId,
-          id: input.id,
-          label: input.path,
-        }),
-        embedText: `${input.title}\n\n${input.content}`,
         supabase,
         logger,
-        databaseUrl: config.supabase.databaseUrl,
-        legacyProvider: embeddingProvider,
+        documentId: input.id,
+        documentPath: input.path,
+        title: input.title,
+        body: input.content,
       })
         .then((result) => {
           if (result.warnings.some((warning) => warning.startsWith(EMBEDDING_DEFERRED_WARNING))) {
@@ -1137,48 +1132,57 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
 
   let drainQueryFailed = false;
   try {
-    // Phase 2: find docs with NULL embedding (from create_document background embeds)
+    // Phase 2: find active docs with no chunk rows. Older deployments used the
+    // document embedding column as the drain trigger; chunking deployments use
+    // fqc_chunks as the document semantic source of truth.
     const { data: unembeddedDocs, error: unembeddedErr } = await supabase
       .from('fqc_documents')
       .select('id, path, title')
       .eq('instance_id', instanceId)
-      .eq('status', 'active')
-      .is('embedding', null);
+      .eq('status', 'active');
 
     if (unembeddedErr) {
       drainQueryFailed = true;
       logger.error(`[EMBED-DRAIN] drain_query_failed: ${unembeddedErr.message}`);
     } else if (unembeddedDocs && unembeddedDocs.length > 0) {
-      logger.info(`[EMBED-DRAIN] found ${unembeddedDocs.length} doc(s) with no embedding — draining`);
+      let docsWithNoChunks = 0;
       for (const doc of unembeddedDocs) {
         const docId = doc.id as string;
         const docPath = doc.path as string;
         const docTitle = (doc.title as string) || titleFromFilename(docPath);
+        const { count, error: chunkCountError } = await supabase
+          .from('fqc_chunks')
+          .select('id', { count: 'exact', head: true })
+          .eq('instance_id', instanceId)
+          .eq('document_id', docId);
+        if (chunkCountError) {
+          drainQueryFailed = true;
+          logger.error(`[EMBED-DRAIN] chunk drain query failed for "${docPath}": ${chunkCountError.message}`);
+          continue;
+        }
+        if ((count ?? 0) > 0) {
+          continue;
+        }
+        docsWithNoChunks++;
 
-        // Read the file content for embedding text
-        let embedText = docTitle;
+        let body = '';
         try {
           const raw = await readFile(`${vaultRoot}/${docPath}`, 'utf-8');
-          const { content: body } = matter(raw);
-          embedText = `${docTitle}\n\n${body}`;
+          body = matter(raw).content;
         } catch {
-          // File unreadable — embed title only (better than nothing)
-          logger.debug(`[EMBED-DRAIN] could not read "${docPath}" for embed text — using title only`);
+          logger.debug(`[EMBED-DRAIN] could not read "${docPath}" for chunk diff`);
+          continue;
         }
 
         embedPromises.push(
-          scheduleBackgroundEmbeddingsForActiveEntries({
+          scheduleChangedDocumentChunks({
             config,
-            target: documentEmbeddingTarget({
-              instanceId,
-              id: docId,
-              label: docPath,
-            }),
-            embedText,
             supabase,
             logger,
-            databaseUrl: config.supabase.databaseUrl,
-            legacyProvider: embeddingProvider,
+            documentId: docId,
+            documentPath: docPath,
+            title: docTitle,
+            body,
           })
             .then((result) => {
               if (result.warnings.some((warning) => warning.startsWith(EMBEDDING_DEFERRED_WARNING))) {
@@ -1192,6 +1196,9 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
               );
             })
         );
+      }
+      if (docsWithNoChunks > 0) {
+        logger.info(`[EMBED-DRAIN] found ${docsWithNoChunks} doc(s) with no chunks — draining`);
       }
     }
   } catch (drainQueryErr: unknown) {
