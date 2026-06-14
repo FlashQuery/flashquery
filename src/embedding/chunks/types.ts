@@ -26,6 +26,7 @@ export interface ParsedChunk {
   source_section_heading_path: string;
   source_start_line: number;
   source_end_line: number;
+  merged_heading_paths: string[];
 }
 
 export interface ChunkIdentityInput {
