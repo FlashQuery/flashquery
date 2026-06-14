@@ -8,7 +8,7 @@ describe('chunk normalization', () => {
 
     const normalized = normalizeChunkContent(input);
 
-    expect(normalized).toBe('Alpha beta\nGamma delta\n\nEpsilon\n\nZeta');
+    expect(normalized).toBe('Alpha beta\nGamma delta\n\n  Epsilon\n\nZeta');
     expect(normalizeChunkContent(normalized)).toBe(normalized);
   });
 

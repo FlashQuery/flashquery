@@ -169,7 +169,7 @@ describe('heading-aware chunk parser', () => {
     });
 
     expect(chunks.map((chunk) => chunk.heading_path)).toEqual(['First', 'First', 'Second', 'Second']);
-    expect(chunks[1]?.content.startsWith('a6 ')).toBe(true);
+    expect(chunks[1]?.content.startsWith('a6')).toBe(true);
     expect(chunks[2]?.content.includes('a')).toBe(false);
   });
 

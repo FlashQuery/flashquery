@@ -1,5 +1,6 @@
 import { chunkEmbedText, chunkContentHash, normalizeChunkContent } from './normalize.js';
 import { deriveChunkId, deriveParentChunkId } from './identity.js';
+import { splitContentPreservingAtomicBlocks } from './atomic-blocks.js';
 import { DEFAULT_CHUNK_PARSER_PARAMS, type ChunkParserInput, type ChunkParserParams, type ParsedChunk } from './types.js';
 
 interface Section {
@@ -230,75 +231,7 @@ function toPendingChunk(section: Section, content: string): PendingChunk {
 }
 
 function splitContentForBudget(content: string, breadcrumb: string, params: ChunkParserParams): string[] {
-  const bodyBudget = Math.max(1, params.maxChunkTokens - countTokens(breadcrumb));
-  if (countTokens(content) <= bodyBudget) {
-    return [content];
-  }
-
-  const overlapTokens = Math.ceil(params.maxChunkTokens * params.overlapRatio);
-  const paragraphs = content.split(/\n{2,}/).filter((part) => part.trim().length > 0);
-  if (paragraphs.length > 1 && paragraphs.every((part) => countTokens(part) <= bodyBudget)) {
-    return packUnits(paragraphs, bodyBudget, overlapTokens);
-  }
-
-  const sentences = splitSentences(content);
-  if (sentences.length > 1 && sentences.every((part) => countTokens(part) <= bodyBudget)) {
-    return packUnits(sentences, bodyBudget, overlapTokens);
-  }
-
-  return splitTokens(content, bodyBudget, overlapTokens);
-}
-
-function splitSentences(content: string): string[] {
-  return content
-    .replace(/\s+/g, ' ')
-    .split(/(?<=[.!?])\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-}
-
-function packUnits(units: string[], bodyBudget: number, overlapTokens: number): string[] {
-  const chunks: string[] = [];
-  let current: string[] = [];
-
-  for (const unit of units) {
-    const candidate = [...current, unit].join('\n\n');
-    if (current.length > 0 && countTokens(candidate) > bodyBudget) {
-      chunks.push(normalizeChunkContent(current.join('\n\n')));
-      current = overlapPrefix(chunks[chunks.length - 1] ?? '', overlapTokens);
-    }
-    current.push(unit);
-  }
-
-  if (current.length > 0) {
-    chunks.push(normalizeChunkContent(current.join('\n\n')));
-  }
-
-  return chunks;
-}
-
-function splitTokens(content: string, bodyBudget: number, overlapTokens: number): string[] {
-  const tokens = content.split(/\s+/).filter(Boolean);
-  const chunks: string[] = [];
-  const step = Math.max(1, bodyBudget - overlapTokens);
-
-  for (let start = 0; start < tokens.length; start += step) {
-    chunks.push(tokens.slice(start, start + bodyBudget).join(' '));
-    if (start + bodyBudget >= tokens.length) {
-      break;
-    }
-  }
-
-  return chunks;
-}
-
-function overlapPrefix(previousChunk: string, overlapTokens: number): string[] {
-  if (overlapTokens <= 0) {
-    return [];
-  }
-
-  const tokens = previousChunk.split(/\s+/).filter(Boolean);
-  return tokens.slice(-overlapTokens);
+  return splitContentPreservingAtomicBlocks(content, breadcrumb, params);
 }
 
 function countTokens(content: string): number {
