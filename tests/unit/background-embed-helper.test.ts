@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   EMBEDDING_DEFERRED_WARNING,
+  documentChunkEmbeddingTarget,
   documentEmbeddingTarget,
   memoryEmbeddingTarget,
   recordEmbeddingTarget,
@@ -267,5 +268,46 @@ describe('background embedding helper', () => {
       id: 'doc-1',
       warnings: ['embedding_deferred'],
     });
+  });
+
+  it('T-U-028 builds document_chunk pending rows with the chunk table and id', async () => {
+    const supabase = makeSupabaseMock();
+
+    const target = documentChunkEmbeddingTarget({
+      instanceId: 'inst',
+      id: '33333333-3333-4333-8333-333333333333',
+      documentPath: 'Notes/Guide.md',
+      headingPath: 'Guide > Setup',
+    });
+
+    expect(target).toEqual({
+      kind: 'document_chunk',
+      instanceId: 'inst',
+      targetTable: 'fqc_chunks',
+      targetId: '33333333-3333-4333-8333-333333333333',
+      targetLabel: 'Notes/Guide.md > Guide > Setup',
+    });
+
+    const result = await scheduleBackgroundEmbedding({
+      target,
+      embedText: 'Guide > Setup\n\nchunk text',
+      provider: makeProvider(new Error('chunk provider down')),
+      supabase: supabase.client,
+      embeddingName: 'primary',
+    });
+
+    expect(result.warnings).toEqual(['embedding_deferred:primary']);
+    expect(supabase.tables.get('fqc_pending_embeds')?.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instance_id: 'inst',
+        target_kind: 'document_chunk',
+        target_table: 'fqc_chunks',
+        target_id: '33333333-3333-4333-8333-333333333333',
+        embedding_name: 'primary',
+        target_label: 'Notes/Guide.md > Guide > Setup',
+        embed_text: 'Guide > Setup\n\nchunk text',
+      }),
+      { onConflict: 'instance_id,target_kind,target_table,target_id,embedding_name' }
+    );
   });
 });

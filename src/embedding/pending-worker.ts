@@ -4,11 +4,13 @@ import {
   type ActiveEmbeddingEntry,
   type BackgroundEmbeddingTarget,
   type BackgroundEmbeddingTargetKind,
+  documentChunkEmbeddingTarget,
   documentEmbeddingTarget,
   memoryEmbeddingTarget,
   recordEmbeddingTarget,
   updateTargetEmbedding,
 } from './background-embed.js';
+import { chunkEmbedText } from './chunks/normalize.js';
 import { logger as defaultLogger } from '../logging/logger.js';
 import type { FlashQueryConfig } from '../config/types.js';
 
@@ -241,6 +243,13 @@ function targetFromPendingRow(row: PendingEmbedRow, instanceId: string): Backgro
       label: row.target_label ?? undefined,
     });
   }
+  if (kind === 'document_chunk') {
+    return documentChunkEmbeddingTarget({
+      instanceId,
+      id: row.target_id,
+      label: row.target_label ?? undefined,
+    });
+  }
   if (kind === 'memory') {
     return memoryEmbeddingTarget({
       instanceId,
@@ -301,6 +310,21 @@ async function resolveEmbedText(
       if (text.length > 0) {
         return text;
       }
+    }
+  }
+
+  if (target.kind === 'document_chunk') {
+    const { data, error } = await (supabase.from('fqc_chunks') as TableQuery)
+      .select<{ breadcrumb?: string; content?: string }>('breadcrumb, content')
+      .eq('instance_id', target.instanceId)
+      .eq('id', target.targetId)
+      .single();
+
+    if (error) {
+      throw new Error(`document chunk embed text lookup failed: ${error.message}`);
+    }
+    if (data && !Array.isArray(data) && typeof data.breadcrumb === 'string' && typeof data.content === 'string') {
+      return chunkEmbedText(data.breadcrumb, data.content);
     }
   }
 

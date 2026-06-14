@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  documentChunkEmbeddingTarget,
   documentEmbeddingTarget,
   scheduleBackgroundEmbedding,
   updateTargetEmbedding,
@@ -91,5 +92,40 @@ describe('embedding write stamping', () => {
       embedding_analysis_provider: 'ollama-local',
       embedding_analysis_truncated: true,
     });
+  });
+
+  it('T-U-029 chunk stamped write populates only the active entry indexed_at column', async () => {
+    const supabase = makeSupabaseMock();
+
+    await updateTargetEmbedding(
+      documentChunkEmbeddingTarget({
+        instanceId: 'inst',
+        id: '33333333-3333-4333-8333-333333333333',
+        documentPath: 'Guide.md',
+        headingPath: 'Guide > Setup',
+      }),
+      [0.7, 0.8],
+      supabase.client,
+      undefined,
+      {
+        embeddingName: 'primary',
+        model: 'text-embedding-3-small',
+        provider: 'openai-main',
+        truncated: false,
+      }
+    );
+
+    expect(supabase.updates).toHaveLength(1);
+    expect(supabase.updates[0]).toMatchObject({
+      table: 'fqc_chunks',
+      embedding_primary: JSON.stringify([0.7, 0.8]),
+      embedding_primary_model: 'text-embedding-3-small',
+      embedding_primary_dimensions: 2,
+      embedding_primary_provider: 'openai-main',
+      embedding_primary_truncated: false,
+    });
+    expect(supabase.updates[0]).toHaveProperty('embedding_primary_indexed_at');
+    expect(supabase.updates[0]).not.toHaveProperty('updated_at');
+    expect(supabase.updates[0]).not.toHaveProperty('embedding_analysis_indexed_at');
   });
 });

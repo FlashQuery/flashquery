@@ -14,7 +14,7 @@ export type EmbeddingWarning =
   | typeof EMBEDDING_DEFERRED_WARNING
   | `embedding_deferred:${string}`
   | 'truncated_inputs';
-export type BackgroundEmbeddingTargetKind = 'document' | 'memory' | 'record';
+export type BackgroundEmbeddingTargetKind = 'document' | 'document_chunk' | 'memory' | 'record';
 
 export interface BackgroundEmbeddingTarget {
   kind: BackgroundEmbeddingTargetKind;
@@ -94,6 +94,7 @@ interface ActiveEmbeddingEntryRow {
 
 const TARGET_TABLES = {
   document: 'fqc_documents',
+  documentChunk: 'fqc_chunks',
   memory: 'fqc_memory',
 } as const;
 
@@ -138,6 +139,24 @@ export function documentEmbeddingTarget(input: {
     targetTable: TARGET_TABLES.document,
     targetId: input.id,
     targetLabel: input.label,
+  };
+}
+
+export function documentChunkEmbeddingTarget(input: {
+  instanceId: string;
+  id: string;
+  documentPath?: string;
+  headingPath?: string;
+  label?: string;
+}): BackgroundEmbeddingTarget {
+  const derivedLabel = [input.documentPath, input.headingPath].filter(Boolean).join(' > ');
+  const targetLabel = input.label ?? (derivedLabel || undefined);
+  return {
+    kind: 'document_chunk',
+    instanceId: input.instanceId,
+    targetTable: TARGET_TABLES.documentChunk,
+    targetId: input.id,
+    targetLabel,
   };
 }
 
@@ -268,7 +287,7 @@ export async function updateTargetEmbedding(
   }
 
   const payload = stamp
-    ? buildStampedEmbeddingPayload(vector, stamp, target.kind === 'record')
+    ? buildStampedEmbeddingPayload(vector, stamp, target.kind)
     : {
         embedding: JSON.stringify(vector),
         ...(target.kind === 'record'
@@ -294,7 +313,12 @@ async function updateTargetEmbeddingWithPg(
 ): Promise<void> {
   assertSafeTargetTable(target);
   const baseColumn = stamp ? `embedding_${stamp.embeddingName}` : 'embedding';
-  const timestampColumn = target.kind === 'record' ? 'embedding_updated_at' : 'updated_at';
+  const timestampColumn =
+    target.kind === 'document_chunk'
+      ? `${baseColumn}_indexed_at`
+      : target.kind === 'record'
+        ? 'embedding_updated_at'
+        : 'updated_at';
 
   if (!stamp) {
     await queryPgPool(
@@ -332,7 +356,7 @@ async function updateTargetEmbeddingWithPg(
 function buildStampedEmbeddingPayload(
   vector: number[],
   stamp: EmbeddingWriteStamp,
-  isRecord: boolean
+  targetKind: BackgroundEmbeddingTargetKind
 ): Record<string, unknown> {
   const baseColumn = `embedding_${stamp.embeddingName}`;
   return {
@@ -341,7 +365,9 @@ function buildStampedEmbeddingPayload(
     [`${baseColumn}_dimensions`]: vector.length,
     [`${baseColumn}_provider`]: stamp.provider,
     [`${baseColumn}_truncated`]: stamp.truncated ?? false,
-    ...(isRecord
+    ...(targetKind === 'document_chunk'
+      ? { [`${baseColumn}_indexed_at`]: new Date().toISOString() }
+      : targetKind === 'record'
       ? { embedding_updated_at: new Date().toISOString() }
       : { updated_at: new Date().toISOString() }),
   };
@@ -551,6 +577,7 @@ function assertSafeRecordTable(tableName: string): void {
 
 function assertSafeTargetTable(target: BackgroundEmbeddingTarget): void {
   if (target.kind === 'document' && target.targetTable === TARGET_TABLES.document) return;
+  if (target.kind === 'document_chunk' && target.targetTable === TARGET_TABLES.documentChunk) return;
   if (target.kind === 'memory' && target.targetTable === TARGET_TABLES.memory) return;
   if (target.kind === 'record') {
     assertSafeRecordTable(target.targetTable);

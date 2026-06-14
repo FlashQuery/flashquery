@@ -5,7 +5,7 @@ import { processPendingEmbeddings } from '../../src/embedding/pending-worker.js'
 type PendingRow = {
   id: string;
   instance_id: string;
-  target_kind: 'document' | 'memory' | 'record';
+  target_kind: 'document' | 'document_chunk' | 'memory' | 'record';
   target_table: string;
   target_id: string;
   target_label: string | null;
@@ -60,6 +60,16 @@ function makeSupabaseMock(rows: PendingRow[]) {
     if (table === 'fqc_memory') {
       return {
         select: vi.fn(() => chain({ data: { content: 'computed memory text' }, error: null })),
+        update: vi.fn((payload: Record<string, unknown>) => {
+          updates.push({ table, ...payload });
+          return chain({ data: null, error: null });
+        }),
+      };
+    }
+
+    if (table === 'fqc_chunks') {
+      return {
+        select: vi.fn(() => chain({ data: { breadcrumb: 'Guide > Setup', content: 'computed chunk text' }, error: null })),
         update: vi.fn((payload: Record<string, unknown>) => {
           updates.push({ table, ...payload });
           return chain({ data: null, error: null });
@@ -169,5 +179,41 @@ describe('pending embedding retry worker', () => {
         last_attempt_at: '2026-05-24T00:00:00.000Z',
       })
     );
+  });
+
+  it('T-U-030 reconstructs document_chunk target and clears retry row on success', async () => {
+    const supabase = makeSupabaseMock([
+      {
+        id: 'pending-chunk-1',
+        instance_id: 'inst-1',
+        target_kind: 'document_chunk',
+        target_table: 'fqc_chunks',
+        target_id: '33333333-3333-4333-8333-333333333333',
+        target_label: 'Guide.md > Guide > Setup',
+        embed_text: null,
+        attempt_count: 0,
+      },
+    ]);
+    const provider = makeProvider([0.1, 0.2, 0.3]);
+
+    const result = await processPendingEmbeddings({
+      supabase: supabase.client,
+      provider,
+      instanceId: 'inst-1',
+      embeddingName: 'primary',
+      limit: 5,
+      now: () => new Date('2026-06-14T00:00:00.000Z'),
+    });
+
+    expect(result).toEqual({ selected: 1, processed: 1, succeeded: 1, failed: 0 });
+    expect(provider.embed).toHaveBeenCalledWith('Guide > Setup\n\ncomputed chunk text');
+    expect(supabase.updates).toContainEqual(
+      expect.objectContaining({
+        table: 'fqc_chunks',
+        embedding_primary: JSON.stringify([0.1, 0.2, 0.3]),
+        embedding_primary_indexed_at: expect.any(String),
+      })
+    );
+    expect(supabase.deletes.length).toBe(1);
   });
 });
