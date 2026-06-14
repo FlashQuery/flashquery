@@ -1039,7 +1039,9 @@ export interface CoreEmbeddingColumnSetEntry {
   dimensions: number;
 }
 
-const CORE_EMBEDDING_TABLES = ['fqc_documents', 'fqc_memory'] as const;
+const DOCUMENT_CHUNK_EMBEDDING_TABLE = 'fqc_chunks' as const;
+const MEMORY_EMBEDDING_TABLE = 'fqc_memory' as const;
+const CORE_EMBEDDING_TABLES = [DOCUMENT_CHUNK_EMBEDDING_TABLE, MEMORY_EMBEDDING_TABLE] as const;
 const EMBEDDING_IDENTIFIER_PATTERN = /^[a-z][a-z0-9_]*$/;
 
 function quoteIdentifier(identifier: string): string {
@@ -1111,9 +1113,14 @@ $$;
 `;
 }
 
-function buildDocumentMatchRpc(entry: CoreEmbeddingColumnSetEntry): string {
-  const functionName = quoteIdentifier(`match_documents_${entry.name}`);
+function buildChunkMatchRpc(entry: CoreEmbeddingColumnSetEntry): string {
+  const functionName = quoteIdentifier(`match_chunks_${entry.name}`);
   const embeddingColumn = quoteIdentifier(`embedding_${entry.name}`);
+  const modelColumn = quoteIdentifier(`embedding_${entry.name}_model`);
+  const dimensionsColumn = quoteIdentifier(`embedding_${entry.name}_dimensions`);
+  const providerColumn = quoteIdentifier(`embedding_${entry.name}_provider`);
+  const truncatedColumn = quoteIdentifier(`embedding_${entry.name}_truncated`);
+  const indexedAtColumn = quoteIdentifier(`embedding_${entry.name}_indexed_at`);
   return `
 DROP FUNCTION IF EXISTS ${functionName}(vector, double precision, integer, text, text[], text, boolean) CASCADE;
 CREATE OR REPLACE FUNCTION ${functionName}(
@@ -1126,36 +1133,60 @@ CREATE OR REPLACE FUNCTION ${functionName}(
   include_archived boolean DEFAULT false
 )
 RETURNS TABLE (
-  id uuid,
+  chunk_id uuid,
+  document_id uuid,
   path text,
   title text,
   tags text[],
+  heading_path text[],
+  heading_level int,
+  breadcrumb text,
+  content text,
   similarity float,
-  created_at timestamptz
+  created_at timestamptz,
+  updated_at timestamptz,
+  embedding_model text,
+  embedding_dimensions int,
+  embedding_provider text,
+  embedding_truncated boolean,
+  embedding_indexed_at timestamptz
 )
 LANGUAGE plpgsql
 AS $$
 BEGIN
   RETURN QUERY
   SELECT
+    c.id,
     d.id,
     d.path,
     d.title,
     d.tags,
-    1 - (d.${embeddingColumn} <=> query_embedding) AS similarity,
-    d.created_at
-  FROM fqc_documents d
+    c.heading_path,
+    c.heading_level,
+    c.breadcrumb,
+    c.content,
+    1 - (c.${embeddingColumn} <=> query_embedding) AS similarity,
+    c.created_at,
+    c.updated_at,
+    c.${modelColumn},
+    c.${dimensionsColumn},
+    c.${providerColumn},
+    c.${truncatedColumn},
+    c.${indexedAtColumn}
+  FROM fqc_chunks c
+  JOIN fqc_documents d ON d.id = c.document_id
   WHERE (include_archived OR d.status = 'active')
-    AND d.${embeddingColumn} IS NOT NULL
-    AND 1 - (d.${embeddingColumn} <=> query_embedding) > match_threshold
+    AND c.${embeddingColumn} IS NOT NULL
+    AND 1 - (c.${embeddingColumn} <=> query_embedding) > match_threshold
     AND (filter_instance_id IS NULL OR d.instance_id = filter_instance_id)
+    AND (filter_instance_id IS NULL OR c.instance_id = filter_instance_id)
     AND (filter_tags IS NULL OR
       CASE WHEN filter_tag_match = 'all'
         THEN d.tags @> filter_tags
         ELSE d.tags && filter_tags
       END
     )
-  ORDER BY d.${embeddingColumn} <=> query_embedding
+  ORDER BY c.${embeddingColumn} <=> query_embedding
   LIMIT match_count;
 END;
 $$;
@@ -1166,14 +1197,16 @@ export function buildCoreEmbeddingColumnSetDDL(entry: CoreEmbeddingColumnSetEntr
   validateEmbeddingSqlName(entry.name);
 
   const baseColumn = `embedding_${entry.name}`;
-  const requiredColumns = [
+  const memoryRequiredColumns = [
     baseColumn,
     `${baseColumn}_model`,
     `${baseColumn}_dimensions`,
     `${baseColumn}_provider`,
     `${baseColumn}_truncated`,
   ];
-  const requiredColumnsSql = requiredColumns.map((column) => `'${column}'`).join(', ');
+  const chunkRequiredColumns = [...memoryRequiredColumns, `${baseColumn}_indexed_at`];
+  const allRequiredColumns = [...new Set([...memoryRequiredColumns, ...chunkRequiredColumns])];
+  const allRequiredColumnsSql = allRequiredColumns.map((column) => `'${column}'`).join(', ');
 
   const ddl: string[] = [
     'BEGIN;',
@@ -1191,7 +1224,7 @@ BEGIN
     LEFT JOIN information_schema.columns c
       ON c.table_schema = 'public'
      AND c.table_name = t.table_name
-     AND c.column_name = ANY(ARRAY[${requiredColumnsSql}]::text[])
+     AND c.column_name = ANY(ARRAY[${allRequiredColumnsSql}]::text[])
   ),
   grouped AS (
     SELECT
@@ -1204,7 +1237,11 @@ BEGIN
   SELECT array_agg(format('%s.%s', table_name, '${baseColumn}') ORDER BY table_name)
   INTO orphaned
   FROM grouped
-  WHERE has_base AND column_count <> ${requiredColumns.length};
+  WHERE has_base
+    AND column_count <> CASE
+      WHEN table_name = '${DOCUMENT_CHUNK_EMBEDDING_TABLE}' THEN ${chunkRequiredColumns.length}
+      ELSE ${memoryRequiredColumns.length}
+    END;
 
   IF orphaned IS NOT NULL THEN
     RAISE EXCEPTION 'orphaned embedding column(s) for entry ${entry.name}: %', array_to_string(orphaned, ', ');
@@ -1213,7 +1250,18 @@ END $$;
 `,
   ];
 
-  for (const table of CORE_EMBEDDING_TABLES) {
+  ddl.push(`
+ALTER TABLE ${quoteIdentifier(DOCUMENT_CHUNK_EMBEDDING_TABLE)} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(baseColumn)} vector(${entry.dimensions});
+ALTER TABLE ${quoteIdentifier(DOCUMENT_CHUNK_EMBEDDING_TABLE)} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(`${baseColumn}_model`)} TEXT;
+ALTER TABLE ${quoteIdentifier(DOCUMENT_CHUNK_EMBEDDING_TABLE)} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(`${baseColumn}_dimensions`)} INT;
+ALTER TABLE ${quoteIdentifier(DOCUMENT_CHUNK_EMBEDDING_TABLE)} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(`${baseColumn}_provider`)} TEXT;
+ALTER TABLE ${quoteIdentifier(DOCUMENT_CHUNK_EMBEDDING_TABLE)} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(`${baseColumn}_truncated`)} BOOLEAN;
+ALTER TABLE ${quoteIdentifier(DOCUMENT_CHUNK_EMBEDDING_TABLE)} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(`${baseColumn}_indexed_at`)} TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS ${quoteIdentifier(`idx_${DOCUMENT_CHUNK_EMBEDDING_TABLE}_${baseColumn}`)}
+  ON ${quoteIdentifier(DOCUMENT_CHUNK_EMBEDDING_TABLE)} USING hnsw (${quoteIdentifier(baseColumn)} vector_cosine_ops);
+`);
+
+  for (const table of [MEMORY_EMBEDDING_TABLE] as const) {
     ddl.push(`
 ALTER TABLE ${quoteIdentifier(table)} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(baseColumn)} vector(${entry.dimensions});
 ALTER TABLE ${quoteIdentifier(table)} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(`${baseColumn}_model`)} TEXT;
@@ -1226,7 +1274,7 @@ CREATE INDEX IF NOT EXISTS ${quoteIdentifier(`idx_${table}_${baseColumn}`)}
   }
 
   ddl.push(buildMemoryMatchRpc(entry));
-  ddl.push(buildDocumentMatchRpc(entry));
+  ddl.push(buildChunkMatchRpc(entry));
   ddl.push('COMMIT;');
   return ddl.join('\n');
 }
@@ -1505,10 +1553,11 @@ class SupabaseManagerImpl implements SupabaseManager {
         }
       }
 
-      logger.info('Schema verification: all 11 required tables present');
+      logger.info('Schema verification: all 12 required tables present');
       logger.debug('  fqc_memory: verified');
       logger.debug('  fqc_vault: verified');
       logger.debug('  fqc_documents: verified');
+      logger.debug('  fqc_chunks: verified');
       logger.debug('  fqc_plugin_registry: verified');
       logger.debug('  fqc_llm_providers: verified');
       logger.debug('  fqc_llm_models: verified');

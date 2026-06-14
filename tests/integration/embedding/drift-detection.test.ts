@@ -15,7 +15,8 @@ const __dirname = dirname(__filename);
 const configPath = resolve(__dirname, '../../fixtures/flashquery.test.yml');
 const TEST_INSTANCE_ID = 'embedding-drift-detection-test';
 
-const coreTables = ['fqc_documents', 'fqc_memory'] as const;
+const coreTables = ['fqc_chunks', 'fqc_memory'] as const;
+const legacyEmbeddingTables = ['fqc_documents', 'fqc_memory'] as const;
 const managedColumns = [
   'embedding_primary',
   'embedding_primary_model',
@@ -37,24 +38,26 @@ function configWithEmbeddings(embeddings: FlashQueryConfig['embeddings']): Flash
 
 async function cleanupPrimarySchema(client: pg.Client): Promise<void> {
   await client.query('DROP FUNCTION IF EXISTS match_memories_primary(vector, double precision, integer, text[], text, text, boolean)');
+  await client.query('DROP FUNCTION IF EXISTS match_chunks_primary(vector, double precision, integer, text, text[], text, boolean)');
   await client.query('DROP FUNCTION IF EXISTS match_documents_primary(vector, double precision, integer, text, text[], text, boolean)');
-  for (const table of coreTables) {
+  for (const table of [...coreTables, 'fqc_documents'] as const) {
     await client.query(`DROP INDEX IF EXISTS idx_${table}_embedding_primary`);
     for (const column of managedColumns) {
       await client.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS ${column} CASCADE`);
     }
+    await client.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS embedding_primary_indexed_at CASCADE`);
   }
 }
 
 async function dropLegacyEmbeddingColumns(client: pg.Client): Promise<void> {
-  for (const table of coreTables) {
+  for (const table of legacyEmbeddingTables) {
     await client.query(`DROP INDEX IF EXISTS idx_${table}_embedding`);
     await client.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS embedding`);
   }
 }
 
 async function restoreLegacyEmbeddingColumns(client: pg.Client): Promise<void> {
-  for (const table of coreTables) {
+  for (const table of legacyEmbeddingTables) {
     await client.query(`DROP INDEX IF EXISTS idx_${table}_embedding`);
     await client.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS embedding`);
     await client.query(`ALTER TABLE ${table} ADD COLUMN embedding vector(${TEST_EMBEDDING_DIMENSIONS})`);
@@ -85,7 +88,7 @@ async function resizeColumnOnly(client: pg.Client, table: string, width: number)
 }
 
 async function createMismatchedLegacyEmbeddingColumns(client: pg.Client): Promise<void> {
-  for (const table of coreTables) {
+  for (const table of legacyEmbeddingTables) {
     await client.query(`DROP INDEX IF EXISTS idx_${table}_embedding`);
     await client.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS embedding`);
     await client.query(`ALTER TABLE ${table} ADD COLUMN embedding vector(32)`);
@@ -117,10 +120,10 @@ describe.skipIf(!HAS_SUPABASE).sequential('drift-detection catalog verification'
 
   it('T-I-026 fails startup when an active core vector column width drifts', async () => {
     await createPrimaryEntry(client, 96);
-    await resizeColumnOnly(client, 'fqc_documents', 64);
+    await resizeColumnOnly(client, 'fqc_chunks', 64);
 
     await expect(verifySchema(client, { instanceId: TEST_INSTANCE_ID })).rejects.toThrow(
-      /entry primary.*fqc_documents.*embedding_primary.*configured width 96.*actual width 64/i
+      /entry primary.*fqc_chunks.*embedding_primary.*configured width 96.*actual width 64/i
     );
   });
 

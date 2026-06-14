@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
+  getActiveEmbeddingDimensionDrift,
   tableExists,
   verifyEmbeddingDimensions,
   verifySchema,
@@ -119,8 +120,8 @@ describe('verifySchema', () => {
     // Should not throw
     await expect(verifySchema(mockClient)).resolves.toBeUndefined();
 
-    // Verify that tableExists was called 11 times, plus 15 required-column checks.
-    expect(mockQuery).toHaveBeenCalledTimes(26);
+    // Verify that tableExists was called 12 times, plus 15 required-column checks.
+    expect(mockQuery).toHaveBeenCalledTimes(27);
   });
 
   it('throws error listing missing tables when one table is missing', async () => {
@@ -159,7 +160,7 @@ describe('verifySchema', () => {
     let callCount = 0;
     mockQuery.mockImplementation(() => {
       // fqc_purpose_templates is checked after fqc_llm_usage.
-      const exists = callCount !== 9;
+      const exists = callCount !== 10;
       callCount++;
       return Promise.resolve({
         rows: [{ '?column?': exists }],
@@ -177,11 +178,11 @@ describe('verifySchema', () => {
     });
 
     await expect(verifySchema(mockClient)).rejects.toThrow(
-      'Missing required tables after DDL: [fqc_memory, fqc_vault, fqc_documents, fqc_plugin_registry, fqc_llm_providers, fqc_llm_models, fqc_llm_purposes, fqc_llm_purpose_models, fqc_llm_usage, fqc_purpose_templates, fqc_pending_embeds]'
+      'Missing required tables after DDL: [fqc_memory, fqc_vault, fqc_documents, fqc_chunks, fqc_plugin_registry, fqc_llm_providers, fqc_llm_models, fqc_llm_purposes, fqc_llm_purpose_models, fqc_llm_usage, fqc_purpose_templates, fqc_pending_embeds]'
     );
 
-    // All 11 tables should be checked
-    expect(mockQuery).toHaveBeenCalledTimes(11);
+    // All 12 tables should be checked
+    expect(mockQuery).toHaveBeenCalledTimes(12);
   });
 
   it('checks tables in the correct order', async () => {
@@ -198,6 +199,7 @@ describe('verifySchema', () => {
       'fqc_memory',
       'fqc_vault',
       'fqc_documents',
+      'fqc_chunks',
       'fqc_plugin_registry',
       'fqc_llm_providers',
       'fqc_llm_models',
@@ -234,6 +236,44 @@ describe('verifySchema', () => {
     await expect(verifySchema(mockClient, 768)).rejects.toThrow(
       'Embedding dimension mismatch: config expects vector(768), but existing schema has fqc_documents.embedding is vector(1536), fqc_memory.embedding is vector(1536)'
     );
+  });
+});
+
+describe('getActiveEmbeddingDimensionDrift', () => {
+  let mockClient: pg.Client;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockClient = { query: mockQuery } as unknown as pg.Client;
+  });
+
+  it('checks active catalog entries against chunks and memory, not documents', async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [{ name: 'primary', dimensions: 96 }],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          { table_name: 'fqc_chunks', formatted_type: 'vector(64)' },
+          { table_name: 'fqc_memory', formatted_type: 'vector(96)' },
+        ],
+      });
+
+    const drifts = await getActiveEmbeddingDimensionDrift(mockClient, 'verify-instance');
+
+    expect(mockQuery.mock.calls[1][1]).toEqual([
+      ['fqc_chunks', 'fqc_memory'],
+      'embedding_primary',
+    ]);
+    expect(drifts).toEqual([
+      {
+        entry: 'primary',
+        table: 'fqc_chunks',
+        column: 'embedding_primary',
+        configuredWidth: 96,
+        actualWidth: 64,
+      },
+    ]);
   });
 });
 

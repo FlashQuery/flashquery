@@ -102,7 +102,7 @@ function describeEndpointChanges(existing: CatalogEndpointRow[], incoming: Catal
 function affectedTablesForEntry(_name: string): string[] {
   // Phase 165-01 owns core catalog sync. Plugin table ownership arrives with plugin
   // embedding registration in Phase 166, where this list can be extended.
-  return ['fqc_documents', 'fqc_memory'];
+  return ['fqc_chunks', 'fqc_memory'];
 }
 
 function buildIdentityRefusalError(

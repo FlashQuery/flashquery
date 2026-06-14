@@ -38,7 +38,7 @@ interface IndexArtifact {
   indexname: string;
 }
 
-const CORE_TABLES = ['fqc_documents', 'fqc_memory'] as const;
+const CORE_TABLES = ['fqc_chunks', 'fqc_memory'] as const;
 const RETIRE_ACTION = 'retire_embedding' as const;
 
 export async function runRetireEmbedding(
@@ -244,7 +244,7 @@ async function discoverFunctions(
   embeddingName: string,
   pluginTables: string[]
 ): Promise<FunctionArtifact[]> {
-  const coreNames = [`match_memories_${embeddingName}`, `match_documents_${embeddingName}`];
+  const coreNames = [`match_memories_${embeddingName}`, `match_chunks_${embeddingName}`];
   const recordNames = pluginTables.map((table) => truncateIdentifier(`match_records_${table}_${embeddingName}`));
   const suffix = `_${embeddingName}`;
   const result = await withPgClient(config.supabase.databaseUrl, async (client) =>
@@ -306,6 +306,7 @@ async function discoverColumns(
           `${baseColumn}_dimensions`,
           `${baseColumn}_provider`,
           `${baseColumn}_truncated`,
+          `${baseColumn}_indexed_at`,
         ]
       : []),
   ];

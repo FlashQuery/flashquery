@@ -12,7 +12,7 @@ export interface EmbeddingDimensionDrift {
   actualWidth: number | null;
 }
 
-const CORE_EMBEDDING_TABLES = ['fqc_documents', 'fqc_memory'] as const;
+const CORE_EMBEDDING_TABLES = ['fqc_chunks', 'fqc_memory'] as const;
 const EMBEDDING_IDENTIFIER_PATTERN = /^[a-z][a-z0-9_]*$/;
 
 function parseVectorWidth(formattedType: string | null | undefined): number | null {
@@ -208,7 +208,8 @@ export async function verifyCatalogEmbeddingDimensions(
  * Required tables:
  * - fqc_memory: stores semantic memories with vector embeddings
  * - fqc_vault: tracks local vault instances and paths
- * - fqc_documents: stores uploaded documents with embeddings
+ * - fqc_documents: stores uploaded documents
+ * - fqc_chunks: stores document semantic chunks with per-entry embeddings
  * - fqc_plugin_registry: tracks installed plugins and schemas
  * - fqc_llm_providers: LLM provider config (Phase 98)
  * - fqc_llm_models: LLM model config (Phase 98)
@@ -230,6 +231,7 @@ export async function verifySchema(
     'fqc_memory',
     'fqc_vault',
     'fqc_documents',
+    'fqc_chunks',
     'fqc_plugin_registry',
     'fqc_llm_providers',
     'fqc_llm_models',

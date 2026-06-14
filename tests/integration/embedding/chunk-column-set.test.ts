@@ -1,28 +1,33 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import pg from 'pg';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { loadConfig, type FlashQueryConfig } from '../../../src/config/loader.js';
-import { initLogger } from '../../../src/logging/logger.js';
-import { initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
 import { syncEmbeddingCatalog } from '../../../src/embedding/embedding-config-sync.js';
+import { initLogger } from '../../../src/logging/logger.js';
+import {
+  buildPluginEmbeddingColumnSetDDL,
+  initSupabase,
+  supabaseManager,
+} from '../../../src/storage/supabase.js';
 import { setupTestSupabase } from '../../helpers/supabase.js';
 import { HAS_SUPABASE } from '../../helpers/test-env.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const configPath = resolve(__dirname, '../../fixtures/flashquery.test.yml');
-const TEST_INSTANCE_ID = 'embedding-column-set-test';
+const TEST_INSTANCE_ID = 'embedding-chunk-column-set-test';
+const PLUGIN_TABLE = 'fqcp_chunk_column_probe';
 
-const coreTables = ['fqc_chunks', 'fqc_memory'] as const;
-const managedColumns = [
+const chunkColumns = [
   'embedding_primary',
   'embedding_primary_model',
   'embedding_primary_dimensions',
   'embedding_primary_provider',
   'embedding_primary_truncated',
+  'embedding_primary_indexed_at',
 ] as const;
-const chunkOnlyColumns = ['embedding_primary_indexed_at'] as const;
+const memoryColumns = chunkColumns.filter((column) => column !== 'embedding_primary_indexed_at');
 
 function configWithEmbeddings(embeddings: FlashQueryConfig['embeddings']): FlashQueryConfig {
   const config = loadConfig(configPath);
@@ -39,15 +44,15 @@ async function cleanupPrimarySchema(client: pg.Client): Promise<void> {
   await client.query('DROP FUNCTION IF EXISTS match_memories_primary(vector, double precision, integer, text[], text, text, boolean)');
   await client.query('DROP FUNCTION IF EXISTS match_chunks_primary(vector, double precision, integer, text, text[], text, boolean)');
   await client.query('DROP FUNCTION IF EXISTS match_documents_primary(vector, double precision, integer, text, text[], text, boolean)');
-  for (const table of [...coreTables, 'fqc_documents'] as const) {
+  await client.query(`DROP FUNCTION IF EXISTS match_records_${PLUGIN_TABLE}_primary(vector, double precision, integer, text)`);
+  for (const table of ['fqc_chunks', 'fqc_memory', 'fqc_documents', PLUGIN_TABLE]) {
     await client.query(`DROP INDEX IF EXISTS idx_${table}_embedding_primary`);
-    for (const column of managedColumns) {
-      await client.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS ${column}`);
+    for (const column of chunkColumns) {
+      await client.query(`ALTER TABLE IF EXISTS ${table} DROP COLUMN IF EXISTS ${column} CASCADE`);
     }
-    for (const column of chunkOnlyColumns) {
-      await client.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS ${column}`);
-    }
+    await client.query(`ALTER TABLE IF EXISTS ${table} DROP COLUMN IF EXISTS embedding_updated_at CASCADE`);
   }
+  await client.query(`DROP TABLE IF EXISTS ${PLUGIN_TABLE}`);
 }
 
 async function getColumnMetadata(client: pg.Client, tableName: string): Promise<Map<string, string>> {
@@ -63,7 +68,7 @@ async function getColumnMetadata(client: pg.Client, tableName: string): Promise<
       AND c.column_name = ANY($2::text[])
     ORDER BY c.column_name
     `,
-    [tableName, [...managedColumns, ...chunkOnlyColumns]]
+    [tableName, [...chunkColumns, 'embedding_updated_at']]
   );
   return new Map(result.rows.map((row: { column_name: string; formatted_type: string }) => [row.column_name, row.formatted_type]));
 }
@@ -76,7 +81,7 @@ async function indexExists(client: pg.Client, indexName: string): Promise<boolea
   return result.rows[0].exists === true;
 }
 
-describe.skipIf(!HAS_SUPABASE).sequential('embedding-columns column set creation', () => {
+describe.skipIf(!HAS_SUPABASE).sequential('chunk embedding column set creation', () => {
   let client: pg.Client;
 
   beforeAll(async () => {
@@ -84,15 +89,9 @@ describe.skipIf(!HAS_SUPABASE).sequential('embedding-columns column set creation
     initLogger(config);
     await initSupabase(config);
     client = await setupTestSupabase();
-  });
+  }, 90000);
 
   beforeEach(async () => {
-    await cleanupPrimarySchema(client);
-    await client.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]);
-    vi.restoreAllMocks();
-  }, 60000);
-
-  afterEach(async () => {
     await cleanupPrimarySchema(client);
     await client.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]);
     vi.restoreAllMocks();
@@ -105,7 +104,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('embedding-columns column set creation
     await supabaseManager?.close();
   }, 60000);
 
-  it('T-I-023 creates per-entry columns and an HNSW index on each core table', async () => {
+  it('T-I-004 config sync creates six per-entry columns and an HNSW index on fqc_chunks', async () => {
     await syncEmbeddingCatalog(configWithEmbeddings([
       {
         name: 'primary',
@@ -114,47 +113,64 @@ describe.skipIf(!HAS_SUPABASE).sequential('embedding-columns column set creation
       },
     ]));
 
-    for (const table of coreTables) {
-      const columns = await getColumnMetadata(client, table);
-      expect(columns.get('embedding_primary')).toBe('vector(96)');
-      expect(columns.get('embedding_primary_model')).toBe('text');
-      expect(columns.get('embedding_primary_dimensions')).toBe('integer');
-      expect(columns.get('embedding_primary_provider')).toBe('text');
-      expect(columns.get('embedding_primary_truncated')).toBe('boolean');
-      if (table === 'fqc_chunks') {
-        expect(columns.get('embedding_primary_indexed_at')).toBe('timestamp with time zone');
-      } else {
-        expect(columns.has('embedding_primary_indexed_at')).toBe(false);
-      }
-      expect(await indexExists(client, `idx_${table}_embedding_primary`)).toBe(true);
-    }
-  }, 90000);
+    const columns = await getColumnMetadata(client, 'fqc_chunks');
+    expect(columns.get('embedding_primary')).toBe('vector(96)');
+    expect(columns.get('embedding_primary_model')).toBe('text');
+    expect(columns.get('embedding_primary_dimensions')).toBe('integer');
+    expect(columns.get('embedding_primary_provider')).toBe('text');
+    expect(columns.get('embedding_primary_truncated')).toBe('boolean');
+    expect(columns.get('embedding_primary_indexed_at')).toBe('timestamp with time zone');
+    expect(await indexExists(client, 'idx_fqc_chunks_embedding_primary')).toBe(true);
+  });
 
-  it('T-I-024 rolls back per-table DDL when a column-set operation fails', async () => {
-    await client.query(`
-      ALTER TABLE fqc_memory ADD COLUMN embedding_primary integer;
-      ALTER TABLE fqc_memory ADD COLUMN embedding_primary_model TEXT;
-      ALTER TABLE fqc_memory ADD COLUMN embedding_primary_dimensions INT;
-      ALTER TABLE fqc_memory ADD COLUMN embedding_primary_provider TEXT;
-      ALTER TABLE fqc_memory ADD COLUMN embedding_primary_truncated BOOLEAN;
-    `);
-
-    await expect(syncEmbeddingCatalog(configWithEmbeddings([
+  it('T-I-005 config sync does not create per-entry document columns on fqc_documents', async () => {
+    await syncEmbeddingCatalog(configWithEmbeddings([
       {
         name: 'primary',
         dimensions: 96,
         endpoints: [{ providerName: 'openai', model: 'text-embedding-3-small' }],
       },
-    ]))).rejects.toThrow(/embedding_primary|idx_fqc_memory_embedding_primary|vector_cosine_ops|column set/i);
+    ]));
 
-    const chunkColumns = await getColumnMetadata(client, 'fqc_chunks');
-    for (const column of managedColumns) {
-      expect(chunkColumns.has(column)).toBe(false);
+    const documentColumns = await getColumnMetadata(client, 'fqc_documents');
+    for (const column of chunkColumns) {
+      expect(documentColumns.has(column)).toBe(false);
     }
-    expect(chunkColumns.has('embedding_primary_indexed_at')).toBe(false);
-  }, 90000);
+    expect(await indexExists(client, 'idx_fqc_documents_embedding_primary')).toBe(false);
+  });
 
-  it('T-I-025 refuses startup when an orphaned base vector column exists', async () => {
+  it('T-I-006 memory and plugin tables preserve AS-BUILT column-set behavior', async () => {
+    await syncEmbeddingCatalog(configWithEmbeddings([
+      {
+        name: 'primary',
+        dimensions: 96,
+        endpoints: [{ providerName: 'openai', model: 'text-embedding-3-small' }],
+      },
+    ]));
+
+    const memory = await getColumnMetadata(client, 'fqc_memory');
+    for (const column of memoryColumns) {
+      expect(memory.has(column)).toBe(true);
+    }
+    expect(memory.has('embedding_primary_indexed_at')).toBe(false);
+
+    await client.query(`
+      CREATE TABLE ${PLUGIN_TABLE} (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        instance_id TEXT NOT NULL,
+        status TEXT DEFAULT 'active'
+      )
+    `);
+    await client.query(buildPluginEmbeddingColumnSetDDL(PLUGIN_TABLE, { name: 'primary', dimensions: 96 }));
+    const plugin = await getColumnMetadata(client, PLUGIN_TABLE);
+    for (const column of memoryColumns) {
+      expect(plugin.has(column)).toBe(true);
+    }
+    expect(plugin.has('embedding_primary_indexed_at')).toBe(false);
+    expect(plugin.has('embedding_updated_at')).toBe(true);
+  });
+
+  it('T-I-007 orphaned partial chunk column set refuses startup transactionally', async () => {
     await client.query(`ALTER TABLE fqc_chunks ADD COLUMN embedding_primary vector(96)`);
 
     await expect(syncEmbeddingCatalog(configWithEmbeddings([
@@ -165,9 +181,9 @@ describe.skipIf(!HAS_SUPABASE).sequential('embedding-columns column set creation
       },
     ]))).rejects.toThrow(/orphaned embedding column.*fqc_chunks\.embedding_primary/i);
 
-    const memoryColumns = await getColumnMetadata(client, 'fqc_memory');
-    for (const column of managedColumns) {
-      expect(memoryColumns.has(column)).toBe(false);
+    const memory = await getColumnMetadata(client, 'fqc_memory');
+    for (const column of memoryColumns) {
+      expect(memory.has(column)).toBe(false);
     }
   });
 });
