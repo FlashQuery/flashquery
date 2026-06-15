@@ -196,6 +196,7 @@ function validateRetireParameters(
     'stale_only',
     'mismatched_width_only',
     'job_id',
+    'max_documents_in_response',
   ]);
   if (!invalid.ok) return invalid;
 
@@ -229,6 +230,7 @@ function validateAbortParameters(
     'drop_stamping_columns',
     'dry_run',
     'background',
+    'max_documents_in_response',
   ]);
   if (!invalid.ok) return invalid;
 

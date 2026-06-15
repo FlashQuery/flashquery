@@ -58,6 +58,7 @@ export interface MaintainVaultInput {
   embedding_name?: string;
   scope?: LifecycleScope;
   max_rows?: number;
+  max_documents_in_response?: number;
   confirm?: string;
   stale_only?: boolean;
   mismatched_width_only?: boolean;

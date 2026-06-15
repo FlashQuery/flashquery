@@ -36,13 +36,17 @@ export interface LifecycleBaseInput {
   dry_run?: boolean;
   background?: boolean;
   job_id?: string;
+  max_documents_in_response?: number;
 }
 
 export interface LifecycleFailure {
-  entity_type: LifecycleEntityType;
+  entity_type: LifecycleEntityType | 'document_chunk';
   identifier: string;
   message: string;
   error?: string;
+  document_id?: string;
+  chunk_id?: string;
+  heading_path?: string;
 }
 
 export interface LifecycleEstimate {

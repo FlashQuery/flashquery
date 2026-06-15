@@ -47,6 +47,12 @@ export function registerScanTools(server: McpServer, config: FlashQueryConfig): 
         embedding_name: z.string().optional().describe('Embedding catalog entry name for core lifecycle actions.'),
         scope: LifecycleScopeSchema.optional().describe('Lifecycle entity scope for backfill_embeddings or rebuild_embeddings.'),
         max_rows: z.number().int().optional().describe('Lifecycle row ceiling; 0 means unlimited.'),
+        max_documents_in_response: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Document lifecycle reporting cap for by_document; defaults to 1000.'),
         confirm: z.string().optional().describe('Confirmation string required by destructive lifecycle actions.'),
         stale_only: z.boolean().optional().describe('Narrow rebuild_embeddings to stale rows.'),
         mismatched_width_only: z.boolean().optional().describe('Narrow rebuild_embeddings to width-mismatched rows.'),
@@ -61,6 +67,7 @@ export function registerScanTools(server: McpServer, config: FlashQueryConfig): 
       embedding_name,
       scope,
       max_rows,
+      max_documents_in_response,
       confirm,
       stale_only,
       mismatched_width_only,
@@ -74,6 +81,7 @@ export function registerScanTools(server: McpServer, config: FlashQueryConfig): 
         ...(embedding_name === undefined ? {} : { embedding_name }),
         ...(scope === undefined ? {} : { scope }),
         ...(max_rows === undefined ? {} : { max_rows }),
+        ...(max_documents_in_response === undefined ? {} : { max_documents_in_response }),
         ...(confirm === undefined ? {} : { confirm }),
         ...(stale_only === undefined ? {} : { stale_only }),
         ...(mismatched_width_only === undefined ? {} : { mismatched_width_only }),

@@ -134,6 +134,18 @@ export interface MaintenanceLifecycleActionResult {
         catalog_rows_deleted: number;
       };
   failures?: Array<{ entity_type: string; identifier: string; message: string; error?: string }>;
+  by_document?: Array<{
+    document_id: string;
+    path: string;
+    chunks_examined: number;
+    chunks_embedded: number;
+    chunks_failed: number;
+    chunks_skipped_already_present?: number;
+  }>;
+  by_document_truncated?: boolean;
+  would_process_chunks?: number;
+  would_process_documents?: number;
+  max_documents_in_response?: number;
   plugin_breakdown?: Array<{
     plugin_id: string;
     plugin_instance: string;
