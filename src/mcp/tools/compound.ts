@@ -25,7 +25,7 @@ import {
 import { validateAllTags, normalizeTags, deduplicateTags } from '../../utils/tag-validator.js';
 import { resolveDocumentIdentifier, targetedScan } from '../utils/resolve-document.js';
 import { AmbiguousDocumentIdentifierError, DocumentNotFoundError } from '../utils/resolve-document.js';
-import { searchDocumentsSemantic, listMarkdownFiles, parseDocMeta } from './documents.js';
+import { listMarkdownFiles, parseDocMeta } from './documents.js';
 import type { DocMeta } from './documents.js';
 import { searchMemoriesSemantic } from './memory.js';
 import { vaultManager } from '../../storage/vault.js';
@@ -55,6 +55,7 @@ import { FM } from '../../constants/frontmatter-fields.js';
 import {
   mergeSearchResults,
   resolveSearchIntent,
+  type SearchMatchedChunk,
   type SearchResultItem,
 } from '../utils/search-results.js';
 import {
@@ -97,6 +98,10 @@ interface SearchEmbeddingSelection {
 interface SemanticSearchHit extends SearchResultItem {
   embeddingName: string;
   rank: number;
+}
+
+interface ChunkSemanticSearchHit extends SemanticSearchHit {
+  matched_chunks: [SearchMatchedChunk];
 }
 
 interface RetrieverFailure {
@@ -294,6 +299,9 @@ export function fuseRrfSearchResults(retrievers: RrfRetrieverHits[], limit: numb
       if ((hit.score ?? 0) > (existing.score ?? 0)) {
         existing.score = hit.score;
       }
+      if (hit.matched_chunks || existing.matched_chunks) {
+        existing.matched_chunks = mergeMatchedChunksForSearch(existing.matched_chunks, hit.matched_chunks);
+      }
       if (matchSource.length > 0) {
         existing.match_source = matchSource;
       }
@@ -339,6 +347,7 @@ export function mergeRrfWithSupplementalResults(
       match_source: [
         ...new Set([...(primary.match_source ?? []), ...(secondary.match_source ?? [])]),
       ],
+      ...mergeMatchedChunkProperty(primary, secondary),
     });
   }
 
@@ -366,17 +375,71 @@ export function mergeRrfWithSupplementalResults(
     .slice(0, limit);
 }
 
+function mergeMatchedChunkProperty(
+  primary: SearchResultItem,
+  secondary: SearchResultItem
+): { matched_chunks?: SearchMatchedChunk[] } {
+  const matched = mergeMatchedChunksForSearch(primary.matched_chunks, secondary.matched_chunks);
+  return matched.length === 0 ? {} : { matched_chunks: matched };
+}
+
+function mergeMatchedChunksForSearch(
+  left: SearchMatchedChunk[] | undefined,
+  right: SearchMatchedChunk[] | undefined
+): SearchMatchedChunk[] {
+  const chunks = [...(left ?? []), ...(right ?? [])];
+  const byId = new Map<string, SearchMatchedChunk>();
+  for (const chunk of chunks) {
+    const existing = byId.get(chunk.chunk_id);
+    if (!existing) {
+      byId.set(chunk.chunk_id, { ...chunk });
+      continue;
+    }
+    byId.set(chunk.chunk_id, {
+      ...existing,
+      score: Math.max(existing.score, chunk.score),
+      per_embedding_ranks: { ...existing.per_embedding_ranks, ...chunk.per_embedding_ranks },
+      indexed_at: mergeIndexedAt(existing.indexed_at, chunk.indexed_at),
+    });
+  }
+  return [...byId.values()].sort((leftChunk, rightChunk) => {
+    const scoreDelta = rightChunk.score - leftChunk.score;
+    if (scoreDelta !== 0) return scoreDelta;
+    return leftChunk.heading_path.localeCompare(rightChunk.heading_path);
+  });
+}
+
+function mergeIndexedAt(
+  left: Record<string, string | null>,
+  right: Record<string, string | null>
+): Record<string, string | null> {
+  const merged: Record<string, string | null> = { ...left };
+  for (const [name, value] of Object.entries(right)) {
+    merged[name] = value ?? merged[name] ?? null;
+  }
+  return merged;
+}
+
+function capMatchedChunks<T extends SearchResultItem>(result: T, limit: number): T {
+  if (!result.matched_chunks) return result;
+  return {
+    ...result,
+    matched_chunks: result.matched_chunks.slice(0, limit),
+  };
+}
+
 async function searchDocumentsForEmbedding(input: {
   config: FlashQueryConfig;
   entry: ActiveEmbeddingEntry;
+  activeEmbeddingNames: string[];
   queryEmbedding: number[];
   tags?: string[];
   tagMatch: 'any' | 'all';
   limit: number;
   includeArchived: boolean;
-}): Promise<SemanticSearchHit[]> {
+}): Promise<ChunkSemanticSearchHit[]> {
   const supabase = supabaseManager.getClient();
-  const rpcResult = await supabase.rpc(`match_documents_${input.entry.name}`, {
+  const rpcResult = await supabase.rpc(`match_chunks_${input.entry.name}`, {
     query_embedding: JSON.stringify(input.queryEmbedding),
     match_threshold: 0.4,
     match_count: input.limit,
@@ -387,25 +450,56 @@ async function searchDocumentsForEmbedding(input: {
   });
   const { data, error } = rpcResult as { data: unknown; error: { message: string } | null };
   if (error) throw new Error(error.message);
-  const rows = (data ?? []) as Array<{ id: string; path: string; title: string; tags: string[]; similarity: number; created_at: string }>;
+  const rows = (data ?? []) as Array<{
+    chunk_id: string;
+    document_id: string;
+    path: string;
+    title: string;
+    tags: string[];
+    heading_path: string;
+    breadcrumb: string;
+    content: string;
+    similarity: number;
+    updated_at: string | Date;
+    embedding_indexed_at: string | Date | null;
+  }>;
   const vaultRoot = input.config.instance.vault.path;
-  const hits: SemanticSearchHit[] = [];
+  const hits: ChunkSemanticSearchHit[] = [];
   let rank = 1;
-  for (const doc of rows) {
-    const meta = await parseDocMeta(vaultRoot, doc.path);
+  for (const chunk of rows) {
+    const meta = await parseDocMeta(vaultRoot, chunk.path);
+    const indexedAt = Object.fromEntries(input.activeEmbeddingNames.map((name) => [name, null])) as Record<string, string | null>;
+    indexedAt[input.entry.name] = chunk.embedding_indexed_at == null
+      ? null
+      : chunk.embedding_indexed_at instanceof Date
+        ? chunk.embedding_indexed_at.toISOString()
+        : String(chunk.embedding_indexed_at);
     hits.push({
       entity_type: 'document',
-      identifier: doc.path,
-      title: doc.title,
-      path: doc.path,
-      fq_id: doc.id,
-      tags: doc.tags,
-      modified: meta?.modified ?? doc.created_at,
+      identifier: chunk.path,
+      title: chunk.title,
+      path: chunk.path,
+      fq_id: chunk.document_id,
+      tags: chunk.tags,
+      modified: meta?.modified ?? (chunk.updated_at instanceof Date ? chunk.updated_at.toISOString() : String(chunk.updated_at)),
       size: meta?.size ?? { chars: 0 },
-      score: doc.similarity,
+      score: chunk.similarity,
       match_source: ['semantic'],
       embeddingName: input.entry.name,
       rank,
+      matched_chunks: [
+        {
+          chunk_id: chunk.chunk_id,
+          heading_path: chunk.heading_path,
+          breadcrumb: chunk.breadcrumb,
+          content: chunk.content,
+          span_start: null,
+          span_end: null,
+          score: chunk.similarity,
+          per_embedding_ranks: { [input.entry.name]: rank },
+          indexed_at: indexedAt,
+        },
+      ],
     });
     rank += 1;
   }
@@ -461,6 +555,7 @@ async function searchMemoriesForEmbedding(input: {
 async function runEmbeddingRetriever(input: {
   config: FlashQueryConfig;
   entry: ActiveEmbeddingEntry;
+  activeEmbeddingNames: string[];
   provider: EmbeddingProvider;
   query: string;
   entityTypes: Array<'documents' | 'memories'>;
@@ -476,6 +571,7 @@ async function runEmbeddingRetriever(input: {
       hits.push(...await searchDocumentsForEmbedding({
         config: input.config,
         entry: input.entry,
+        activeEmbeddingNames: input.activeEmbeddingNames,
         queryEmbedding,
         tags: input.tags,
         tagMatch: input.tagMatch,
@@ -1439,6 +1535,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         tags: z.array(z.string()).optional().describe('Filter by tags.'),
         tag_match: z.enum(['any', 'all']).optional().describe('Tag matching mode. Default: any.'),
         limit: z.number().optional().describe('Global result limit after merge/dedupe/sort. Default: 10.'),
+        limit_chunks_per_result: z.number().int().positive().max(25).optional().describe('Maximum matched chunks per document result. Default: 3.'),
         entity_types: z.array(z.enum(['documents', 'memories'])).optional().describe('Search domains. Default: enabled searchable domains.'),
         list_all: z.boolean().optional().describe('Allow empty unfiltered list-mode search.'),
         path_filter: z.string().optional().describe('Document path substring filter for filesystem/list searches.'),
@@ -1454,6 +1551,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
     },
     async (params) => {
       const { tags, tag_match, path_filter, include_archived, embedding_names } = params;
+      const limitChunksPerResult = params.limit_chunks_per_result ?? 3;
       if (getIsShuttingDown()) {
         return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
       }
@@ -1507,6 +1605,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 runEmbeddingRetriever({
                   config,
                   entry,
+                  activeEmbeddingNames: selection.selected.map((selectedEntry) => selectedEntry.name),
                   provider: createEmbeddingProviderForCatalogEntry(config, entry),
                   query: intent.query,
                   entityTypes: intent.entity_types,
@@ -1542,10 +1641,12 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                       hits: result.hits,
                     })),
                     intent.limit
-                  ));
+                  ).map((result) => capMatchedChunks(result, limitChunksPerResult)));
                 } else {
                   allResults.push(...successful.flatMap((result) =>
-                    result.hits.map(({ embeddingName: _embeddingName, rank: _rank, ...hit }) => hit)
+                    result.hits.map(({ embeddingName: _embeddingName, rank: _rank, ...hit }) =>
+                      capMatchedChunks(hit, limitChunksPerResult)
+                    )
                   ));
                 }
               }
@@ -1557,39 +1658,14 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           const vaultRoot = config.instance.vault.path;
           const canSemantic = !(embeddingProvider instanceof NullEmbeddingProvider);
           if (!catalogSemanticHandled && (intent.requested_mode === 'semantic' || intent.requested_mode === 'mixed') && intent.query && canSemantic) {
-            try {
-	              const docs = await searchDocumentsSemantic(config, intent.query, {
-	                tags,
-	                tagMatch: matchMode,
-	                limit: intent.limit,
-	                includeArchived: include_archived === true,
-	              });
-	              const semanticResults = await Promise.all(docs.map(async (doc) => {
-	                const meta = await parseDocMeta(config.instance.vault.path, doc.path);
-	                return {
-	                  entity_type: 'document' as const,
-	                  identifier: doc.path,
-	                  title: doc.title,
-	                  path: doc.path,
-	                  fq_id: doc.id,
-	                  tags: doc.tags,
-	                  modified: meta?.modified ?? doc.created_at,
-	                  size: meta?.size ?? { chars: 0 },
-	                  score: doc.similarity,
-	                  match_source: ['semantic' as const],
-	                };
-	              }));
-	              allResults.push(...semanticResults);
-            } catch (err) {
-              warnings.push('embedding_unavailable');
-              if (intent.requested_mode === 'semantic') {
-                return jsonExpectedError({
-                  error: 'unsupported',
-                  message: 'Semantic document search is unavailable',
-                  identifier: 'documents',
-                  details: { reason: err instanceof Error ? err.message : String(err) },
-                });
-              }
+            warnings.push('embedding_unavailable');
+            if (intent.requested_mode === 'semantic') {
+              return jsonExpectedError({
+                error: 'unsupported',
+                message: 'Semantic document search is unavailable without an active embedding catalog',
+                identifier: 'documents',
+                details: { reason: 'chunk_catalog_required' },
+              });
             }
           } else if (!catalogSemanticHandled && intent.requested_mode === 'semantic' && !canSemantic) {
             return jsonExpectedError({

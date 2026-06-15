@@ -12,6 +12,7 @@ export interface SearchInput {
   path_filter?: string;
   list_all?: boolean;
   limit?: number;
+  limit_chunks_per_result?: number;
   [key: string]: unknown;
 }
 
@@ -44,6 +45,19 @@ export interface SearchResultItem {
   match_source?: SearchMatchSource[];
   archived_at?: string | null;
   is_latest?: boolean | null;
+  matched_chunks?: SearchMatchedChunk[];
+}
+
+export interface SearchMatchedChunk {
+  chunk_id: string;
+  heading_path: string;
+  breadcrumb: string;
+  content: string;
+  span_start: number | null;
+  span_end: number | null;
+  score: number;
+  per_embedding_ranks: Record<string, number>;
+  indexed_at: Record<string, string | null>;
 }
 
 export function resolveSearchMode(mode: string | undefined): SearchMode {
@@ -97,6 +111,20 @@ export function validateSearchInput(input: SearchInput): ErrorEnvelope | null {
       message: 'list-mode searches with filters require explicit entity_types',
       details: { field: 'entity_types' },
     };
+  }
+  if (input.limit_chunks_per_result !== undefined) {
+    if (
+      !Number.isInteger(input.limit_chunks_per_result) ||
+      input.limit_chunks_per_result < 1 ||
+      input.limit_chunks_per_result > 25
+    ) {
+      return {
+        error: 'invalid_input',
+        message: 'limit_chunks_per_result must be an integer between 1 and 25',
+        identifier: 'limit_chunks_per_result',
+        details: { field: 'limit_chunks_per_result', value: input.limit_chunks_per_result },
+      };
+    }
   }
   return null;
 }
@@ -209,6 +237,7 @@ export function mergeSearchResults(results: SearchResultItem[], limit: number): 
       ...next,
       ...(matchSource.length > 0 ? { match_source: matchSource } : {}),
       ...(existing.score !== undefined || result.score !== undefined ? { score: Math.max(existingScore, resultScore) } : {}),
+      ...mergeMatchedChunks(existing, result),
     });
   }
 
@@ -220,4 +249,44 @@ export function mergeSearchResults(results: SearchResultItem[], limit: number): 
       return sortKey(a).localeCompare(sortKey(b));
     })
     .slice(0, limit);
+}
+
+function mergeMatchedChunks(
+  left: SearchResultItem,
+  right: SearchResultItem
+): { matched_chunks?: SearchMatchedChunk[] } {
+  const chunks = [...(left.matched_chunks ?? []), ...(right.matched_chunks ?? [])];
+  if (chunks.length === 0) return {};
+  const byId = new Map<string, SearchMatchedChunk>();
+  for (const chunk of chunks) {
+    const existing = byId.get(chunk.chunk_id);
+    if (!existing) {
+      byId.set(chunk.chunk_id, { ...chunk });
+      continue;
+    }
+    byId.set(chunk.chunk_id, {
+      ...existing,
+      score: Math.max(existing.score, chunk.score),
+      per_embedding_ranks: { ...existing.per_embedding_ranks, ...chunk.per_embedding_ranks },
+      indexed_at: mergeIndexedAt(existing.indexed_at, chunk.indexed_at),
+    });
+  }
+  return {
+    matched_chunks: [...byId.values()].sort((a, b) => {
+      const scoreDelta = b.score - a.score;
+      if (scoreDelta !== 0) return scoreDelta;
+      return a.heading_path.localeCompare(b.heading_path);
+    }),
+  };
+}
+
+function mergeIndexedAt(
+  left: Record<string, string | null>,
+  right: Record<string, string | null>
+): Record<string, string | null> {
+  const merged: Record<string, string | null> = { ...left };
+  for (const [name, value] of Object.entries(right)) {
+    merged[name] = value ?? merged[name] ?? null;
+  }
+  return merged;
 }

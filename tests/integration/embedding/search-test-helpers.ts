@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -125,9 +125,9 @@ export async function resetEmbeddingSearchData(client: pg.Client, instanceId: st
   await client.query('DELETE FROM fqc_documents WHERE instance_id = $1', [instanceId]);
   await client.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [instanceId]);
   for (const name of entryNames) {
-    for (const table of ['fqc_documents', 'fqc_memory']) {
+    for (const table of ['fqc_chunks', 'fqc_memory']) {
       await client.query(`DROP INDEX IF EXISTS idx_${table}_embedding_${name}`);
-      for (const suffix of ['', '_model', '_dimensions', '_provider', '_truncated']) {
+      for (const suffix of ['', '_model', '_dimensions', '_provider', '_truncated', '_indexed_at']) {
         await client.query(
           `ALTER TABLE ${table} DROP COLUMN IF EXISTS ${pg.escapeIdentifier(`embedding_${name}${suffix}`)} CASCADE`
         );
@@ -146,6 +146,7 @@ export async function addSearchDocument(input: {
   vectorByEntry?: Record<string, number[]>;
 }): Promise<string> {
   const id = input.id ?? randomUUID();
+  await mkdir(join(input.harness.vaultPath, input.path, '..'), { recursive: true });
   await writeFile(
     join(input.harness.vaultPath, input.path),
     matter.stringify(`Body for ${input.title}`, {
@@ -161,10 +162,26 @@ export async function addSearchDocument(input: {
      VALUES ($1, $2, $3, $4, $5, 'active')`,
     [id, input.harness.config.instance.id, input.path, input.title, ['search166']]
   );
+  const chunkId = randomUUID();
+  await input.harness.client.query(
+    `INSERT INTO fqc_chunks (
+       id, instance_id, document_id, heading_path, heading_level, breadcrumb,
+       content, content_hash, chunk_index
+     )
+     VALUES ($1, $2, $3, $4, 1, $4, $5, $6, 0)`,
+    [chunkId, input.harness.config.instance.id, id, input.title, `Body for ${input.title}`, `hash-${chunkId}`]
+  );
   for (const [entryName, vector] of Object.entries(input.vectorByEntry ?? {})) {
     await input.harness.client.query(
-      `UPDATE fqc_documents SET ${pg.escapeIdentifier(`embedding_${entryName}`)} = $1::vector WHERE id = $2`,
-      [`[${vector.join(',')}]`, id]
+      `UPDATE fqc_chunks
+       SET ${pg.escapeIdentifier(`embedding_${entryName}`)} = $1::vector,
+           ${pg.escapeIdentifier(`embedding_${entryName}_model`)} = $2,
+           ${pg.escapeIdentifier(`embedding_${entryName}_dimensions`)} = $3,
+           ${pg.escapeIdentifier(`embedding_${entryName}_provider`)} = 'search-provider',
+           ${pg.escapeIdentifier(`embedding_${entryName}_truncated`)} = false,
+           ${pg.escapeIdentifier(`embedding_${entryName}_indexed_at`)} = now()
+       WHERE id = $4`,
+      [`[${vector.join(',')}]`, `model-${entryName}`, vector.length, chunkId]
     );
   }
   return id;
