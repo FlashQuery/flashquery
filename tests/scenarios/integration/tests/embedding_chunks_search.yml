@@ -1,0 +1,65 @@
+name: embedding_chunks_search
+description: >
+  Chunk-backed document semantic search returns document results with
+  matched_chunks, and mixed document search preserves filesystem discovery while
+  retaining semantic chunk metadata.
+coverage: [IS-chunk-1, IS-chunk-2]
+deps: [embeddings]
+server_modes: [managed]
+extra_config:
+  embeddings:
+    - name: embedding_chunks_primary
+      dimensions: 768
+      endpoints:
+        - provider_name: local-ollama
+          model: nomic-embed-text
+
+steps:
+  - label: "Write chunk search document"
+    action: vault.write
+    name: chunk_search_doc
+    path: "embedding/chunk-search.md"
+    title: "Chunk Search Scenario"
+    content: |
+      ## Retrieval Section
+
+      Calypso chunk retrieval body proves semantic chunks.
+    tags: [embedding-chunks]
+
+  - label: "Backfill chunk search document"
+    action: maintain_vault
+    args:
+      action: backfill_embeddings
+      embedding_name: embedding_chunks_primary
+      scope:
+        entity_types: [documents]
+        documents:
+          paths: ["embedding/chunk-search.md"]
+      max_rows: 0
+
+  - label: "Semantic document search returns matched chunks"
+    assert:
+      op: search
+      args:
+        query: "Calypso chunk retrieval semantic chunks"
+        mode: semantic
+        entity_types: [documents]
+      expect_path: "embedding/chunk-search.md"
+      expect_json_array_length:
+        path: results[0].matched_chunks
+        equals: 1
+      expect_json_equals:
+        path: embeddings_queried
+        value: [embedding_chunks_primary]
+
+  - label: "Mixed document search preserves filesystem hit and chunk metadata"
+    assert:
+      op: search
+      args:
+        query: "Chunk Search Scenario Calypso"
+        mode: mixed
+        entity_types: [documents]
+      expect_path: "embedding/chunk-search.md"
+      expect_json_array_length:
+        path: results[0].matched_chunks
+        equals: 1

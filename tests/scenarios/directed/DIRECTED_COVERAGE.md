@@ -2104,4 +2104,6 @@ Behaviors verifying the `call_model` and `get_llm_usage` MCP tools introduced in
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
+| D-chunk-3 | T-A-003 / REQ-CHUNK-011: public `maintain_vault backfill_embeddings` reports chunk counts and by-document breakdown. | test_chunk_lifecycle_backfill | 2026-06-14 | 2026-06-14 |
+| D-chunk-4 | T-A-004 / REQ-CHUNK-011: public `maintain_vault rebuild_embeddings` handles heading restructure and stale chunk removal. | test_chunk_lifecycle_rebuild | 2026-06-14 | 2026-06-14 |
 | D-chunk-5 | T-A-008 / REQ-CHUNK-015: public memory and plugin embedding workflows still work after document semantic search moves to chunk `matched_chunks`. | test_chunk_preserves_memory_plugin_embeddings | 2026-06-14 | 2026-06-14 |

@@ -131,6 +131,8 @@ Note: Test Plan §4.10.6 reserved `IS-09`, `IS-10`, `IS-11`, and `IA-09`; the li
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
+| IS-chunk-1 | T-A-005 / REQ-CHUNK-012: managed document semantic search returns one document result with non-empty `matched_chunks`. | embedding_chunks_search      | 2026-06-14   | 2026-06-14   |
+| IS-chunk-2 | T-A-006 / REQ-CHUNK-013: managed mixed document search preserves filesystem discovery while retaining semantic chunk metadata. | embedding_chunks_search      | 2026-06-14   | 2026-06-14   |
 | IS-chunk-3 | T-A-007 / REQ-CHUNK-014: first-time embedding enablement returns document semantic results with non-empty `matched_chunks`. | embedding_first_time_enablement_search | 2026-06-14   | 2026-06-14   |
 
 ## Phase 160 Vault Write Coherency Folder Locks
