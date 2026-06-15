@@ -90,26 +90,20 @@ describe('buildSchemaDDL', () => {
     expect(ddl).not.toContain('ADD COLUMN IF NOT EXISTS fq_params');
   });
 
-  it('creates fqc_documents indexes including HNSW and instance_path unique index', () => {
+  it('creates fqc_documents indexes without a whole-document HNSW semantic index', () => {
     const ddl = buildSchemaDDL(1536);
-    expect(ddl).toContain('idx_fqc_documents_embedding');
+    expect(ddl).toContain('DROP INDEX IF EXISTS idx_fqc_documents_embedding');
+    expect(ddl).not.toContain('CREATE INDEX IF NOT EXISTS idx_fqc_documents_embedding');
     expect(ddl).toContain('idx_fqc_documents_instance');
     expect(ddl).toContain('idx_fqc_documents_instance_path');
     expect(ddl).toContain('idx_fqc_documents_status');
     expect(ddl).not.toContain('idx_fqc_documents_project');
   });
 
-  it('creates the match_documents RPC function without filter_project parameter', () => {
+  it('does not create the legacy match_documents RPC function', () => {
     const ddl = buildSchemaDDL(1536);
-    expect(ddl).toContain('CREATE OR REPLACE FUNCTION match_documents');
-    expect(ddl).toContain('embedding IS NOT NULL');
-    expect(ddl).toContain('path text');
-    expect(ddl).not.toContain('vault_path text');
-    // match_documents should not have filter_project; check by extracting that function's block
-    const matchDocStart = ddl.indexOf('CREATE OR REPLACE FUNCTION match_documents');
-    const matchDocEnd = ddl.indexOf('$$;', matchDocStart) + 3;
-    const matchDocBlock = ddl.slice(matchDocStart, matchDocEnd);
-    expect(matchDocBlock).not.toContain('filter_project');
+    expect(ddl).not.toContain('CREATE OR REPLACE FUNCTION match_documents');
+    expect(ddl).toContain('DROP FUNCTION IF EXISTS match_documents');
   });
 });
 
@@ -276,30 +270,9 @@ describe('Phase 33 DDL updates (tag_match support)', () => {
     expect(block).toContain('m.tags && filter_tags');
   });
 
-  it('match_documents has filter_tags param', () => {
+  it('legacy match_documents tag-filter RPC is retired', () => {
     const ddl = buildSchemaDDL(1536);
-    const fnStart = ddl.indexOf('CREATE OR REPLACE FUNCTION match_documents');
-    const fnEnd = ddl.indexOf('$$;', fnStart) + 3;
-    const block = ddl.slice(fnStart, fnEnd);
-    expect(block).toContain('filter_tags text[] DEFAULT NULL');
-  });
-
-  it('match_documents has filter_tag_match param with default any', () => {
-    const ddl = buildSchemaDDL(1536);
-    const fnStart = ddl.indexOf('CREATE OR REPLACE FUNCTION match_documents');
-    const fnEnd = ddl.indexOf('$$;', fnStart) + 3;
-    const block = ddl.slice(fnStart, fnEnd);
-    expect(block).toContain("filter_tag_match text DEFAULT 'any'");
-  });
-
-  it('match_documents WHERE clause uses CASE for tag matching with @> and &&', () => {
-    const ddl = buildSchemaDDL(1536);
-    const fnStart = ddl.indexOf('CREATE OR REPLACE FUNCTION match_documents');
-    const fnEnd = ddl.indexOf('$$;', fnStart) + 3;
-    const block = ddl.slice(fnStart, fnEnd);
-    expect(block).toContain("CASE WHEN filter_tag_match = 'all'");
-    expect(block).toContain('d.tags @> filter_tags');
-    expect(block).toContain('d.tags && filter_tags');
+    expect(ddl).not.toContain('CREATE OR REPLACE FUNCTION match_documents');
   });
 
   it('DROP match_memories targets the old 6-param signature (vector, double precision, integer, text, text[], text)', () => {

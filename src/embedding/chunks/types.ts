@@ -37,7 +37,7 @@ export interface ChunkIdentityInput {
 }
 
 export const DEFAULT_CHUNK_PARSER_PARAMS: ChunkParserParams = {
-  minChunkTokens: 120,
-  maxChunkTokens: 700,
+  minChunkTokens: 100,
+  maxChunkTokens: 800,
   overlapRatio: 0.12,
 };

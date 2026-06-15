@@ -201,9 +201,6 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
               status: 'active',
               template_meta: extractTemplateMeta(copyFm),
             } as Record<string, unknown>;
-            if ((config.embeddings?.length ?? 0) === 0) {
-              insertPayload.embedding = null;
-            }
             const { error: insertError } = await supabase
               .from('fqc_documents')
               .insert(insertPayload);

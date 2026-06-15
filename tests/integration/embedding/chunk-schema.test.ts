@@ -57,13 +57,16 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk schema DDL', () => {
   });
 
   it('T-I-001 fresh schema creates fqc_chunks with required columns, constraints, and indexes', async () => {
-    const columns = await client.query<{ column_name: string }>(
+    const columns = await client.query<{ column_name: string; formatted_type: string }>(
       `
-      SELECT column_name
-      FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND table_name = 'fqc_chunks'
-      ORDER BY column_name
+      SELECT c.column_name, format_type(a.atttypid, a.atttypmod) AS formatted_type
+      FROM information_schema.columns c
+      JOIN pg_class cl ON cl.relname = c.table_name
+      JOIN pg_namespace n ON n.oid = cl.relnamespace AND n.nspname = c.table_schema
+      JOIN pg_attribute a ON a.attrelid = cl.oid AND a.attname = c.column_name
+      WHERE c.table_schema = 'public'
+        AND c.table_name = 'fqc_chunks'
+      ORDER BY c.column_name
       `
     );
     expect(columns.rows.map((row) => row.column_name)).toEqual(
@@ -82,6 +85,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk schema DDL', () => {
         'updated_at',
       ])
     );
+    expect(columns.rows.find((row) => row.column_name === 'heading_path')?.formatted_type).toBe('text');
 
     const constraints = await client.query<{ conname: string; contype: string; definition: string }>(
       `
@@ -120,7 +124,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk schema DDL', () => {
         id, instance_id, document_id, heading_path, heading_level, breadcrumb,
         content, content_hash, chunk_index
       )
-      VALUES (gen_random_uuid(), $1, $2, ARRAY['Root'], 1, 'Root', 'content', 'hash-a', 0)
+      VALUES (gen_random_uuid(), $1, $2, 'Root', 1, 'Root', 'content', 'hash-a', 0)
       `,
       [TEST_INSTANCE_ID, documentId]
     );
@@ -141,7 +145,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk schema DDL', () => {
         id, instance_id, document_id, heading_path, heading_level, breadcrumb,
         content, content_hash, chunk_index
       )
-      VALUES (gen_random_uuid(), $1, $2, ARRAY['Root'], 1, 'Root', $3, $4, 0)
+      VALUES (gen_random_uuid(), $1, $2, 'Root', 1, 'Root', $3, $4, 0)
     `;
     await client.query(insert, [TEST_INSTANCE_ID, documentId, 'content a', 'hash-a']);
     await expect(client.query(insert, [TEST_INSTANCE_ID, documentId, 'content b', 'hash-b'])).rejects.toThrow(

@@ -116,6 +116,8 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk fresh deployment guards', () =>
     await expect(columnExists(client, 'fqc_documents', 'embedding_primary')).resolves.toBe(false);
     await expect(columnExists(client, 'fqc_documents', 'embedding_primary_indexed_at')).resolves.toBe(false);
     await expect(functionExists(client, 'match_documents_primary')).resolves.toBe(false);
+    await expect(columnExists(client, 'fqc_documents', 'embedding')).resolves.toBe(false);
+    await expect(functionExists(client, 'match_documents')).resolves.toBe(false);
   });
 
   it('T-I-013 no maintain_vault cleanup action is registered for legacy document vectors', async () => {

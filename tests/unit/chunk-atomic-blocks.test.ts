@@ -75,6 +75,27 @@ describe('CommonMark and GFM atomic chunk blocks', () => {
     expect(chunks[1]?.content).toBe('- beta three four\n  - nested must also stay');
   });
 
+  it('T-U-018 splits offset top-level lists relative to the list block', () => {
+    const chunks = parseDocumentChunks({
+      ...atomicBase,
+      body: [
+        '# Offset List',
+        'Introductory prose sits before the list.',
+        '',
+        '- alpha one two',
+        '  - nested must stay',
+        '- beta three four',
+        '  - nested must also stay',
+      ].join('\n'),
+      params: { minChunkTokens: 1, maxChunkTokens: 13, overlapRatio: 0 },
+    });
+
+    expect(chunks).toHaveLength(3);
+    expect(chunks[0]?.content).toBe('Introductory prose sits before the list.');
+    expect(chunks[1]?.content).toBe('- alpha one two\n  - nested must stay');
+    expect(chunks[2]?.content).toBe('- beta three four\n  - nested must also stay');
+  });
+
   it('T-U-019 parses variable-length fences, indented fences, and Docling-style GFM without FlashQuery conventions', () => {
     const chunks = parseDocumentChunks({
       ...atomicBase,

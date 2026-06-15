@@ -91,7 +91,7 @@ async function insertChunk(client: pg.Client): Promise<{ documentId: string; chu
        id, instance_id, document_id, heading_path, heading_level, breadcrumb,
        content, content_hash, chunk_index
      )
-     VALUES ($1, $2, $3, ARRAY['Pending Chunks', 'Setup'], 2, 'Pending Chunks > Setup',
+     VALUES ($1, $2, $3, 'Pending Chunks > Setup', 2, 'Pending Chunks > Setup',
        'chunk pending content', 'chunk-pending-hash', 0)`,
     [chunkId, TEST_INSTANCE_ID, documentId]
   );

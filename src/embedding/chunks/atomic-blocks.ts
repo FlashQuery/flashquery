@@ -18,6 +18,7 @@ interface MarkdownUnit {
   text: string;
   atomic: boolean;
   nodeType: string;
+  startLine?: number;
   children?: PositionedNode[];
 }
 
@@ -59,11 +60,12 @@ function extractMarkdownUnits(content: string): MarkdownUnit[] {
       text: normalizeChunkContent(text),
       atomic: child.type === 'code' || child.type === 'table' || child.type === 'list',
       nodeType: child.type,
+      startLine: child.position.start.line,
       children: child.children,
     });
   }
 
-  return units.length > 0 ? units : [{ text: normalizeChunkContent(content), atomic: false, nodeType: 'text' }];
+  return units.length > 0 ? units : [{ text: normalizeChunkContent(content), atomic: false, nodeType: 'text', startLine: 1 }];
 }
 
 function splitOversizedUnit(unit: MarkdownUnit, bodyBudget: number): MarkdownUnit[] {
@@ -83,7 +85,7 @@ function splitOversizedUnit(unit: MarkdownUnit, bodyBudget: number): MarkdownUni
     return splitTopLevelList(unit, bodyBudget).map((text) => ({ text, atomic: true, nodeType: 'list' }));
   }
 
-  return splitTokens(unit.text, bodyBudget, 0).map((text) => ({ text, atomic: false, nodeType: 'text' }));
+  return splitSentences(unit.text, bodyBudget).map((text) => ({ text, atomic: false, nodeType: 'text' }));
 }
 
 function splitTable(table: string, bodyBudget: number): string[] {
@@ -147,13 +149,14 @@ function splitFencedCode(code: string, bodyBudget: number): string[] {
 
 function splitTopLevelList(unit: MarkdownUnit, bodyBudget: number): string[] {
   const lines = unit.text.split('\n');
+  const baseLine = unit.startLine ?? 1;
   const itemTexts = (unit.children ?? [])
     .map((child) => {
       if (!child.position) {
         return '';
       }
-      const start = child.position.start.line - 1;
-      const end = child.position.end.line - 1;
+      const start = child.position.start.line - baseLine;
+      const end = child.position.end.line - baseLine;
       return normalizeChunkContent(lines.slice(start, end + 1).join('\n'));
     })
     .filter(Boolean);
@@ -179,6 +182,44 @@ function splitTopLevelList(unit: MarkdownUnit, bodyBudget: number): string[] {
   }
 
   return chunks.length > 0 ? chunks : splitTokens(unit.text, bodyBudget, 0);
+}
+
+function splitSentences(content: string, bodyBudget: number): string[] {
+  const sentences = content
+    .match(/[^.!?]+(?:[.!?]+(?=\s|$)|$)/g)
+    ?.map((sentence) => normalizeChunkContent(sentence))
+    .filter(Boolean) ?? [];
+
+  if (sentences.length <= 1) {
+    return splitTokens(content, bodyBudget, 0);
+  }
+
+  const chunks: string[] = [];
+  let current: string[] = [];
+
+  for (const sentence of sentences) {
+    if (countTokens(sentence) > bodyBudget) {
+      if (current.length > 0) {
+        chunks.push(normalizeChunkContent(current.join(' ')));
+        current = [];
+      }
+      chunks.push(...splitTokens(sentence, bodyBudget, 0));
+      continue;
+    }
+
+    const candidate = [...current, sentence].join(' ');
+    if (current.length > 0 && countTokens(candidate) > bodyBudget) {
+      chunks.push(normalizeChunkContent(current.join(' ')));
+      current = [];
+    }
+    current.push(sentence);
+  }
+
+  if (current.length > 0) {
+    chunks.push(normalizeChunkContent(current.join(' ')));
+  }
+
+  return chunks;
 }
 
 function packMarkdownUnits(units: MarkdownUnit[], bodyBudget: number, overlapTokens: number): string[] {

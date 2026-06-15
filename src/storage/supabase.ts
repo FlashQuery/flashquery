@@ -361,17 +361,19 @@ CREATE TABLE IF NOT EXISTS fqc_documents (
   content_hash TEXT,
   status TEXT DEFAULT 'active',
   archived_at TIMESTAMPTZ,
-  embedding vector(${dimensions}),
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+DROP INDEX IF EXISTS idx_fqc_documents_embedding;
+ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS embedding CASCADE;
 
 -- Phase 168: deterministic document chunks for document semantic embeddings.
 CREATE TABLE IF NOT EXISTS fqc_chunks (
   id UUID PRIMARY KEY,
   instance_id TEXT NOT NULL,
   document_id UUID NOT NULL REFERENCES fqc_documents(id) ON DELETE CASCADE,
-  heading_path TEXT[] NOT NULL DEFAULT '{}',
+  heading_path TEXT NOT NULL,
   heading_level INT NOT NULL DEFAULT 0,
   breadcrumb TEXT NOT NULL,
   content TEXT NOT NULL,
@@ -382,6 +384,53 @@ CREATE TABLE IF NOT EXISTS fqc_chunks (
   updated_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE(instance_id, document_id, heading_path, chunk_index)
 );
+
+-- Phase 168 contract repair for databases initialized while heading_path was
+-- represented as text[]. Fresh chunk deployments store the joined path string.
+DO $$
+DECLARE
+  heading_path_type TEXT;
+  unique_constraint TEXT;
+BEGIN
+  SELECT format_type(a.atttypid, a.atttypmod)
+  INTO heading_path_type
+  FROM pg_attribute a
+  WHERE a.attrelid = 'public.fqc_chunks'::regclass
+    AND a.attname = 'heading_path'
+    AND NOT a.attisdropped;
+
+  IF heading_path_type = 'text[]' THEN
+    SELECT conname
+    INTO unique_constraint
+    FROM pg_constraint
+    WHERE conrelid = 'public.fqc_chunks'::regclass
+      AND contype = 'u'
+      AND pg_get_constraintdef(oid) LIKE '%(instance_id, document_id, heading_path, chunk_index)%'
+    LIMIT 1;
+
+    IF unique_constraint IS NOT NULL THEN
+      EXECUTE format('ALTER TABLE fqc_chunks DROP CONSTRAINT %I', unique_constraint);
+    END IF;
+
+    ALTER TABLE fqc_chunks ALTER COLUMN heading_path DROP DEFAULT;
+    ALTER TABLE fqc_chunks
+      ALTER COLUMN heading_path TYPE TEXT
+      USING array_to_string(heading_path, ' > ');
+    ALTER TABLE fqc_chunks ALTER COLUMN heading_path SET NOT NULL;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'public.fqc_chunks'::regclass
+      AND contype = 'u'
+      AND pg_get_constraintdef(oid) LIKE '%(instance_id, document_id, heading_path, chunk_index)%'
+  ) THEN
+    ALTER TABLE fqc_chunks
+      ADD CONSTRAINT fqc_chunks_instance_document_heading_chunk_key
+      UNIQUE(instance_id, document_id, heading_path, chunk_index);
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_fqc_chunks_document_id ON fqc_chunks(document_id);
 CREATE INDEX IF NOT EXISTS idx_fqc_chunks_instance_id ON fqc_chunks(instance_id);
@@ -744,17 +793,6 @@ CREATE INDEX IF NOT EXISTS idx_fqc_memory_status ON fqc_memory (status);
 	CREATE UNIQUE INDEX IF NOT EXISTS idx_fqc_memory_one_latest_per_chain
 	  ON fqc_memory (instance_id, chain_root_id) WHERE (is_latest = true);
 CREATE INDEX IF NOT EXISTS idx_fqc_vault_instance ON fqc_vault (instance_id);
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'fqc_documents'
-      AND column_name = 'embedding'
-  ) THEN
-    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_fqc_documents_embedding ON fqc_documents USING hnsw (embedding vector_cosine_ops)';
-  END IF;
-END $$;
 CREATE INDEX IF NOT EXISTS idx_fqc_documents_instance ON fqc_documents (instance_id);
 -- Phase 90: migrate from full to partial unique index on (instance_id, path).
 -- Archived rows are excluded so a new document at the same path (after archiving
@@ -932,57 +970,11 @@ BEGIN
 	END;
 	$$;
 
--- Step 5: Create match_documents RPC function
-
--- Drop old function signatures with incompatible parameters (Phase 33 added filter_tags, filter_tag_match)
-	-- Old signature: (vector, float, int, text) — 4 params, no tag filtering
-	-- New signature: (vector, float, int, text, text[], text) — adds filter_tags and filter_tag_match
-	DROP FUNCTION IF EXISTS match_documents(vector, double precision, integer, text) CASCADE;
-	DROP FUNCTION IF EXISTS match_documents(vector, double precision, integer, text, text[], text) CASCADE;
-
-CREATE OR REPLACE FUNCTION match_documents(
-  query_embedding vector(${dimensions}),
-  match_threshold float DEFAULT 0.7,
-  match_count int DEFAULT 10,
-	  filter_instance_id text DEFAULT NULL,
-	  filter_tags text[] DEFAULT NULL,
-	  filter_tag_match text DEFAULT 'any',
-	  include_archived boolean DEFAULT false
-	)
-RETURNS TABLE (
-  id uuid,
-  path text,
-  title text,
-  tags text[],
-  similarity float,
-  created_at timestamptz
-)
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT
-    d.id,
-    d.path,
-    d.title,
-    d.tags,
-    1 - (d.embedding <=> query_embedding) AS similarity,
-    d.created_at
-  FROM fqc_documents d
-	  WHERE (include_archived OR d.status = 'active')
-    AND d.embedding IS NOT NULL
-    AND 1 - (d.embedding <=> query_embedding) > match_threshold
-    AND (filter_instance_id IS NULL OR d.instance_id = filter_instance_id)
-    AND (filter_tags IS NULL OR
-      CASE WHEN filter_tag_match = 'all'
-        THEN d.tags @> filter_tags
-        ELSE d.tags && filter_tags
-      END
-    )
-  ORDER BY d.embedding <=> query_embedding
-  LIMIT match_count;
-END;
-$$;
+-- Step 5: Retire legacy whole-document semantic RPCs. Document semantic search
+-- is provided by per-entry match_chunks_<name> functions.
+DROP FUNCTION IF EXISTS match_documents(vector, double precision, integer, text) CASCADE;
+DROP FUNCTION IF EXISTS match_documents(vector, double precision, integer, text, text[], text) CASCADE;
+DROP FUNCTION IF EXISTS match_documents(vector, double precision, integer, text, text[], text, boolean) CASCADE;
 
 -- Step 6: Create find_plugin_scope RPC function (pg_trgm fuzzy matching)
 
@@ -1138,7 +1130,7 @@ RETURNS TABLE (
   path text,
   title text,
   tags text[],
-  heading_path text[],
+  heading_path text,
   heading_level int,
   breadcrumb text,
   content text,

@@ -169,7 +169,7 @@ async function insertChunks(
         chunk.id,
         instanceId,
         chunk.document_id,
-        toStoredHeadingPath(chunk.heading_path),
+        chunk.heading_path,
         chunk.heading_level,
         chunk.breadcrumb,
         chunk.content,
@@ -199,7 +199,7 @@ async function updateChunks(
            updated_at = now()
        WHERE instance_id = $8 AND document_id = $9 AND id = $10`,
       [
-        toStoredHeadingPath(chunk.heading_path),
+        chunk.heading_path,
         chunk.heading_level,
         chunk.breadcrumb,
         chunk.content,
@@ -229,11 +229,4 @@ async function deleteOrphanChunks(
      WHERE instance_id = $1 AND document_id = $2 AND id = ANY($3::uuid[])`,
     [instanceId, documentId, chunks.map((chunk) => chunk.id)]
   );
-}
-
-function toStoredHeadingPath(headingPath: string): string[] {
-  return headingPath
-    .split(' > ')
-    .map((part) => part.trim())
-    .filter(Boolean);
 }

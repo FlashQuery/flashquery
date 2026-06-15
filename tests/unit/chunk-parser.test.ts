@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { parseDocumentChunks } from '../../src/embedding/chunks/parser.js';
+import { DEFAULT_CHUNK_PARSER_PARAMS } from '../../src/embedding/chunks/types.js';
 
 const parserBase = {
   instanceId: 'inst-parser',
@@ -9,6 +10,14 @@ const parserBase = {
 };
 
 describe('heading-aware chunk parser', () => {
+  it('pins the v1 parser parameter contract defaults', () => {
+    expect(DEFAULT_CHUNK_PARSER_PARAMS).toEqual({
+      minChunkTokens: 100,
+      maxChunkTokens: 800,
+      overlapRatio: 0.12,
+    });
+  });
+
   it('T-U-004 H1-H6 headings produce document-order sections with expected heading paths', () => {
     const chunks = parseDocumentChunks({
       ...parserBase,
@@ -152,8 +161,17 @@ describe('heading-aware chunk parser', () => {
     });
 
     expect(paragraphChunks).toHaveLength(2);
-    expect(sentenceChunks.length).toBeGreaterThan(1);
+    expect(sentenceChunks.map((chunk) => chunk.content)).toEqual([
+      'One two three.',
+      'Four five six.',
+      'Seven eight nine.',
+    ]);
     expect(tokenChunks).toHaveLength(3);
+    expect(tokenChunks.map((chunk) => chunk.content)).toEqual([
+      'superlongtoken',
+      'anotherlongtoken',
+      'thirdlongtoken',
+    ]);
   });
 
   it('T-U-013 prose overlap defaults to 12 percent and never crosses heading boundaries', () => {

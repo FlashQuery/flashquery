@@ -101,7 +101,7 @@ async function insertChunkWithVector(client: pg.Client, dimensions: number, vect
       embedding_primary_indexed_at
     )
     VALUES (
-      gen_random_uuid(), $1, $2, ARRAY['Root', 'Child'], 2, 'Root > Child',
+      gen_random_uuid(), $1, $2, 'Root > Child', 2, 'Root > Child',
       'chunk rpc content', 'hash-rpc', 0, $3::vector, 'text-embedding-3-small',
       $4, 'openai', false, now()
     )
@@ -182,7 +182,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk per-entry RPCs', () => {
         embedding_primary_indexed_at
       )
       VALUES (
-        gen_random_uuid(), $1, $2, ARRAY['Root', 'Child'], 2, 'Root > Child',
+        gen_random_uuid(), $1, $2, 'Root > Child', 2, 'Root > Child',
         'chunk rpc content', 'hash-rpc', 0, $3::vector, 'text-embedding-3-small',
         3, 'openai', false, now()
       )
@@ -202,7 +202,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk per-entry RPCs', () => {
       document_id: document.rows[0].id,
       path: '/rpc/chunks.md',
       title: 'Chunk RPCs',
-      heading_path: ['Root', 'Child'],
+      heading_path: 'Root > Child',
       heading_level: 2,
       breadcrumb: 'Root > Child',
       content: 'chunk rpc content',
