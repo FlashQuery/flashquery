@@ -340,7 +340,7 @@ export async function resolveCoreLifecycleWorkPlan(
   });
   const skippedAlreadyPresent =
     mode === 'backfill_embeddings'
-      ? await countAlreadyPresent(config, input.scope, embeddingName.payload)
+      ? await countSkippedAlreadyPresentForPlan(config, input, embeddingName.payload, selected.byDocument)
       : 0;
 
   return {
@@ -565,16 +565,25 @@ async function selectDocumentChunkRows(
         title,
         body: parsed.content,
       });
+      const embeddedChunkIds =
+        mode === 'backfill_embeddings'
+          ? await selectDryRunBackfillEmbeddedChunkIds(config, document.id, entry.name, chunks.map((chunk) => chunk.id))
+          : new Set<string>();
+      const rowsToProcess =
+        mode === 'backfill_embeddings'
+          ? chunks.filter((chunk) => !embeddedChunkIds.has(chunk.id))
+          : chunks;
+      const skippedAlreadyPresent = mode === 'backfill_embeddings' ? chunks.length - rowsToProcess.length : 0;
       byDocument.push({
         document_id: document.id,
         path: document.path,
-        chunks_examined: chunks.length,
+        chunks_examined: rowsToProcess.length,
         chunks_embedded: 0,
         chunks_failed: 0,
-        ...(mode === 'backfill_embeddings' ? { chunks_skipped_already_present: 0 } : {}),
+        ...(mode === 'backfill_embeddings' ? { chunks_skipped_already_present: skippedAlreadyPresent } : {}),
       });
       rows.push(
-        ...chunks.map((chunk) => ({
+        ...rowsToProcess.map((chunk) => ({
           entity_type: 'document_chunk' as const,
           id: chunk.id,
           document_id: document.id,
@@ -672,6 +681,32 @@ async function countAlreadyPresent(
   return total;
 }
 
+async function countSkippedAlreadyPresentForPlan(
+  config: FlashQueryConfig,
+  input: LifecycleBaseInput,
+  embeddingName: string,
+  byDocument: LifecycleByDocument[]
+): Promise<number> {
+  if (input.dry_run !== true) {
+    return countAlreadyPresent(config, input.scope, embeddingName);
+  }
+
+  const documentSkipped = byDocument.reduce(
+    (sum, document) => sum + (document.chunks_skipped_already_present ?? 0),
+    0
+  );
+  const nonDocumentEntities = coreEntityTypes(input.scope).filter((entity) => entity !== 'documents');
+  if (nonDocumentEntities.length === 0) {
+    return documentSkipped;
+  }
+
+  const nonDocumentScope: LifecycleScope = {
+    ...(input.scope ?? {}),
+    entity_types: nonDocumentEntities,
+  };
+  return documentSkipped + await countAlreadyPresent(config, nonDocumentScope, embeddingName);
+}
+
 async function selectScopedDocuments(
   config: FlashQueryConfig,
   scope: LifecycleScope | undefined
@@ -743,6 +778,29 @@ async function selectPersistedChunkRows(
     )
   );
   return result.rows;
+}
+
+async function selectDryRunBackfillEmbeddedChunkIds(
+  config: FlashQueryConfig,
+  documentId: string,
+  embeddingName: string,
+  chunkIds: string[]
+): Promise<Set<string>> {
+  if (chunkIds.length === 0) return new Set();
+  const result = await withPgClient(config.supabase.databaseUrl, async (client) =>
+    client.query<{ id: string }>(
+      `
+      SELECT id
+      FROM fqc_chunks
+      WHERE instance_id = $1
+        AND document_id = $2
+        AND id = ANY($3::uuid[])
+        AND ${pg.escapeIdentifier(`embedding_${embeddingName}`)} IS NOT NULL
+      `,
+      [config.instance.id, documentId, chunkIds]
+    )
+  );
+  return new Set(result.rows.map((row) => row.id));
 }
 
 async function countDocumentChunksAlreadyPresent(

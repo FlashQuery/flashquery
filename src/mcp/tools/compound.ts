@@ -1785,9 +1785,10 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           }
         }
 
-        const results = catalogFusion === 'rrf'
+        const mergedResults = catalogFusion === 'rrf'
           ? mergeRrfWithSupplementalResults(allResults, intent.limit)
           : mergeSearchResults(allResults, intent.limit);
+        const results = mergedResults.map((result) => capMatchedChunks(result, limitChunksPerResult));
         return jsonToolResult({
           query: intent.query,
           entity_types: intent.entity_types,

@@ -40,12 +40,18 @@ function makeConfig(): FlashQueryConfig {
   } as unknown as FlashQueryConfig;
 }
 
-function setupPg(rowsBySql: Array<{ match: string; rows: Record<string, unknown>[] }>): void {
+function setupPg(
+  rowsBySql: Array<{
+    match: string;
+    rows: Record<string, unknown>[] | ((params: unknown[] | undefined) => Record<string, unknown>[]);
+  }>
+): void {
   mocks.withPgClient.mockImplementation(async (_databaseUrl, callback) => {
     return await callback({
-      query: vi.fn(async (sql: string) => {
+      query: vi.fn(async (sql: string, params?: unknown[]) => {
         const found = rowsBySql.find((entry) => sql.includes(entry.match));
-        return { rows: found?.rows ?? [] };
+        const rows = typeof found?.rows === 'function' ? found.rows(params) : found?.rows;
+        return { rows: rows ?? [] };
       }),
     });
   });
@@ -127,9 +133,11 @@ describe('chunk lifecycle work planning', () => {
     ]);
   });
 
-  it('T-U-032 dry-run parses scoped documents without persisting chunks', async () => {
+  it('T-U-032 dry-run parses scoped documents without persisting chunks and counts only missing backfill vectors', async () => {
     vi.clearAllMocks();
-    mocks.readFile.mockResolvedValue('# Doc One\n\n## A\n\nalpha body');
+    const alphaBody = Array.from({ length: 120 }, () => 'alpha').join(' ');
+    const betaBody = Array.from({ length: 120 }, () => 'beta').join(' ');
+    mocks.readFile.mockResolvedValue(`# Doc One\n\n## A\n\n${alphaBody}\n\n## B\n\n${betaBody}`);
     setupPg([
       {
         match: 'FROM fqc_embeddings',
@@ -138,6 +146,10 @@ describe('chunk lifecycle work planning', () => {
       {
         match: 'FROM fqc_documents',
         rows: [{ id: 'doc-1', path: 'docs/one.md', title: 'Doc One', updated_at: '2026-06-14T00:00:00.000Z' }],
+      },
+      {
+        match: 'AND id = ANY($3::uuid[])',
+        rows: (params) => [{ id: ((params?.[2] as string[]) ?? [])[0] }],
       },
     ]);
 
@@ -158,8 +170,19 @@ describe('chunk lifecycle work planning', () => {
     if (!result.ok) throw new Error(result.error.message);
     expect(result.payload.dry_run).toBe(true);
     expect(result.payload.would_process_documents).toBe(1);
-    expect(result.payload.would_process_chunks).toBeGreaterThan(0);
-    expect(result.payload.counts.rows_examined).toBeGreaterThan(0);
+    expect(result.payload.would_process_chunks).toBe(1);
+    expect(result.payload.counts.rows_examined).toBe(1);
+    expect(result.payload.counts.rows_skipped_already_present).toBe(1);
+    expect(result.payload.by_document).toEqual([
+      {
+        document_id: 'doc-1',
+        path: 'docs/one.md',
+        chunks_examined: 1,
+        chunks_embedded: 0,
+        chunks_failed: 0,
+        chunks_skipped_already_present: 1,
+      },
+    ]);
   });
 
   it('T-U-033 caps by_document after preserving failed documents first', async () => {

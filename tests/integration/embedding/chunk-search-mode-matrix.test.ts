@@ -44,8 +44,34 @@ async function addExtraChunk(input: {
   }
 }
 
+async function addSearchMemory(input: {
+  harness: EmbeddingSearchHarness;
+  content: string;
+  vectorByEntry: Record<string, number[]>;
+}): Promise<string> {
+  const memoryId = randomUUID();
+  await input.harness.client.query(
+    `INSERT INTO fqc_memory (id, instance_id, content, tags, plugin_scope, status, is_latest)
+     VALUES ($1, $2, $3, $4, 'global', 'active', true)`,
+    [memoryId, input.harness.config.instance.id, input.content, ['search166']]
+  );
+  for (const [entryName, vector] of Object.entries(input.vectorByEntry)) {
+    await input.harness.client.query(
+      `UPDATE fqc_memory
+       SET ${pg.escapeIdentifier(`embedding_${entryName}`)} = $1::vector,
+           ${pg.escapeIdentifier(`embedding_${entryName}_model`)} = $2,
+           ${pg.escapeIdentifier(`embedding_${entryName}_dimensions`)} = $3,
+           ${pg.escapeIdentifier(`embedding_${entryName}_provider`)} = 'search-provider',
+           ${pg.escapeIdentifier(`embedding_${entryName}_truncated`)} = false
+       WHERE id = $4`,
+      [`[${vector.join(',')}]`, `model-${entryName}`, vector.length, memoryId]
+    );
+  }
+  return memoryId;
+}
+
 describe.skipIf(!HAS_SUPABASE).sequential('chunk search mode matrix', () => {
-  let harness: EmbeddingSearchHarness;
+  let harness: EmbeddingSearchHarness | undefined;
 
   beforeEach(() => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
@@ -58,6 +84,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk search mode matrix', () => {
     vi.restoreAllMocks();
     if (harness) {
       await destroyEmbeddingSearchHarness(harness, [ENTRY_PRIMARY, ENTRY_ANALYSIS]);
+      harness = undefined;
     }
   });
 
@@ -126,8 +153,87 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk search mode matrix', () => {
           [ENTRY_PRIMARY]: expect.any(String),
           [ENTRY_ANALYSIS]: expect.any(String),
         }),
+        span_start: null,
+        span_end: null,
       })
     );
+  }, 90_000);
+
+  it('T-I-025 preserves zero-active, partial retriever failure, and memory-beside-documents behavior', async () => {
+    harness = await createEmbeddingSearchHarness({
+      instanceId: 'phase-169-chunk-search-zero-active',
+      entries: [{ name: ENTRY_PRIMARY, status: 'deactivated' }],
+    });
+
+    const zeroActive = await harness.server.search({
+      query: 'inactive',
+      mode: 'semantic',
+      entity_types: ['documents'],
+    });
+    expect(parseToolJson<{ error: string; details: { reason: string } }>(zeroActive)).toMatchObject({
+      error: 'unsupported',
+      details: { reason: 'zero_active_embeddings' },
+    });
+    await destroyEmbeddingSearchHarness(harness, [ENTRY_PRIMARY]);
+    harness = undefined;
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, options) => {
+      const body = JSON.parse(String((options as RequestInit).body));
+      if (String(body.model).includes(ENTRY_ANALYSIS)) {
+        return { ok: false, status: 500, text: async () => 'provider down' } as Response;
+      }
+      return { ok: true, json: async () => ({ data: [{ embedding: [1, 0, 0] }] }) } as Response;
+    });
+    harness = await createEmbeddingSearchHarness({
+      instanceId: 'phase-169-chunk-search-preservation',
+      entries: [{ name: ENTRY_PRIMARY }, { name: ENTRY_ANALYSIS }],
+    });
+    await addSearchDocument({
+      harness,
+      path: 'chunk-preserve.md',
+      title: 'Chunk Preserve',
+      vectorByEntry: { [ENTRY_PRIMARY]: [1, 0, 0], [ENTRY_ANALYSIS]: [1, 0, 0] },
+    });
+    await addSearchMemory({
+      harness,
+      content: 'memory preserve content',
+      vectorByEntry: { [ENTRY_PRIMARY]: [1, 0, 0], [ENTRY_ANALYSIS]: [1, 0, 0] },
+    });
+
+    const result = await harness.server.search({
+      query: 'preserve',
+      mode: 'semantic',
+      entity_types: ['documents', 'memories'],
+      limit: 5,
+    });
+    const payload = parseToolJson<{
+      embeddings_queried: string[];
+      warnings: string[];
+      results: Array<{
+        entity_type: string;
+        path?: string;
+        content_preview?: string;
+        matched_chunks?: unknown[];
+      }>;
+    }>(result);
+
+    expect(payload.embeddings_queried).toEqual([ENTRY_PRIMARY]);
+    expect(payload.warnings).toContain(`partial_retriever_failure:${ENTRY_ANALYSIS}`);
+    expect(payload.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity_type: 'document',
+          path: 'chunk-preserve.md',
+          matched_chunks: [expect.objectContaining({ breadcrumb: 'Chunk Preserve' })],
+        }),
+        expect.objectContaining({
+          entity_type: 'memory',
+          content_preview: 'memory preserve content',
+        }),
+      ])
+    );
+    const memoryResult = payload.results.find((item) => item.entity_type === 'memory');
+    expect(memoryResult).not.toHaveProperty('matched_chunks');
   }, 90_000);
 
   it('T-I-027 limit_chunks_per_result caps chunks independently of document limit', async () => {
@@ -148,18 +254,76 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk search mode matrix', () => {
       content: 'extra cap content',
       vectors: { [ENTRY_PRIMARY]: [1, 0, 0] },
     });
+    await addExtraChunk({
+      harness,
+      documentId,
+      heading: 'Chunk Cap > More',
+      content: 'more cap content',
+      vectors: { [ENTRY_PRIMARY]: [1, 0, 0] },
+    });
 
     const result = await harness.server.search({
       query: 'cap',
       mode: 'semantic',
       entity_types: ['documents'],
-      limit: 1,
-      limit_chunks_per_result: 1,
+      limit: 10,
+      limit_chunks_per_result: 2,
     });
     const payload = parseToolJson<{ results: Array<{ matched_chunks: unknown[] }> }>(result);
 
     expect(payload.results).toHaveLength(1);
-    expect(payload.results[0].matched_chunks).toHaveLength(1);
+    expect(payload.results[0].matched_chunks).toHaveLength(2);
+  }, 90_000);
+
+  it('T-I-032 returns AS-BUILT memory shape beside chunked document results', async () => {
+    harness = await createEmbeddingSearchHarness({
+      instanceId: 'phase-169-chunk-search-memory-shape',
+      entries: [{ name: ENTRY_PRIMARY }],
+    });
+    await addSearchDocument({
+      harness,
+      path: 'chunk-memory-shape.md',
+      title: 'Chunk Memory Shape',
+      vectorByEntry: { [ENTRY_PRIMARY]: [1, 0, 0] },
+    });
+    await addSearchMemory({
+      harness,
+      content: 'memory shape content',
+      vectorByEntry: { [ENTRY_PRIMARY]: [1, 0, 0] },
+    });
+
+    const result = await harness.server.search({
+      query: 'shape',
+      mode: 'semantic',
+      entity_types: ['documents', 'memories'],
+      limit: 5,
+    });
+    const payload = parseToolJson<{
+      results: Array<{
+        entity_type: string;
+        memory_id?: string;
+        content_preview?: string;
+        plugin_scope?: string;
+        matched_chunks?: unknown[];
+      }>;
+    }>(result);
+
+    expect(payload.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity_type: 'document',
+          matched_chunks: [expect.objectContaining({ breadcrumb: 'Chunk Memory Shape' })],
+        }),
+        expect.objectContaining({
+          entity_type: 'memory',
+          memory_id: expect.any(String),
+          content_preview: 'memory shape content',
+          plugin_scope: 'global',
+        }),
+      ])
+    );
+    const memoryResult = payload.results.find((item) => item.entity_type === 'memory');
+    expect(memoryResult).not.toHaveProperty('matched_chunks');
   }, 90_000);
 
   it('T-U-038 returns invalid_input for invalid limit_chunks_per_result', async () => {

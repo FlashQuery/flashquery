@@ -169,6 +169,72 @@ describe.skipIf(!HAS_SUPABASE)('plugin write_record embedding routing', () => {
     });
   }, 90_000);
 
+  it('T-I-031 preserves plugin record embedding and semantic search on chunk-enabled schema', async () => {
+    harness = await createPluginRecordHarness();
+    const pluginId = 'plug_write_chunk_preserve';
+    const tableName = `fqcp_${pluginId}_default_notes`;
+    harness.tablesToDrop.add(tableName);
+    const registerResult = await harness.registerPlugin({
+      schema_yaml: pluginRecordYaml(pluginId, '*'),
+      embedding_name: 'primary',
+    }) as { isError?: boolean };
+    expect(registerResult.isError).toBeFalsy();
+
+    const chunkTable = await harness.client.query(
+      `SELECT to_regclass('public.fqc_chunks')::text AS table_name`
+    );
+    expect(chunkTable.rows[0]?.table_name).toBe('fqc_chunks');
+
+    const writeResult = await harness.writeRecord({
+      mode: 'create',
+      plugin_id: pluginId,
+      table: 'notes',
+      data: { title: 'Chunk era plugin', body: 'Semantic record survives chunking' },
+      include: ['data'],
+    }) as { isError?: boolean };
+    expect(writeResult.isError).toBeFalsy();
+    const payload = JSON.parse(textOf(writeResult)) as { id: string; warnings?: string[] };
+    expect(payload.warnings).toBeUndefined();
+
+    const rpcName = `match_records_${tableName}_primary`;
+    const rpc = await harness.client.query(
+      `SELECT to_regprocedure($1) IS NOT NULL AS exists`,
+      [`${rpcName}(vector,double precision,integer,text)`]
+    );
+    expect(rpc.rows[0]?.exists).toBe(true);
+
+    const row = await harness.client.query(
+      `SELECT embedding_primary::text AS primary_vec,
+              embedding_primary_model AS model
+       FROM ${tableName}
+       WHERE id = $1`,
+      [payload.id]
+    );
+    expect(row.rows[0]).toMatchObject({
+      primary_vec: '[0.1,0.2,0.3]',
+      model: 'primary-model',
+    });
+
+    const searchResult = await harness.searchRecords({
+      plugin_id: pluginId,
+      table: 'notes',
+      query: 'Semantic record',
+      include: ['data'],
+      max_results: 5,
+    }) as { isError?: boolean };
+    expect(searchResult.isError).toBeFalsy();
+    const searchPayload = JSON.parse(textOf(searchResult)) as {
+      results: Array<{ id: string; score?: number; data?: Record<string, unknown> }>;
+    };
+    expect(searchPayload.results).toEqual([
+      expect.objectContaining({
+        id: payload.id,
+        score: expect.any(Number),
+        data: expect.objectContaining({ title: 'Chunk era plugin' }),
+      }),
+    ]);
+  }, 90_000);
+
   it('emits a suffixed deferred warning and pending row when plugin embedding fails', async () => {
     harness = await createPluginRecordHarness();
     const pluginId = 'plug_write_deferred';
