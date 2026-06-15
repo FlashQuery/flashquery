@@ -90,29 +90,43 @@ describe.skipIf(!HAS_SUPABASE)('doctor embedding retry diagnostics', () => {
 
   it('T-I-006 reports embedding-null rows that lack pending retry state without raw embed text', async () => {
     await client.query('DELETE FROM fqc_pending_embeds WHERE instance_id = $1', [TEST_INSTANCE_ID]);
+    await client.query('DELETE FROM fqc_chunks WHERE instance_id = $1', [TEST_INSTANCE_ID]);
     await client.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]);
     await client.query('DELETE FROM fqc_memory WHERE instance_id = $1', [TEST_INSTANCE_ID]);
     await client.query('DELETE FROM fqcp_phase146_doctor_records WHERE instance_id = $1', [TEST_INSTANCE_ID]);
 
     const docGapId = '00000000-0000-4000-8000-000000000601';
     const docTrackedId = '00000000-0000-4000-8000-000000000602';
+    const chunkGapId = '00000000-0000-4000-8000-000000000605';
+    const chunkTrackedId = '00000000-0000-4000-8000-000000000606';
     const memoryGapId = '00000000-0000-4000-8000-000000000603';
     const recordGapId = '00000000-0000-4000-8000-000000000604';
-    const targetIds = [docGapId, docTrackedId, memoryGapId, recordGapId];
+    const targetIds = [docGapId, docTrackedId, chunkGapId, chunkTrackedId, memoryGapId, recordGapId];
 
     await client.query('DELETE FROM fqc_pending_embeds WHERE target_id = ANY($1::text[])', [targetIds]);
+    await client.query('DELETE FROM fqc_chunks WHERE id = ANY($1::uuid[])', [targetIds]);
     await client.query('DELETE FROM fqc_documents WHERE id = ANY($1::uuid[])', [targetIds]);
     await client.query('DELETE FROM fqc_memory WHERE id = ANY($1::uuid[])', [targetIds]);
     await client.query('DELETE FROM fqcp_phase146_doctor_records WHERE id = ANY($1::uuid[])', [targetIds]);
 
     await client.query(
       `
-      INSERT INTO fqc_documents (id, instance_id, path, title, status, embedding_${ENTRY_NAME})
+      INSERT INTO fqc_documents (id, instance_id, path, title, status)
       VALUES
-        ($1, $3, 'gap.md', 'Doctor Gap', 'active', NULL),
-        ($2, $3, 'tracked.md', 'Tracked Gap', 'active', NULL)
+        ($1, $3, 'gap.md', 'Doctor Gap', 'active'),
+        ($2, $3, 'tracked.md', 'Tracked Gap', 'active')
       `,
       [docGapId, docTrackedId, TEST_INSTANCE_ID]
+    );
+    await client.query(
+      `
+      INSERT INTO fqc_chunks
+        (id, instance_id, document_id, heading_path, heading_level, breadcrumb, content, content_hash, chunk_index, embedding_${ENTRY_NAME})
+      VALUES
+        ($1, $5, $3, 'Doctor Gap', 1, 'Doctor Gap', 'private document content that must not appear', 'hash-gap', 0, NULL),
+        ($2, $5, $4, 'Tracked Gap', 1, 'Tracked Gap', 'tracked private document content', 'hash-tracked', 0, NULL)
+      `,
+      [chunkGapId, chunkTrackedId, docGapId, docTrackedId, TEST_INSTANCE_ID]
     );
     await client.query(
       `
@@ -132,9 +146,9 @@ describe.skipIf(!HAS_SUPABASE)('doctor embedding retry diagnostics', () => {
       `
       INSERT INTO fqc_pending_embeds
         (instance_id, target_kind, target_table, target_id, embedding_name, target_label, embed_text, attempt_count, status)
-      VALUES ($1, 'document', 'fqc_documents', $2, $3, 'Tracked Gap', 'raw pending embed text', 1, 'pending')
+      VALUES ($1, 'document_chunk', 'fqc_chunks', $2, $3, 'Tracked Gap', 'raw pending embed text', 1, 'pending')
       `,
-      [TEST_INSTANCE_ID, docTrackedId, ENTRY_NAME]
+      [TEST_INSTANCE_ID, chunkTrackedId, ENTRY_NAME]
     );
 
     const result = await checkEmbeddingRetryGaps(makeConfig());
@@ -144,10 +158,13 @@ describe.skipIf(!HAS_SUPABASE)('doctor embedding retry diagnostics', () => {
     expect(result.issue).toContain('documents=1');
     expect(result.issue).toContain('memories=1');
     expect(result.issue).toContain('records=1');
-    expect(result.issue).toContain(docGapId);
+    expect(result.issue).toContain(chunkGapId);
     expect(result.issue).toContain(memoryGapId);
     expect(result.issue).toContain('fqcp_phase146_doctor_records');
+    expect(result.issue).not.toContain(docGapId);
     expect(result.issue).not.toContain(docTrackedId);
+    expect(result.issue).not.toContain(chunkTrackedId);
+    expect(result.issue).not.toContain('private document content');
     expect(result.issue).not.toContain('private memory content');
     expect(result.issue).not.toContain('private record name');
     expect(result.issue).not.toContain('raw pending embed text');

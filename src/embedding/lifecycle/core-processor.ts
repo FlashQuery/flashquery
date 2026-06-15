@@ -211,7 +211,7 @@ export async function runCoreLifecycle(
       }
 
       try {
-        const embedText = await buildEmbedText(config, row);
+        const embedText = buildEmbedText(row);
         const vector = await provider.embed(embedText);
         collectProviderWarnings(provider, warnings);
         const providerInfo = provider.getProviderInfo?.();
@@ -854,7 +854,7 @@ function countsRecord(counts: LifecycleCounts): Record<string, unknown> {
   return { ...counts };
 }
 
-async function buildEmbedText(config: FlashQueryConfig, row: CoreWorkRow): Promise<string> {
+function buildEmbedText(row: CoreWorkRow): string {
   if (row.entity_type === 'memory') {
     return row.content ?? row.label;
   }

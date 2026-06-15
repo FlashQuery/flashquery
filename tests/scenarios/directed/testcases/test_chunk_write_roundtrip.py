@@ -18,9 +18,11 @@ except Exception:  # pragma: no cover
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail  # noqa: E402
+from lifecycle_embedding_scenario_helpers import lifecycle_catalog_config  # noqa: E402
 
 TEST_NAME = "test_chunk_write_roundtrip"
 COVERAGE = ["D-chunk-1", "T-A-001"]
+EMBEDDING_NAME = "chunk_write_primary"
 
 
 def _payload(result) -> dict[str, Any]:
@@ -70,6 +72,20 @@ def _chunks_for_document(document_id: str) -> list[dict[str, Any]]:
             ]
 
 
+def _matched_chunks(payload: dict[str, Any], document_id: str) -> list[dict[str, Any]]:
+    results = payload.get("results")
+    if not isinstance(results, list):
+        return []
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        if str(result.get("fq_id") or result.get("id") or result.get("document_id") or "") != document_id:
+            continue
+        chunks = result.get("matched_chunks")
+        return [chunk for chunk in chunks if isinstance(chunk, dict)] if isinstance(chunks, list) else []
+    return []
+
+
 def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
     port_range = tuple(args.port_range) if args.port_range else None
@@ -80,11 +96,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
     with TestContext(
         fqc_dir=args.fqc_dir,
-        url=args.url,
-        secret=args.secret,
         vault_path=getattr(args, "vault_path", None),
-        managed=args.managed,
+        managed=True,
         port_range=port_range,
+        require_embedding=True,
+        extra_config=lifecycle_catalog_config(EMBEDDING_NAME),
     ) as ctx:
         create = ctx.client.call_tool(
             "write_document",
@@ -157,6 +173,25 @@ def run_test(args: argparse.Namespace) -> TestRun:
             passed=update.ok and changed_hash and contains_updated,
             detail="" if changed_hash and contains_updated else json.dumps({"before": before, "after": after}, sort_keys=True),
             timing_ms=int((time.monotonic() - t0) * 1000),
+        )
+
+        search = ctx.client.call_tool(
+            "search",
+            query=f"Updated chunk body {run.run_id}",
+            mode="semantic",
+            entity_types=["documents"],
+            limit=5,
+            limit_chunks_per_result=3,
+        )
+        search_payload = _payload(search)
+        matched_chunks = _matched_chunks(search_payload, document_id)
+        search_visible = any("Updated chunk body" in str(chunk.get("content") or "") for chunk in matched_chunks)
+        run.step(
+            "semantic search exposes updated chunk metadata in matched_chunks",
+            passed=search.ok and search_visible,
+            detail=expectation_detail(search) or search.error or json.dumps(search_payload, sort_keys=True),
+            timing_ms=search.timing_ms,
+            tool_result=search,
         )
 
         if ctx.server:

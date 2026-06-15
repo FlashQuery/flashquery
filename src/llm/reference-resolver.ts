@@ -13,15 +13,11 @@ import type { FlashQueryConfig } from '../config/types.js';
 import {
   resolveAndBuildDocument,
   DocumentRequestError,
-  type ScheduleDocumentEmbeddingInput,
 } from '../mcp/utils/document-output.js';
 import type { logger } from '../logging/logger.js';
 import type { supabaseManager } from '../storage/supabase.js';
 import type { embeddingProvider } from '../embedding/provider.js';
-import {
-  documentEmbeddingTarget,
-  scheduleBackgroundEmbeddingsForActiveEntries,
-} from '../embedding/background-embed.js';
+import { scheduleDocumentEmbedding } from '../mcp/tools/documents/helpers.js';
 import {
   isReferenceFailureReason,
   type ReferenceFailureReason,
@@ -40,28 +36,6 @@ import type {
   TemplateParamsInput,
   TemplateParamUsage,
 } from './reference-metadata.js';
-
-async function scheduleDocumentEmbedding({
-  instanceId,
-  id,
-  label,
-  embedText,
-  provider,
-  supabase,
-  config,
-  databaseUrl,
-}: ScheduleDocumentEmbeddingInput): Promise<void> {
-  if (!config) return;
-
-  await scheduleBackgroundEmbeddingsForActiveEntries({
-    config,
-    target: documentEmbeddingTarget({ instanceId, id, label }),
-    embedText,
-    supabase,
-    databaseUrl: databaseUrl ?? config.supabase.databaseUrl,
-    legacyProvider: provider,
-  });
-}
 
 function documentResolutionDeps(
   config: FlashQueryConfig,

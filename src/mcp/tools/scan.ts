@@ -4,7 +4,7 @@ import type { FlashQueryConfig } from '../../config/loader.js';
 import { maintainVault, type MaintainVaultInput } from '../../services/maintenance.js';
 import { jsonExpectedError, jsonRuntimeError, jsonToolResult } from '../utils/response-formats.js';
 
-const MaintenanceActionSchema = z.enum([
+export const MAINTENANCE_ACTIONS = [
   'sync',
   'repair',
   'status',
@@ -12,7 +12,9 @@ const MaintenanceActionSchema = z.enum([
   'rebuild_embeddings',
   'retire_embedding',
   'abort',
-]);
+] as const;
+
+const MaintenanceActionSchema = z.enum(MAINTENANCE_ACTIONS);
 
 const LifecycleScopeSchema = z
   .object({

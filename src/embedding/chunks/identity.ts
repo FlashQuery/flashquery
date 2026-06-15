@@ -2,9 +2,9 @@ import { v5 as uuidv5 } from 'uuid';
 
 import type { ChunkIdentityInput } from './types.js';
 
-export const FLASHQUERY_CHUNK_NAMESPACE = '51ad35c4-4f8e-5b95-b38f-f4f3d65c7f52';
+const FLASHQUERY_CHUNK_NAMESPACE = '51ad35c4-4f8e-5b95-b38f-f4f3d65c7f52';
 
-export function chunkIdentityName(input: ChunkIdentityInput): string {
+function chunkIdentityName(input: ChunkIdentityInput): string {
   return `${input.instanceId}:${input.documentId}:${input.headingPath}:${input.chunkIndex}`;
 }
 

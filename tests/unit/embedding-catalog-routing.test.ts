@@ -9,7 +9,10 @@ describe('catalog embedding routing guards', () => {
   ])('%s routes document re-embeds through the current document embedding path', (_label, path) => {
     const source = readFileSync(path, 'utf8');
 
-    expect(source).toMatch(/scheduleChangedDocumentChunks|scheduleBackgroundEmbeddingsForActiveEntries/);
+    expect(source).toMatch(/scheduleChangedDocumentChunks|from ['"]\.\.\/mcp\/tools\/documents\/helpers\.js['"]/);
     expect(source).not.toMatch(/scheduleBackgroundEmbedding\s*\(\s*\{/);
+    expect(source).not.toContain('documentEmbeddingTarget');
+    expect(source).not.toContain('target_kind: \'document\'');
+    expect(source).not.toContain('targetTable: \'fqc_documents\'');
   });
 });

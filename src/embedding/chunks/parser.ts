@@ -94,7 +94,7 @@ function buildSectionTree(title: string, body: string): Section {
       continue;
     }
 
-    while (stack.length > 1 && stack[stack.length - 1]!.level >= heading.level) {
+    while (stack.length > 1 && stack[stack.length - 1].level >= heading.level) {
       stack.pop();
     }
 
@@ -160,8 +160,8 @@ function findHeadings(lines: string[]): Array<{ lineIndex: number; level: number
     if (headingMatch) {
       headings.push({
         lineIndex,
-        level: headingMatch[1]!.length,
-        text: headingMatch[2]!.trim(),
+        level: headingMatch[1].length,
+        text: headingMatch[2].trim(),
       });
     }
   }

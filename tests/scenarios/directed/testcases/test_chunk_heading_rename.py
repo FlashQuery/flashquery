@@ -18,9 +18,11 @@ except Exception:  # pragma: no cover
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail  # noqa: E402
+from lifecycle_embedding_scenario_helpers import lifecycle_catalog_config  # noqa: E402
 
 TEST_NAME = "test_chunk_heading_rename"
 COVERAGE = ["D-chunk-2", "T-A-002"]
+EMBEDDING_NAME = "chunk_rename_primary"
 
 
 def _payload(result) -> dict[str, Any]:
@@ -62,6 +64,22 @@ def _chunk_breadcrumbs(document_id: str) -> list[str]:
             return [str(row[0]) for row in cur.fetchall()]
 
 
+def _matched_chunk_breadcrumbs(payload: dict[str, Any], document_id: str) -> list[str]:
+    results = payload.get("results")
+    if not isinstance(results, list):
+        return []
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        if str(result.get("fq_id") or result.get("id") or result.get("document_id") or "") != document_id:
+            continue
+        chunks = result.get("matched_chunks")
+        if not isinstance(chunks, list):
+            return []
+        return [str(chunk.get("breadcrumb") or "") for chunk in chunks if isinstance(chunk, dict)]
+    return []
+
+
 def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
     port_range = tuple(args.port_range) if args.port_range else None
@@ -74,11 +92,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
     with TestContext(
         fqc_dir=args.fqc_dir,
-        url=args.url,
-        secret=args.secret,
         vault_path=getattr(args, "vault_path", None),
-        managed=args.managed,
+        managed=True,
         port_range=port_range,
+        require_embedding=True,
+        extra_config=lifecycle_catalog_config(EMBEDDING_NAME),
     ) as ctx:
         create = ctx.client.call_tool(
             "write_document",
@@ -139,6 +157,26 @@ def run_test(args: argparse.Namespace) -> TestRun:
             passed=update.ok and stale_removed and replacement_present,
             detail="" if stale_removed and replacement_present else json.dumps({"before": before, "after": after}, sort_keys=True),
             timing_ms=int((time.monotonic() - t0) * 1000),
+        )
+
+        search = ctx.client.call_tool(
+            "search",
+            query=f"Stable chunk body {run.run_id}",
+            mode="semantic",
+            entity_types=["documents"],
+            limit=5,
+            limit_chunks_per_result=3,
+        )
+        search_payload = _payload(search)
+        matched_breadcrumbs = _matched_chunk_breadcrumbs(search_payload, document_id)
+        search_stale_removed = not any(old_heading in breadcrumb for breadcrumb in matched_breadcrumbs)
+        search_replacement_present = any(new_heading in breadcrumb for breadcrumb in matched_breadcrumbs)
+        run.step(
+            "semantic search omits stale old-heading matched chunks",
+            passed=search.ok and search_stale_removed and search_replacement_present,
+            detail=expectation_detail(search) or search.error or json.dumps(search_payload, sort_keys=True),
+            timing_ms=search.timing_ms,
+            tool_result=search,
         )
 
         if ctx.server:

@@ -208,7 +208,7 @@ async function queryDocumentEmbeddingGaps(
   embeddingNames: string[]
 ): Promise<string[]> {
   if (embeddingNames.length === 0) {
-    return queryLegacyCoreEmbeddingGaps(databaseUrl, instanceId, 'fqc_documents', 'd', 'document');
+    return [];
   }
 
   const gaps: string[] = [];
@@ -218,20 +218,23 @@ async function queryDocumentEmbeddingGaps(
     const { rows } = await queryPgPool<{ id: string }>(
       databaseUrl,
       `
-      SELECT d.id::text AS id
-      FROM fqc_documents d
+      SELECT c.id::text AS id
+      FROM fqc_chunks c
+      JOIN fqc_documents d
+        ON d.id = c.document_id
+       AND d.instance_id = c.instance_id
       LEFT JOIN fqc_pending_embeds p
-        ON p.instance_id = d.instance_id
-       AND p.target_kind = 'document'
-       AND p.target_table = 'fqc_documents'
-       AND p.target_id = d.id::text
+        ON p.instance_id = c.instance_id
+       AND p.target_kind = 'document_chunk'
+       AND p.target_table = 'fqc_chunks'
+       AND p.target_id = c.id::text
        AND p.embedding_name = $2
        AND p.status = 'pending'
-      WHERE d.instance_id = $1
+      WHERE c.instance_id = $1
         AND d.status = 'active'
-        AND d.${column} IS NULL
+        AND c.${column} IS NULL
         AND p.id IS NULL
-      ORDER BY d.id
+      ORDER BY c.document_id, c.chunk_index, c.id
       LIMIT 20
       `,
       [instanceId, embeddingName]

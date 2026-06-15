@@ -3,7 +3,6 @@ import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { extname, join, relative } from 'node:path';
 import matter from 'gray-matter';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { FM } from '../constants/frontmatter-fields.js';
 import { logger } from '../logging/logger.js';
 
@@ -69,47 +68,4 @@ export async function parseDocMeta(vaultRoot: string, relativePath: string): Pro
     logger.warn(`search_documents: skipping malformed file ${relativePath}`);
     return null;
   }
-}
-
-export async function reconcileMissingRow(
-  vaultRoot: string,
-  fqcId: string,
-  oldPath: string,
-  supabase: SupabaseClient,
-  extensions: string[] = ['.md']
-): Promise<string | null> {
-  const allFiles = await listMarkdownFiles(vaultRoot, extensions);
-  let newPath: string | null = null;
-  for (const candidate of allFiles) {
-    try {
-      const raw = await readFile(join(vaultRoot, candidate), 'utf-8');
-      const { data: fm } = matter(raw);
-      if (fm[FM.ID] === fqcId) {
-        newPath = candidate;
-        break;
-      }
-    } catch {
-      // skip unreadable files
-    }
-  }
-
-  if (newPath) {
-    logger.info(
-      `search_documents: file moved — updating path from "${oldPath}" to "${newPath}" for fqc_id=${fqcId}`
-    );
-    await supabase
-      .from('fqc_documents')
-      .update({ path: newPath, updated_at: new Date().toISOString() })
-      .eq('id', fqcId);
-    return newPath;
-  }
-
-  logger.info(
-    `search_documents: vault file missing and not found in vault scan — marking fqc_id=${fqcId} as missing`
-  );
-  await supabase
-    .from('fqc_documents')
-    .update({ status: 'missing', updated_at: new Date().toISOString() })
-    .eq('id', fqcId);
-  return null;
 }

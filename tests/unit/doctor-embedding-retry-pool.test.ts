@@ -39,7 +39,7 @@ describe('doctor embedding retry diagnostics pg usage', () => {
   it('uses the shared pg pool for document, memory, and record gap queries', async () => {
     pgClientMock.queryPgPool
       .mockResolvedValueOnce({ rows: [{ name: 'primary' }], rowCount: 1 })
-      .mockResolvedValueOnce({ rows: [{ id: 'doc-1' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'chunk-1' }], rowCount: 1 })
       .mockResolvedValueOnce({ rows: [], rowCount: 0 })
       .mockResolvedValueOnce({
         rows: [{ table_name: 'fqcp_doctor_records', embedding_name: 'primary', column_name: 'embedding_primary' }],
@@ -50,7 +50,7 @@ describe('doctor embedding retry diagnostics pg usage', () => {
     const result = await checkEmbeddingRetryGaps(makeConfig());
 
     expect(result.passed).toBe(false);
-    expect(result.issue).toContain('documents=1 [doc-1]');
+    expect(result.issue).toContain('documents=1 [chunk-1]');
     expect(result.issue).toContain('records=1 [fqcp_doctor_records:rec-1]');
     expect(pgClientMock.createPgClientIPv4).not.toHaveBeenCalled();
     expect(pgClientMock.queryPgPool).toHaveBeenCalledTimes(5);
@@ -63,7 +63,7 @@ describe('doctor embedding retry diagnostics pg usage', () => {
     expect(pgClientMock.queryPgPool).toHaveBeenNthCalledWith(
       2,
       'postgres://user:pass@localhost:5432/fq',
-      expect.stringContaining('FROM fqc_documents d'),
+      expect.stringMatching(/FROM fqc_chunks c[\s\S]*target_kind = 'document_chunk'[\s\S]*target_table = 'fqc_chunks'/),
       ['doctor-pool-test', 'primary']
     );
     expect(pgClientMock.queryPgPool).toHaveBeenNthCalledWith(

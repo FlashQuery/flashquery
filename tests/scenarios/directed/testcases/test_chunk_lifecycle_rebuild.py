@@ -16,7 +16,7 @@ from lifecycle_embedding_scenario_helpers import cli_main, db_url, first_action,
 from fqc_test_utils import TestContext, TestRun, expectation_detail  # noqa: E402
 
 TEST_NAME = "test_chunk_lifecycle_rebuild"
-COVERAGE = ["D-chunk-4"]
+COVERAGE = ["D-chunk-4", "T-A-004"]
 EMBEDDING_NAME = "chunk_lifecycle_primary"
 
 
@@ -100,23 +100,20 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not document_id:
             return run
 
-        update = ctx.client.call_tool(
-            "write_document",
-            mode="update",
-            identifier=document_id,
-            content=f"## {new_heading}\n\nRebuild lifecycle body {suffix}.",
+        vault_file = Path(ctx.vault.vault_root) / doc_path
+        vault_file.write_text(
+            vault_file.read_text(encoding="utf-8").replace(old_heading, new_heading),
+            encoding="utf-8",
         )
         before_rebuild = _chunk_rows(ctx, document_id)
-        stale_removed = not any(old_heading in str(row.get("breadcrumb")) for row in before_rebuild)
-        replacement_present = any(new_heading in str(row.get("breadcrumb")) for row in before_rebuild)
+        stale_still_present = any(old_heading in str(row.get("breadcrumb")) for row in before_rebuild)
+        replacement_not_yet_present = not any(new_heading in str(row.get("breadcrumb")) for row in before_rebuild)
         run.step(
-            "public update removes stale old-heading chunks before rebuild",
-            passed=update.ok and stale_removed and replacement_present,
-            detail=expectation_detail(update) or update.error or json.dumps(before_rebuild, sort_keys=True),
-            timing_ms=update.timing_ms,
-            tool_result=update,
+            "out-of-band heading edit leaves stale chunk rows for rebuild",
+            passed=stale_still_present and replacement_not_yet_present,
+            detail="" if stale_still_present and replacement_not_yet_present else json.dumps(before_rebuild, sort_keys=True),
         )
-        if not update.ok:
+        if not (stale_still_present and replacement_not_yet_present):
             return run
 
         _stamp_stale_chunk_vectors(ctx, document_id)
@@ -139,9 +136,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
             and int(by_doc.get("chunks_embedded") or 0) >= 1
             and all(row.get("model") and row.get("model") != "stale-model" for row in after)
             and not any(old_heading in str(row.get("breadcrumb")) for row in after)
+            and any(new_heading in str(row.get("breadcrumb")) for row in after)
         )
         run.step(
-            "maintain_vault rebuild refreshes restructured chunks without old headings",
+            "maintain_vault rebuild deletes stale old-heading chunks and embeds replacements",
             passed=passed,
             detail=expectation_detail(rebuild) or rebuild.error or json.dumps(
                 {"payload": payload, "after": after},

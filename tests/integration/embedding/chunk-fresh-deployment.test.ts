@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import pg from 'pg';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -10,6 +10,7 @@ import { syncEmbeddingCatalog } from '../../../src/embedding/embedding-config-sy
 import { initLogger } from '../../../src/logging/logger.js';
 import { registerCompoundTools } from '../../../src/mcp/tools/compound.js';
 import { registerDocumentTools } from '../../../src/mcp/tools/documents.js';
+import { MAINTENANCE_ACTIONS } from '../../../src/mcp/tools/scan.js';
 import { initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
 import { initVault } from '../../../src/storage/vault.js';
 import { setupTestSupabase } from '../../helpers/supabase.js';
@@ -239,9 +240,17 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk fresh deployment guards', () =>
   });
 
   it('T-I-013 no maintain_vault cleanup action is registered for legacy document vectors', async () => {
-    const scanSource = await readFile(resolve(__dirname, '../../../src/mcp/tools/scan.ts'), 'utf8');
-    expect(scanSource).not.toContain('cleanup_document_vectors');
-    expect(scanSource).not.toContain('legacy_document_vectors');
-    expect(scanSource).not.toContain('document_vectors');
+    expect(MAINTENANCE_ACTIONS).toEqual([
+      'sync',
+      'repair',
+      'status',
+      'backfill_embeddings',
+      'rebuild_embeddings',
+      'retire_embedding',
+      'abort',
+    ]);
+    expect(MAINTENANCE_ACTIONS).not.toEqual(expect.arrayContaining([
+      expect.stringMatching(/document.*vector|vector.*document|legacy/i),
+    ]));
   });
 });

@@ -15,14 +15,14 @@ export interface DocumentChunkDiff {
   chunksNeedingEmbedding: ParsedChunk[];
 }
 
-export type ChunkStoreOperationKind = 'begin' | 'select' | 'insert' | 'update' | 'delete' | 'commit';
+type ChunkStoreOperationKind = 'begin' | 'select' | 'insert' | 'update' | 'delete' | 'commit';
 
 export interface ChunkStoreOperation {
   kind: ChunkStoreOperationKind;
   count: number;
 }
 
-export interface ChunkStorePgClient {
+interface ChunkStorePgClient {
   connect?(): Promise<unknown>;
   end?(): Promise<void>;
   query<Row = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<{ rows: Row[] }>;

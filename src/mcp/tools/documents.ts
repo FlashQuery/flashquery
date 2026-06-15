@@ -1,6 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
-import { reconcileMissingRow } from '../../storage/document-primitives.js';
 import { createDocumentToolDeps } from './documents/deps.js';
 import { registerWriteDocumentTool } from './documents/write.js';
 import { registerGetDocumentTool } from './documents/get.js';
@@ -13,7 +12,6 @@ export {
   computeHash,
   listMarkdownFiles,
   parseDocMeta,
-  reconcileMissingRow,
   type DocMeta,
 } from '../../storage/document-primitives.js';
 
@@ -21,7 +19,7 @@ export {
  * Shared semantic document search helper. Used by search_documents and search_all.
  * Returns raw RPC results with reconciliation applied.
  */
-export async function searchDocumentsSemantic(
+export function searchDocumentsSemantic(
   config: FlashQueryConfig,
   query: string,
   opts: {
@@ -34,7 +32,7 @@ export async function searchDocumentsSemantic(
   void config;
   void query;
   void opts;
-  throw new Error('Legacy whole-document semantic search is retired; use chunk catalog search instead.');
+  return Promise.reject(new Error('Legacy whole-document semantic search is retired; use chunk catalog search instead.'));
 }
 
 export function registerDocumentTools(server: McpServer, config: FlashQueryConfig): void {

@@ -120,6 +120,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk maintain_vault lifecycle integr
     providerState.failOn = '';
     await cleanup(client);
     await insertCatalog(client);
+    await createCoreEmbeddingColumnSet(config, config.embeddings![0]);
   });
 
   afterAll(async () => {
@@ -194,7 +195,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk maintain_vault lifecycle integr
       client,
       vaultPath,
       'chunks/lifecycle-stale.md',
-      `# Lifecycle Stale\n\n## Alpha\n\n${LONG_BODY}\n\n## Beta\n\n${LONG_BODY}`
+      `# Lifecycle Stale\n\n## Alpha\n\n${LONG_BODY}\n\n## Beta\n\n${LONG_BODY}\n\n## Gamma\n\n${LONG_BODY}`
     );
     await runBackfillEmbeddings(config, {
       action: 'backfill_embeddings',
@@ -214,6 +215,12 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk maintain_vault lifecycle integr
        WHERE instance_id = $1 AND document_id = $2 AND heading_path LIKE '%Beta%'`,
       [TEST_INSTANCE_ID, documentId]
     );
+    await client.query(
+      `UPDATE fqc_chunks
+       SET embedding_primary_model = NULL
+       WHERE instance_id = $1 AND document_id = $2 AND heading_path LIKE '%Gamma%'`,
+      [TEST_INSTANCE_ID, documentId]
+    );
 
     const result = await runRebuildEmbeddings(config, {
       action: 'rebuild_embeddings',
@@ -226,7 +233,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk maintain_vault lifecycle integr
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
-    expect(result.payload.counts.rows_examined).toBe(1);
+    expect(result.payload.counts.rows_examined).toBe(2);
   });
 
   it('T-I-023 per-chunk failures include document id, chunk id, heading path, and error', async () => {
