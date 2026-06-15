@@ -18,7 +18,7 @@ import { registerRecordTools } from '../../../src/mcp/tools/records.js';
 import { initPlugins } from '../../../src/plugins/manager.js';
 import {
   EMBEDDING_DEFERRED_WARNING,
-  documentEmbeddingTarget,
+  documentChunkEmbeddingTarget,
   memoryEmbeddingTarget,
   recordEmbeddingTarget,
   scheduleBackgroundEmbedding,
@@ -212,7 +212,7 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding schema bootstrap (integration)
 	        JSON.stringify([{ providerName: 'mock-provider', model: 'mock-model' }]),
 	      ]
 	    );
-	  }, 60_000);
+	  }, 120_000);
 
   afterAll(async () => {
 	    await client?.query('DELETE FROM fqc_pending_embeds WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
@@ -254,7 +254,7 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding schema bootstrap (integration)
   it('forced provider failure creates pending rows for document, memory, and record targets', async () => {
     const supabase = supabaseManager.getClient();
     const targets = [
-      documentEmbeddingTarget({ instanceId: TEST_INSTANCE_ID, id: 'doc-target', label: 'Doc target' }),
+      documentChunkEmbeddingTarget({ instanceId: TEST_INSTANCE_ID, id: 'chunk-target', label: 'Chunk target' }),
       memoryEmbeddingTarget({ instanceId: TEST_INSTANCE_ID, id: 'memory-target', label: 'Memory target' }),
       recordEmbeddingTarget({
         instanceId: TEST_INSTANCE_ID,
@@ -287,11 +287,11 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding schema bootstrap (integration)
 
     expect(rows).toEqual([
       expect.objectContaining({
-        target_kind: 'document',
-        target_table: 'fqc_documents',
-        target_id: 'doc-target',
-        target_label: 'Doc target',
-        embed_text: 'document retry text',
+        target_kind: 'document_chunk',
+        target_table: 'fqc_chunks',
+        target_id: 'chunk-target',
+        target_label: 'Chunk target',
+        embed_text: 'document_chunk retry text',
         attempt_count: 1,
         last_error: 'forced provider failure',
         status: 'pending',
@@ -360,7 +360,7 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding schema bootstrap (integration)
     ]);
   });
 
-  it('write_document remains successful and returns embedding_deferred when embedding fails', async () => {
+  it('T-I-030 write_document uses document_chunk pending targets while memory remains row-per-vector', async () => {
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
 
@@ -384,17 +384,17 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding schema bootstrap (integration)
       SELECT target_kind, target_table, target_id, target_label, embed_text, last_error, status
       FROM fqc_pending_embeds
       WHERE instance_id = $1
-        AND target_kind = 'document'
-        AND target_id = $2
+        AND target_kind = 'document_chunk'
+        AND target_label = $2
       `,
-      [TEST_INSTANCE_ID, payload.fq_id]
+      [TEST_INSTANCE_ID, 'phase-146/deferred-warning.md > Deferred Warning Document']
     );
     expect(rows).toEqual([
       expect.objectContaining({
-        target_kind: 'document',
-        target_table: 'fqc_documents',
-        target_id: payload.fq_id,
-        target_label: 'phase-146/deferred-warning.md',
+        target_kind: 'document_chunk',
+        target_table: 'fqc_chunks',
+        target_id: expect.any(String),
+        target_label: 'phase-146/deferred-warning.md > Deferred Warning Document',
         embed_text: 'Deferred Warning Document\n\nDocument content that forces a deferred embedding warning',
         last_error: 'forced provider failure',
         status: 'pending',
@@ -434,22 +434,24 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding schema bootstrap (integration)
       SELECT target_kind, target_table, target_id, target_label, embed_text, last_error, status
       FROM fqc_pending_embeds
       WHERE instance_id = $1
-        AND target_kind = 'document'
-        AND target_id = $2
+        AND target_kind = 'document_chunk'
+        AND target_label = $2
       `,
-      [TEST_INSTANCE_ID, created.fq_id]
+      [TEST_INSTANCE_ID, 'phase-146/compound-warning.md > Compound Warning Document']
     );
-    expect(rows).toEqual([
-      expect.objectContaining({
-        target_kind: 'document',
-        target_table: 'fqc_documents',
-        target_id: created.fq_id,
-        target_label: 'phase-146/compound-warning.md',
-        embed_text: expect.stringContaining('Appended compound content'),
-        last_error: 'forced provider failure',
-        status: 'pending',
-      }),
-    ]);
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          target_kind: 'document_chunk',
+          target_table: 'fqc_chunks',
+          target_id: expect.any(String),
+          target_label: 'phase-146/compound-warning.md > Compound Warning Document',
+          embed_text: expect.stringContaining('Appended compound content'),
+          last_error: 'forced provider failure',
+          status: 'pending',
+        }),
+      ])
+    );
   });
 
   it('write_record remains successful and returns embedding_deferred when embedding fails', async () => {

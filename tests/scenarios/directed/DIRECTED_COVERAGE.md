@@ -2099,3 +2099,9 @@ Behaviors verifying the `call_model` and `get_llm_usage` MCP tools introduced in
 | D-119 | T-S-020 / REQ-041: mixed lifecycle scope applies top-level `embedding_name` to core rows while records use frozen plugin choices; pure-records rebuild derives/refuses confirm deterministically. | test_records_scope_mixed | 2026-06-11 | 2026-06-11 |
 | D-120 | T-S-021 / REQ-042: first-time enablement recipe backfills a configured embedding catalog and verifies semantic document/memory search. | test_first_time_enablement | 2026-06-11 | 2026-06-11 |
 | D-121 | T-S-022 / REQ-043: legacy schema reset recipe removes singular embedding artifacts, backfills the new catalog, and verifies semantic search. | test_legacy_schema_reset | 2026-06-11 | 2026-06-11 |
+
+## Phase 169 Embedding Chunks Lifecycle Search And Deployment Verification
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| D-chunk-5 | T-A-008 / REQ-CHUNK-015: public memory and plugin embedding workflows still work after document semantic search moves to chunk `matched_chunks`. | test_chunk_preserves_memory_plugin_embeddings | 2026-06-14 | 2026-06-14 |

@@ -125,7 +125,13 @@ Note: Test Plan §4.10.6 reserved `IS-09`, `IS-10`, `IS-11`, and `IA-09`; the li
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
 | IS-15 | T-Y-001: pooled record vector SQL supports concurrent `write_record` embed_fields writes and semantic `search_records` results with scores. | record_embed_pool_concurrency | 2026-06-03   | 2026-06-03   |
-| IS-50 | T-Y-001 / REQ-042: first-time embedding enablement recipe leaves documents and memories discoverable through semantic search. | embedding_first_time_enablement_search | 2026-06-11   | 2026-06-11   |
+| IS-50 | T-Y-001 / REQ-042: first-time embedding enablement recipe leaves documents and memories discoverable through semantic search. | embedding_first_time_enablement_search | 2026-06-14   | 2026-06-14   |
+
+## Phase 169 Embedding Chunks Lifecycle Search And Deployment Verification
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| IS-chunk-3 | T-A-007 / REQ-CHUNK-014: first-time embedding enablement returns document semantic results with non-empty `matched_chunks`. | embedding_first_time_enablement_search | 2026-06-14   | 2026-06-14   |
 
 ## Phase 160 Vault Write Coherency Folder Locks
 

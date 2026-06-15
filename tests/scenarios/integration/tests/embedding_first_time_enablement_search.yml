@@ -6,7 +6,7 @@ description: >
   cannot express a portable cross-entity relative ranking check for provider-
   dependent semantic scores; ranking remains covered by lower-level search/RRF
   tests and this scenario documents that limitation for IS-50.
-coverage: [IS-50]
+coverage: [IS-50, IS-chunk-3]
 deps: [embeddings]
 server_modes: [managed]
 extra_config:
@@ -57,6 +57,20 @@ steps:
         path: results
         value:
           match_source: [semantic]
+      expect_json_equals:
+        path: embeddings_queried
+        value: [primary]
+
+  - label: "Document semantic search returns matched chunks"
+    assert:
+      op: search
+      args:
+        query: "Calypso enablement recipe document semantic retrieval"
+        entity_types: [documents]
+      expect_path: "embedding/first-time-enable.md"
+      expect_json_array_length:
+        path: results[0].matched_chunks
+        equals: 1
       expect_json_equals:
         path: embeddings_queried
         value: [primary]
