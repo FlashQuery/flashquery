@@ -182,7 +182,7 @@ export async function checkEmbeddingRetryGaps(config: FlashQueryConfig): Promise
       name: 'Embedding retry coverage',
       passed: false,
       issue: err instanceof Error ? err.message : String(err),
-      fix: 'Verify DATABASE_URL has access to fqc_documents, fqc_memory, plugin record tables, and fqc_pending_embeds.',
+      fix: 'Verify DATABASE_URL has access to fqc_chunks, fqc_documents, fqc_memory, plugin record tables, and fqc_pending_embeds.',
     };
   }
 }
