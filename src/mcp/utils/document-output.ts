@@ -469,12 +469,20 @@ export async function resolveAndBuildDocument(
     const docTitle = typeof data[FM.TITLE] === 'string' ? (data[FM.TITLE] as string) : relativePath;
     const now = new Date().toISOString();
     log.debug(`get_document: stale hash detected for ${relativePath} — queuing background re-embed`);
-    const { error: hashErr } = await sm.getClient()
+    const { data: updatedRows, error: hashErr } = await sm.getClient()
       .from('fqc_documents')
       .update({ content_hash: versionToken, updated_at: now })
-      .eq('id', fqcId);
+      .eq('id', fqcId)
+      .select('id');
     if (hashErr) {
       log.warn(`get_document: hash update failed for ${relativePath}: ${hashErr.message}`);
+    } else if (!updatedRows || updatedRows.length === 0) {
+      // No fqc_documents row for this id yet (e.g. a frontmatter-less file read
+      // before a scan has persisted it). Scheduling chunk embeds here would insert
+      // fqc_chunks rows referencing a non-existent parent and violate the FK
+      // constraint, failing the read. Skip read-triggered re-embedding — the next
+      // vault scan persists the document row and its chunks.
+      log.debug(`get_document: no fqc_documents row for ${relativePath} (id=${fqcId}) — skipping read-triggered re-embed`);
     } else {
       await deps.scheduleDocumentEmbedding({
         instanceId: cfg.instance.id,
