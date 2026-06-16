@@ -55,10 +55,12 @@ import sys
 import time
 from pathlib import Path
 
-# Add the framework directory to the path for shared imports
+# Add the testcases dir (for the shared lifecycle helper) and framework dir to the path.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
-from fqc_test_utils import TestContext, TestRun, expectation_detail
+from fqc_test_utils import TestContext, TestRun, expectation_detail  # noqa: E402
+from lifecycle_embedding_scenario_helpers import lifecycle_catalog_config  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +101,25 @@ def _track_created(ctx, result_text: str) -> tuple[str, str]:
     if fqc_id:
         ctx.cleanup.track_mcp_document(fqc_id)
     return fqc_id, path
+
+
+def _has_matched_chunks(result, title: str) -> tuple[bool, str]:
+    """Chunk-model check (REQ-CHUNK-012/013): the document semantic hit is
+    document-centric and carries a non-empty matched_chunks list."""
+    try:
+        payload = __import__("json").loads(result.text)
+    except Exception:
+        return False, "semantic response was not JSON"
+    results = payload.get("results") if isinstance(payload, dict) else None
+    if not isinstance(results, list) or not results:
+        return False, "no results array in semantic response"
+    for item in results:
+        if isinstance(item, dict) and item.get("title") == title:
+            mc = item.get("matched_chunks")
+            if isinstance(mc, list) and len(mc) >= 1:
+                return True, f"matched_chunks present (n={len(mc)})"
+            return False, f"document hit but matched_chunks missing/empty: {mc!r}"
+    return False, f"document titled {title!r} not in semantic results"
 
 
 def _looks_like_graceful_fallback(result) -> tuple[bool, str]:
@@ -184,11 +205,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
     with TestContext(
         fqc_dir=args.fqc_dir,
-        # Always start a dedicated managed server — require_embedding=True
-        # configures the embedding provider; the shared suite server has none.
+        # Always start a dedicated managed server. require_embedding=True wires the
+        # provider; extra_config registers an active catalog entry so the chunk
+        # migration's document semantic search (match_chunks_<name>) has a catalog.
+        # Without an active entry, semantic doc search returns chunk_catalog_required.
         managed=True,
         port_range=port_range,
         require_embedding=True,
+        extra_config=lifecycle_catalog_config("primary"),
     ) as ctx:
 
         # ── Step 1a: Create Doc A via MCP ────────────────────────────
@@ -272,11 +296,16 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         sem_result.expect_count_gte(1)
         sem_result.expect_contains(title_a)
+        # Document semantic search now routes through chunks: the document row
+        # must carry a non-empty matched_chunks list (REQ-CHUNK-012/013).
+        chunks_ok, chunks_detail = _has_matched_chunks(sem_result, title_a)
 
         run.step(
-            label="search_documents mode='semantic' surfaces Doc A (S-07)",
-            passed=(sem_result.ok and sem_result.status == "pass"),
-            detail=expectation_detail(sem_result) or sem_result.error or "",
+            label="search_documents mode='semantic' surfaces Doc A with matched_chunks (S-07)",
+            passed=(sem_result.ok and sem_result.status == "pass" and chunks_ok),
+            detail="; ".join(
+                p for p in (expectation_detail(sem_result) or sem_result.error or "", chunks_detail) if p
+            ),
             timing_ms=sem_result.timing_ms,
             tool_result=sem_result,
             server_logs=step_logs,

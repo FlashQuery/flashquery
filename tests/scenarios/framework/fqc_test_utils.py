@@ -179,7 +179,9 @@ class FQCServer:
     regardless of how the test exits.
     """
 
-    DEFAULT_READY_TIMEOUT = 60  # seconds — allow time for LLM config sync to remote Supabase
+    DEFAULT_READY_TIMEOUT = 120  # seconds — allow time for LLM config sync + heavier chunk-schema
+    # startup DDL (fqc_chunks + per-entry column sets + HNSW indexes + match_chunks RPCs) against a
+    # remote Supabase pooler, where each DDL statement is a separate connect/query round-trip.
     DEFAULT_SHUTDOWN_TIMEOUT = 35  # 30s FQC grace + 5s buffer
 
     def __init__(

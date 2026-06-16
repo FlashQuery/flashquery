@@ -127,8 +127,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
             tags=["fqc-test", run.run_id],
         )
         # Destinations created by copy/move are tracked explicitly for cleanup.
-        ctx.cleanup.track_file(doc_copy)
-        ctx.cleanup.track_file(doc_moved)
+        # They're created by the copy/move tools (not create_file), so they also need
+        # an mcp_identifier or their fqc_documents rows leak past strict cleanup.
+        ctx.cleanup.track_file(doc_copy, mcp_identifier=doc_copy)
+        ctx.cleanup.track_file(doc_moved, mcp_identifier=doc_moved)
         ctx.create_file(
             doc_remove,
             title="Version Token Doc To Remove",

@@ -16,6 +16,9 @@ except Exception:  # pragma: no cover
     psycopg = None  # type: ignore[assignment]
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
+# The lifecycle embedding helper lives alongside the testcases; add this dir to the
+# path so the import resolves standalone (not just when an earlier test cached it).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail  # noqa: E402
 from lifecycle_embedding_scenario_helpers import lifecycle_catalog_config  # noqa: E402

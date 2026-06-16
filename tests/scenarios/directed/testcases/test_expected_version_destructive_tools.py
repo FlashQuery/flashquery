@@ -153,7 +153,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         move_path = f"_test/{TEST_NAME}_move_{run.run_id}.md"
         move_dest = f"_test/{TEST_NAME}_moved_{run.run_id}.md"
         ctx.create_file(move_path, title="WCO Move", body="Move me.", tags=["wco"])
-        ctx.cleanup.track_file(move_dest)
+        # Destination is created by move_document (not create_file), so register it for
+        # MCP cleanup too — otherwise its fqc_documents row leaks past strict cleanup.
+        ctx.cleanup.track_file(move_dest, mcp_identifier=move_dest)
 
         # ── Step group: copy_document ────────────────────────────
         copy_path = f"_test/{TEST_NAME}_copy_{run.run_id}.md"
