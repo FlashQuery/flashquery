@@ -69,11 +69,20 @@ def _read_models(ctx, doc_ids: list[str], memory_ids: list[str]) -> list[str | N
     models: list[str | None] = []
     with psycopg.connect(db_url(ctx)) as conn:
         with conn.cursor() as cur:
-            for table, ids in (("fqc_documents", doc_ids), ("fqc_memory", memory_ids)):
-                for row_id in ids:
-                    cur.execute(f"SELECT embedding_primary_model FROM {table} WHERE id = %s", (row_id,))
-                    row = cur.fetchone()
-                    models.append(row[0] if row else None)
+            for doc_id in doc_ids:
+                cur.execute(
+                    "SELECT embedding_primary_model FROM fqc_chunks WHERE document_id = %s LIMIT 1",
+                    (doc_id,),
+                )
+                row = cur.fetchone()
+                models.append(row[0] if row else None)
+            for mem_id in memory_ids:
+                cur.execute(
+                    "SELECT embedding_primary_model FROM fqc_memory WHERE id = %s",
+                    (mem_id,),
+                )
+                row = cur.fetchone()
+                models.append(row[0] if row else None)
     return models
 
 

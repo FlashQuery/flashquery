@@ -44,10 +44,10 @@ def run_test(args: argparse.Namespace):
             passed=(
                 result.ok
                 and before["catalog_rows"] == 1
-                and len(before["columns"]) == 10
+                and len(before["columns"]) == 11
                 and counts.get("catalog_rows_deleted") == 1
                 and counts.get("tables_affected") == 2
-                and counts.get("columns_dropped") == 10
+                and counts.get("columns_dropped") == 11
                 and counts.get("indexes_dropped") == 2
                 and after == {"catalog_rows": 0, "columns": [], "indexes": [], "functions": []}
             ),

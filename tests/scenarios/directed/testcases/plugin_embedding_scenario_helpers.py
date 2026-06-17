@@ -5,6 +5,8 @@ import json
 import os
 import sys
 from pathlib import Path
+
+_DEFAULT_DIMS = int(os.environ.get("FQC_TEST_EMBEDDING_DIMENSIONS", "768"))
 from typing import Any
 
 try:
@@ -39,7 +41,7 @@ def catalog_config(entries: list[dict[str, Any]]) -> dict[str, Any]:
         "embeddings": [
             {
                 "name": entry["name"],
-                "dimensions": entry.get("dimensions", 3),
+                "dimensions": entry.get("dimensions", _DEFAULT_DIMS),
                 "endpoints": [
                     {
                         "provider_name": "catalog-provider",

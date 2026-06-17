@@ -80,13 +80,14 @@ def _clear_doc_vector(ctx, doc_id: str, name: str = "primary") -> None:
         with conn.cursor() as cur:
             cur.execute(
                 f"""
-                UPDATE fqc_documents
+                UPDATE fqc_chunks
                 SET "{base}" = NULL,
                     "{base}_model" = NULL,
                     "{base}_dimensions" = NULL,
                     "{base}_provider" = NULL,
-                    "{base}_truncated" = NULL
-                WHERE id = %s
+                    "{base}_truncated" = NULL,
+                    "{base}_indexed_at" = NULL
+                WHERE document_id = %s
                 """,
                 (doc_id,),
             )
@@ -98,7 +99,10 @@ def _doc_model(ctx, doc_id: str, name: str = "primary") -> str | None:
 
     with psycopg.connect(db_url(ctx)) as conn:
         with conn.cursor() as cur:
-            cur.execute(f'SELECT "embedding_{name}_model" FROM fqc_documents WHERE id = %s', (doc_id,))
+            cur.execute(
+                f'SELECT "embedding_{name}_model" FROM fqc_chunks WHERE document_id = %s LIMIT 1',
+                (doc_id,),
+            )
             row = cur.fetchone()
             return row[0] if row else None
 

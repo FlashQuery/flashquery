@@ -320,10 +320,12 @@ class FQCServer:
             config["llm"] = self._resolve_llm_config(env)
 
         if self.require_embedding:
+            embedding_llm_overlay, embedding_catalog = self._resolve_embedding_config(env)
             config["llm"] = self._merge_llm_config(
                 config.get("llm"),
-                self._resolve_embedding_llm_config(env),
+                embedding_llm_overlay,
             )
+            config["embeddings"] = embedding_catalog
 
         # Deep-merge any caller-supplied extra_config. Top-level keys are merged
         # at the root; nested dict keys are recursively merged; list values are replaced.
@@ -360,8 +362,8 @@ class FQCServer:
 
     # -- Embedding config --------------------------------------------------
 
-    def _resolve_embedding_llm_config(self, env: dict[str, str]) -> dict:
-        """Return test-managed embedding purpose config."""
+    def _resolve_embedding_config(self, env: dict[str, str]) -> tuple[dict, list]:
+        """Return (llm_providers_overlay, embeddings_catalog) for the embeddings catalog format."""
         mode = (
             os.environ.get("FQC_TEST_EMBEDDING_MODE")
             or env.get("FQC_TEST_EMBEDDING_MODE", "ollama_openai")
@@ -389,8 +391,7 @@ class FQCServer:
         )
 
         providers = []
-        models = []
-        purpose_models = []
+        endpoints = []
 
         if mode in {"ollama_openai", "ollama"}:
             providers.append({
@@ -399,19 +400,11 @@ class FQCServer:
                 "endpoint": ollama_url,
                 "local": True,
             })
-            models.append({
-                "name": "local-ollama-embeddings",
+            endpoints.append({
                 "provider_name": "local-ollama",
                 "model": ollama_model,
-                "type": "embedding",
-                "dimensions": dimensions,
-                "cost_per_million": {"input": 0.0, "output": 0.0},
-                "capabilities": {
-                    "tool_calling": True,
-                    "usage_on_tool_calls": True,
-                },
+                "rate_limit": {"min_delay_ms": 100},
             })
-            purpose_models.append("local-ollama-embeddings")
 
         if mode in {"ollama_openai", "openai"}:
             if not openai_api_key:
@@ -426,37 +419,26 @@ class FQCServer:
                     "endpoint": "https://api.openai.com",
                     "api_key": openai_api_key,
                 })
-                models.append({
-                    "name": "openai-embeddings",
+                endpoints.append({
                     "provider_name": "openai-embeddings",
                     "model": openai_model,
-                    "type": "embedding",
-                    "dimensions": dimensions,
-                    "cost_per_million": {"input": 0.02, "output": 0.0},
-                    "capabilities": {
-                        "tool_calling": True,
-                        "usage_on_tool_calls": True,
-                    },
                 })
-                purpose_models.append("openai-embeddings")
 
-        if not purpose_models:
+        if not endpoints:
             raise RuntimeError(
-                "Managed embedding tests could not configure an embedding model. "
+                "Managed embedding tests could not configure an embedding endpoint. "
                 "Check FQC_TEST_EMBEDDING_MODE and provider credentials."
             )
 
-        return {
-            "providers": providers,
-            "models": models,
-            "purposes": [
-                {
-                    "name": "embedding",
-                    "description": "Generates vector embeddings for semantic search.",
-                    "models": purpose_models,
-                }
-            ],
-        }
+        embeddings_catalog = [
+            {
+                "name": "primary",
+                "dimensions": dimensions,
+                "endpoints": endpoints,
+            }
+        ]
+
+        return {"providers": providers, "models": [], "purposes": []}, embeddings_catalog
 
     # -- LLM config --------------------------------------------------------
 

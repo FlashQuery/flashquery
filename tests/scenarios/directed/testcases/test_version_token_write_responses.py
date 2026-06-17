@@ -140,6 +140,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not scan.ok:
             return run
 
+        # doc_remove is cleaned up by remove_document later in the test (file+DB row deleted).
+        # doc_a and doc_b need MCP tracking so their fqc_documents rows are archived on cleanup.
+        for path in [doc_a, doc_b]:
+            resp = ctx.client.call_tool("get_document", identifiers=path)
+            fq_id = _json(resp.text).get("fq_id") if resp.ok else None
+            if fq_id:
+                ctx.cleanup.track_mcp_document(fq_id)
+
         # ── Step 1: write_document(update) carries version_token ──
         log_mark = ctx.server.log_position if ctx.server else 0
         write = ctx.client.call_tool(
@@ -269,6 +277,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
         copy_token = _doc_token(copy.text) if copy.ok else None
+        copy_fq_id = _json(copy.text).get("fq_id") if copy.ok else None
+        if copy_fq_id:
+            ctx.cleanup.track_mcp_document(copy_fq_id)
         copy_get = ctx.client.call_tool("get_document", identifiers=doc_copy, include=["body"])
         copy_get_token = _doc_token(copy_get.text) if copy_get.ok else None
         checks = {

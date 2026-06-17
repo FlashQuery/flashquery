@@ -138,19 +138,31 @@ def clear_entry_vectors(ctx: TestContext, doc_id: str, memory_id: str, name: str
     column = f"embedding_{name}"
     with psycopg.connect(db_url(ctx)) as conn:
         with conn.cursor() as cur:
-            for table, row_id in (("fqc_documents", doc_id), ("fqc_memory", memory_id)):
-                cur.execute(
-                    f"""
-                    UPDATE {table}
-                    SET {column} = NULL,
-                        {column}_model = NULL,
-                        {column}_dimensions = NULL,
-                        {column}_provider = NULL,
-                        {column}_truncated = NULL
-                    WHERE id = %s
-                    """,
-                    (row_id,),
-                )
+            cur.execute(
+                f"""
+                UPDATE fqc_chunks
+                SET {column} = NULL,
+                    {column}_model = NULL,
+                    {column}_dimensions = NULL,
+                    {column}_provider = NULL,
+                    {column}_truncated = NULL,
+                    {column}_indexed_at = NULL
+                WHERE document_id = %s
+                """,
+                (doc_id,),
+            )
+            cur.execute(
+                f"""
+                UPDATE fqc_memory
+                SET {column} = NULL,
+                    {column}_model = NULL,
+                    {column}_dimensions = NULL,
+                    {column}_provider = NULL,
+                    {column}_truncated = NULL
+                WHERE id = %s
+                """,
+                (memory_id,),
+            )
         conn.commit()
 
 
@@ -160,19 +172,31 @@ def stamp_stale_vectors(ctx: TestContext, doc_id: str, memory_id: str, name: str
     vector = "[" + ",".join(["0.001"] * dims) + "]"
     with psycopg.connect(db_url(ctx)) as conn:
         with conn.cursor() as cur:
-            for table, row_id in (("fqc_documents", doc_id), ("fqc_memory", memory_id)):
-                cur.execute(
-                    f"""
-                    UPDATE {table}
-                    SET {column} = %s::vector,
-                        {column}_model = 'stale-model',
-                        {column}_dimensions = %s,
-                        {column}_provider = 'scenario',
-                        {column}_truncated = false
-                    WHERE id = %s
-                    """,
-                    (vector, dims, row_id),
-                )
+            cur.execute(
+                f"""
+                UPDATE fqc_chunks
+                SET {column} = %s::vector,
+                    {column}_model = 'stale-model',
+                    {column}_dimensions = %s,
+                    {column}_provider = 'scenario',
+                    {column}_truncated = false,
+                    {column}_indexed_at = now()
+                WHERE document_id = %s
+                """,
+                (vector, dims, doc_id),
+            )
+            cur.execute(
+                f"""
+                UPDATE fqc_memory
+                SET {column} = %s::vector,
+                    {column}_model = 'stale-model',
+                    {column}_dimensions = %s,
+                    {column}_provider = 'scenario',
+                    {column}_truncated = false
+                WHERE id = %s
+                """,
+                (vector, dims, memory_id),
+            )
         conn.commit()
 
 
@@ -181,10 +205,12 @@ def read_stamp_models(ctx: TestContext, doc_id: str, memory_id: str, name: str =
     with psycopg.connect(db_url(ctx)) as conn:
         with conn.cursor() as cur:
             models: list[str | None] = []
-            for table, row_id in (("fqc_documents", doc_id), ("fqc_memory", memory_id)):
-                cur.execute(f"SELECT {column} FROM {table} WHERE id = %s", (row_id,))
-                row = cur.fetchone()
-                models.append(row[0] if row else None)
+            cur.execute(f"SELECT {column} FROM fqc_chunks WHERE document_id = %s LIMIT 1", (doc_id,))
+            row = cur.fetchone()
+            models.append(row[0] if row else None)
+            cur.execute(f"SELECT {column} FROM fqc_memory WHERE id = %s", (memory_id,))
+            row = cur.fetchone()
+            models.append(row[0] if row else None)
             return models
 
 
@@ -280,10 +306,10 @@ def register_plugin(ctx: TestContext, plugin_id: str, schema_yaml: str, embeddin
 
 def retire_metadata(ctx: TestContext, embedding_name: str, plugin_table: str | None = None) -> dict[str, Any]:
     base = f"embedding_{embedding_name}"
-    tables = ["fqc_documents", "fqc_memory"]
+    tables = ["fqc_chunks", "fqc_memory"]
     if plugin_table:
         tables.append(plugin_table)
-    function_names = [f"match_documents_{embedding_name}", f"match_memories_{embedding_name}"]
+    function_names = [f"match_chunks_{embedding_name}", f"match_memories_{embedding_name}"]
     if plugin_table:
         function_names.append(f"match_records_{plugin_table}_{embedding_name}"[:63])
     with psycopg.connect(db_url(ctx)) as conn:
@@ -312,10 +338,11 @@ def retire_metadata(ctx: TestContext, embedding_name: str, plugin_table: str | N
                 """
                 SELECT indexname FROM pg_indexes
                 WHERE schemaname = 'public'
+                  AND tablename = ANY(%s)
                   AND indexname LIKE %s
                 ORDER BY indexname
                 """,
-                (f"idx_%_{base}",),
+                (tables, f"idx_%_{base}"),
             )
             indexes = [row[0] for row in cur.fetchall()]
             cur.execute(
@@ -358,11 +385,19 @@ def seed_deactivated_column_set(ctx: TestContext, name: str = "retired_entry") -
                 """,
                 (ctx.server.instance_id, name, dims),
             )
-            for table in ("fqc_documents", "fqc_memory"):
-                cur.execute(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "embedding_{name}" vector({dims})')
-                cur.execute(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "embedding_{name}_model" TEXT')
-                cur.execute(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "embedding_{name}_dimensions" INT')
-                cur.execute(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "embedding_{name}_provider" TEXT')
-                cur.execute(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "embedding_{name}_truncated" BOOLEAN')
-                cur.execute(f'CREATE INDEX IF NOT EXISTS "idx_{table}_embedding_{name}" ON "{table}" USING hnsw ("embedding_{name}" vector_cosine_ops)')
+            # fqc_chunks gets 6 columns including indexed_at
+            cur.execute(f'ALTER TABLE "fqc_chunks" ADD COLUMN IF NOT EXISTS "embedding_{name}" vector({dims})')
+            cur.execute(f'ALTER TABLE "fqc_chunks" ADD COLUMN IF NOT EXISTS "embedding_{name}_model" TEXT')
+            cur.execute(f'ALTER TABLE "fqc_chunks" ADD COLUMN IF NOT EXISTS "embedding_{name}_dimensions" INT')
+            cur.execute(f'ALTER TABLE "fqc_chunks" ADD COLUMN IF NOT EXISTS "embedding_{name}_provider" TEXT')
+            cur.execute(f'ALTER TABLE "fqc_chunks" ADD COLUMN IF NOT EXISTS "embedding_{name}_truncated" BOOLEAN')
+            cur.execute(f'ALTER TABLE "fqc_chunks" ADD COLUMN IF NOT EXISTS "embedding_{name}_indexed_at" TIMESTAMPTZ')
+            cur.execute(f'CREATE INDEX IF NOT EXISTS "idx_fqc_chunks_embedding_{name}" ON "fqc_chunks" USING hnsw ("embedding_{name}" vector_cosine_ops)')
+            # fqc_memory gets 5 columns (no indexed_at)
+            cur.execute(f'ALTER TABLE "fqc_memory" ADD COLUMN IF NOT EXISTS "embedding_{name}" vector({dims})')
+            cur.execute(f'ALTER TABLE "fqc_memory" ADD COLUMN IF NOT EXISTS "embedding_{name}_model" TEXT')
+            cur.execute(f'ALTER TABLE "fqc_memory" ADD COLUMN IF NOT EXISTS "embedding_{name}_dimensions" INT')
+            cur.execute(f'ALTER TABLE "fqc_memory" ADD COLUMN IF NOT EXISTS "embedding_{name}_provider" TEXT')
+            cur.execute(f'ALTER TABLE "fqc_memory" ADD COLUMN IF NOT EXISTS "embedding_{name}_truncated" BOOLEAN')
+            cur.execute(f'CREATE INDEX IF NOT EXISTS "idx_fqc_memory_embedding_{name}" ON "fqc_memory" USING hnsw ("embedding_{name}" vector_cosine_ops)')
         conn.commit()

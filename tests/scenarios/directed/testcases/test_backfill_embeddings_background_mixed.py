@@ -80,10 +80,12 @@ def _core_models(ctx, doc_id: str, memory_id: str, embedding_name: str) -> list[
     with psycopg.connect(db_url(ctx)) as conn:
         with conn.cursor() as cur:
             values: list[str | None] = []
-            for table, row_id in (("fqc_documents", doc_id), ("fqc_memory", memory_id)):
-                cur.execute(f'SELECT "{column}" FROM "{table}" WHERE id = %s', (row_id,))
-                row = cur.fetchone()
-                values.append(row[0] if row else None)
+            cur.execute(f'SELECT "{column}" FROM fqc_chunks WHERE document_id = %s LIMIT 1', (doc_id,))
+            row = cur.fetchone()
+            values.append(row[0] if row else None)
+            cur.execute(f'SELECT "{column}" FROM fqc_memory WHERE id = %s', (memory_id,))
+            row = cur.fetchone()
+            values.append(row[0] if row else None)
             return values
 
 

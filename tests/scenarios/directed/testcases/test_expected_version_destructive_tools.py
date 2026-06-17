@@ -173,6 +173,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
             run.record_cleanup(ctx.cleanup_errors)
             return run
 
+        # remove_path is cleaned up by remove_document later in the test (file+DB row deleted).
+        # The rest need MCP tracking so their fqc_documents rows are archived on cleanup.
+        for path in [archive_path, move_path, copy_path, alias_path]:
+            resp = ctx.client.call_tool("get_document", identifiers=path)
+            fq_id = _json(resp.text).get("fq_id") if resp.ok else None
+            if fq_id:
+                ctx.cleanup.track_mcp_document(fq_id)
+
         # ── archive_document ─────────────────────────────────────
         tokens = stale_and_current(archive_path, "archive_document")
         if tokens is None:

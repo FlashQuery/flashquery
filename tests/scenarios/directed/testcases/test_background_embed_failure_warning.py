@@ -40,6 +40,18 @@ TEST_NAME = "test_background_embed_failure_warning"
 COVERAGE = ["D-69"]
 
 BROKEN_EMBEDDING_CONFIG = {
+    "embeddings": [
+        {
+            "name": "primary",
+            "dimensions": 768,
+            "endpoints": [
+                {
+                    "provider_name": "broken-embeddings",
+                    "model": "text-embedding-3-small",
+                }
+            ],
+        }
+    ],
     "llm": {
         "providers": [
             {
@@ -49,27 +61,9 @@ BROKEN_EMBEDDING_CONFIG = {
                 "api_key": "sk-test-unreachable",
             },
         ],
-        "models": [
-            {
-                "name": "broken-embed-model",
-                "provider_name": "broken-embeddings",
-                "model": "text-embedding-3-small",
-                "type": "embedding",
-                "cost_per_million": {"input": 0.02, "output": 0.0},
-                "capabilities": {
-                    "tool_calling": True,
-                    "usage_on_tool_calls": True,
-                },
-            },
-        ],
-        "purposes": [
-            {
-                "name": "embedding",
-                "description": "Intentional failure injection for D-69",
-                "models": ["broken-embed-model"],
-            },
-        ],
-    }
+        "models": [],
+        "purposes": [],
+    },
 }
 
 
@@ -118,7 +112,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         result.expect_json_equals(
             "warnings[0]",
-            "embedding_deferred",
+            "embedding_deferred:primary",
             "public JSON response includes embedding_deferred warning",
         )
 

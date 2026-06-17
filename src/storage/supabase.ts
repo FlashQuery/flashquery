@@ -1355,6 +1355,10 @@ export async function createCoreEmbeddingColumnSet(
 ): Promise<void> {
   const { url: supabaseUrl, serviceRoleKey, databaseUrl } = config.supabase;
   await ddlQuery(supabaseUrl, serviceRoleKey, buildCoreEmbeddingColumnSetDDL(entry), databaseUrl);
+  // Notify PostgREST to reload its schema cache so the newly created match_chunks_*
+  // and match_memories_* RPC functions are immediately accessible via the REST API.
+  await ddlQuery(supabaseUrl, serviceRoleKey, `SELECT pg_notify('pgrst', 'reload schema')`, databaseUrl);
+  await new Promise((resolve) => setTimeout(resolve, 300));
   logger.info(
     `Embedding catalog: ensured core column set for entry '${entry.name}' on ${CORE_EMBEDDING_TABLES.join(', ')}`
   );
