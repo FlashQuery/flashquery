@@ -164,7 +164,8 @@ async function insertChunks(
          id, instance_id, document_id, heading_path, heading_level, breadcrumb,
          content, content_hash, chunk_index, parent_chunk_id
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       ON CONFLICT (id) DO NOTHING`,
       [
         chunk.id,
         instanceId,
