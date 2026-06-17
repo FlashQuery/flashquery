@@ -399,20 +399,26 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
                   const postWriteRaw = await readFile(resolved.absPath, 'utf-8');
                   const postWriteHash = computeHash(postWriteRaw);
 
-                  const { error: updateError } = await supabase
+                  // Upsert rather than plain update so that write_document(mode="update") on
+                  // a file that exists on disk but hasn't been scanned yet still creates the
+                  // fqc_documents row. Without this, scheduleChangedDocumentChunks would receive
+                  // a documentId that has no parent row and fail with an FK violation.
+                  const { error: upsertError } = await supabase
                     .from('fqc_documents')
-                    .update({
+                    .upsert({
+                      id: fqcId,
+                      instance_id: config.instance.id,
+                      path: resolved.relativePath,
                       title: effectiveTitle,
                       tags: effectiveTags,
                       content_hash: postWriteHash,
-                      path: resolved.relativePath,
+                      status: (fm[FM.STATUS] as string | undefined) ?? 'active',
                       template_meta: extractTemplateMeta(fm),
                       updated_at: new Date().toISOString(),
-                    })
-                    .eq('id', fqcId);
-                  if (updateError) {
+                    }, { onConflict: 'id' });
+                  if (upsertError) {
                     logger.warn(
-                      `write_document(update): fqc_documents update failed for ${resolved.relativePath}: ${updateError.message}`
+                      `write_document(update): fqc_documents upsert failed for ${resolved.relativePath}: ${upsertError.message}`
                     );
                   }
 
