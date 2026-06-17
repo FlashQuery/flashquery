@@ -23,10 +23,10 @@ export function registerGetDocumentTool(server: McpServer, deps: DocumentToolDep
             'Array input always returns an array response with per-element success or error objects (the MCP call never fails on partial errors). ' +
             'String input returns a flat object response (backward compatible with Phase 107).'
           ),
-          include: z.array(z.enum(['body', 'frontmatter', 'headings']))
+          include: z.array(z.enum(['body', 'frontmatter', 'headings', 'connections']))
             .optional()
             .default(['body'])
-            .describe('Which fields to include in the response. Any combination of "body", "frontmatter", "headings". Default: ["body"].'),
+            .describe('Which fields to include in the response. Any combination of "body", "frontmatter", "headings", "connections". Default: ["body"].'),
           sections: z.array(z.string()).optional().describe(
             'Optional: heading names to extract (case-insensitive substring). Requires "body" in include. Multi-element returns sections in input order separated by blank lines; repeating a name N times returns the 1st through Nth matches.'
           ),
@@ -46,9 +46,14 @@ export function registerGetDocumentTool(server: McpServer, deps: DocumentToolDep
             'apply to the TARGET document. Pre-resolution errors (path missing, wrong type, target not found) are returned at the top level. ' +
             'Post-resolution errors (section not found, occurrence out of range) are nested under "followed_ref".'
           ),
+          connections: z.object({
+            limit: z.number().int().positive().max(200).optional().describe('Maximum unique whole-document target chunks. Default: 50.'),
+            limit_per_chunk: z.number().int().positive().max(25).optional().describe('Maximum target chunks per source chunk. Default: 5.'),
+            embedding_names: z.array(z.string()).optional().describe('Optional active embedding catalog entry names. Omit for all active entries.'),
+          }).optional().describe('Options for include:["connections"]. Uses stored source chunk vectors only and does not embed query text.'),
         },
       },
-      async ({ identifiers, include, sections, include_nested, occurrence: occurrenceParam, max_depth, follow_ref: followRef }) => {
+      async ({ identifiers, include, sections, include_nested, occurrence: occurrenceParam, max_depth, follow_ref: followRef, connections }) => {
         if (getIsShuttingDown()) {
           return {
             content: [{ type: 'text' as const, text: 'Server is shutting down; new requests cannot be processed' }],
@@ -56,7 +61,7 @@ export function registerGetDocumentTool(server: McpServer, deps: DocumentToolDep
           };
         }
         const occurrence = occurrenceParam ?? 1;
-        const effectiveInclude: Array<'body' | 'frontmatter' | 'headings'> = include && include.length > 0 ? include : ['body'];
+        const effectiveInclude: Array<'body' | 'frontmatter' | 'headings' | 'connections'> = include && include.length > 0 ? include : ['body'];
         const sectionsList = sections ?? [];
         const effectiveMaxDepth = max_depth ?? 6;
         // WR-02: explicit fallback in case MCP SDK strips the Zod .default(true)
@@ -82,6 +87,7 @@ export function registerGetDocumentTool(server: McpServer, deps: DocumentToolDep
           include: [...effectiveInclude],
           sections: sectionsList,
           occurrence,
+          connections,
         });
         if (paramError !== null) {
           return jsonExpectedError({
@@ -99,6 +105,7 @@ export function registerGetDocumentTool(server: McpServer, deps: DocumentToolDep
           occurrence,
           effectiveMaxDepth,
           followRef,
+          connections,
         };
         const deps = { config, supabaseManager, embeddingProvider, logger, scheduleDocumentEmbedding };
 

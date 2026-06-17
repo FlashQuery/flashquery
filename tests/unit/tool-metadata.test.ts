@@ -170,6 +170,7 @@ describe('tool metadata registry', () => {
     expect(description).toContain('body');
     expect(description).toContain('frontmatter');
     expect(description).toContain('headings');
+    expect(description).toContain('connections');
   });
 
   it('documents archive_document JSON identification blocks, archived_at, and idempotency', () => {

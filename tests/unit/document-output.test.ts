@@ -92,6 +92,61 @@ describe('resolveTitle (GDOC-03)', () => {
   });
 });
 
+describe('get_document connections include contract', () => {
+  it('nests semantic connection rollups only when connections is included', () => {
+    const metadata = buildMetadataEnvelope(
+      'Notes/Connections.md',
+      {
+        relativePath: 'Notes/Connections.md',
+        capturedFrontmatter: {
+          fqcId: '11111111-1111-4111-8111-111111111111',
+          contentHash: 'c'.repeat(64),
+        },
+      },
+      { fq_title: 'Connections', fq_updated: '2026-06-17T00:00:00.000Z' },
+      '## A\n\nBody'
+    );
+    const connections = {
+      overall: [
+        {
+          id: 'Other.md#chunk-2',
+          score: 0.94,
+          target: {
+            chunk_id: 'chunk-2',
+            document_id: '22222222-2222-4222-8222-222222222222',
+            path: 'Other.md',
+            title: 'Other',
+          },
+        },
+      ],
+      source_chunks: [
+        {
+          chunk_id: 'chunk-1',
+          heading_path: 'A',
+          breadcrumb: 'A',
+          connections: [],
+        },
+      ],
+    };
+
+    const withoutConnections = buildConsolidatedResponse(metadata, ['body'], {
+      body: '## A\n\nBody',
+      connections,
+    });
+    const withConnections = buildConsolidatedResponse(metadata, ['connections'], {
+      connections,
+    });
+
+    expect(withoutConnections).not.toHaveProperty('connections');
+    expect(withConnections).toMatchObject({
+      identifier: 'Notes/Connections.md',
+      connections,
+    });
+    expect(withConnections).not.toHaveProperty('overall');
+    expect(withConnections).not.toHaveProperty('source_chunks');
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // describe: buildMetadataEnvelope (GDOC-02, GDOC-07)
 // ─────────────────────────────────────────────────────────────────────────────

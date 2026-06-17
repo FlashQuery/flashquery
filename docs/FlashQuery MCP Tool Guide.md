@@ -102,28 +102,29 @@ Use `get_document` to read documents, `insert_in_doc` for anchored insertion, `r
 **Status:** final
 **Category:** doc-read
 **Tier:** read-only
-**Use when:** Reading one or more documents, extracting headings or sections, or following a frontmatter pointer.
+**Use when:** Reading one or more documents, extracting headings or sections, loading stored-vector semantic connections, or following a frontmatter pointer.
 **Do not use when:** You need search/discovery; use `search` or `list_vault`.
 
 **Behavior**
 
-`get_document` resolves each identifier as a vault-relative path, `fq_id`, or unique filename. A single string returns one flat object. An array returns an ordered array of per-document success or error objects; partial failures do not fail the outer call. By default it includes `body`. Section extraction is case-insensitive substring matching, with digit-leading queries anchored to the heading start. `follow_ref` resolves a dot-separated frontmatter path on the source document and returns the target document under `followed_ref`.
+`get_document` resolves each identifier as a vault-relative path, `fq_id`, or unique filename. A single string returns one flat object. An array returns an ordered array of per-document success or error objects; partial failures do not fail the outer call. By default it includes `body`. Section extraction is case-insensitive substring matching, with digit-leading queries anchored to the heading start. `connections` is opt-in and returns stored chunk-vector semantic links without embedding query text. `follow_ref` resolves a dot-separated frontmatter path on the source document and returns the target document under `followed_ref`.
 
 **Inputs**
 
 | Field | Type | Required | Default | Description |
 |---|---:|---:|---:|---|
 | `identifiers` | `string \| string[]` | yes | none | One or more document identifiers: path, `fq_id`, or filename. |
-| `include` | `("body" \| "frontmatter" \| "headings")[]` | no | `["body"]` | Payload sections to include. |
+| `include` | `("body" \| "frontmatter" \| "headings" \| "connections")[]` | no | `["body"]` | Payload sections to include. |
 | `sections` | `string[]` | no | none | Heading names to extract. Requires `body` in `include`. |
 | `include_nested` | `boolean` | no | `true` | Whether section extraction includes nested subsection content. |
 | `occurrence` | `number` | no | `1` | 1-indexed heading occurrence. Valid only when `sections` has exactly one element. |
 | `max_depth` | `number` | no | `6` | Heading depth for `headings`, integer 1-6. |
 | `follow_ref` | `string` | no | none | Dot path into source frontmatter whose string value is resolved as a document identifier. |
+| `connections` | `object` | no | defaults | Options for `include:["connections"]`: `limit`, `limit_per_chunk`, and `embedding_names`. Invalid unless `include` contains `connections`. |
 
 **Output**
 
-Success includes `identifier`, `title`, `path`, `fq_id`, `modified`, and `size.chars`, plus requested `body`, `frontmatter`, `headings`, and/or `followed_ref`. Expected errors use canonical JSON envelopes. `follow_ref` pre-resolution errors appear at the top level; post-resolution target errors can appear under `followed_ref`.
+Success includes `identifier`, `title`, `path`, `fq_id`, `modified`, and `size.chars`, plus requested `body`, `frontmatter`, `headings`, `connections`, and/or `followed_ref`. Expected errors use canonical JSON envelopes. `connections.overall` is the deduped outbound target-chunk rollup sorted by highest cosine similarity, and `connections.source_chunks` preserves per-source-chunk links. `follow_ref` pre-resolution errors appear at the top level; post-resolution target errors can appear under `followed_ref`.
 
 **Examples**
 

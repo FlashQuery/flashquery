@@ -43,6 +43,38 @@ describe('document tools final surface', () => {
     expect(names).not.toContain('update_document');
     expect(names).not.toContain('search_documents');
   });
+
+  it('registers get_document connections as an include-gated payload with validation', async () => {
+    let getDocumentConfig: { inputSchema?: Record<string, unknown> } | undefined;
+    let getDocumentHandler: ((params: Record<string, unknown>) => Promise<{ content: Array<{ text: string }>; isError?: boolean }>) | undefined;
+    const server = {
+      registerTool: vi.fn((name: string, config: { inputSchema?: Record<string, unknown> }, handler: typeof getDocumentHandler) => {
+        if (name === 'get_document') {
+          getDocumentConfig = config;
+          getDocumentHandler = handler;
+        }
+      }),
+    } as unknown as McpServer;
+
+    registerDocumentTools(server, makeConfig());
+
+    const includeSchema = getDocumentConfig?.inputSchema?.include as { safeParse(value: unknown): { success: boolean } } | undefined;
+    expect(includeSchema?.safeParse(['connections']).success).toBe(true);
+    expect(getDocumentConfig?.inputSchema?.connections).toBeDefined();
+
+    const result = await getDocumentHandler?.({
+      identifiers: 'Notes/Plan.md',
+      include: ['body'],
+      connections: { limit: 10 },
+    });
+    const payload = JSON.parse(result?.content[0]?.text ?? '{}') as { error?: string; details?: { conflict?: string } };
+
+    expect(result?.isError).toBe(false);
+    expect(payload).toMatchObject({
+      error: 'invalid_input',
+      details: { conflict: 'connections_without_include' },
+    });
+  });
 });
 
 describe('document primitives', () => {

@@ -101,7 +101,7 @@ describe('native tool catalog capture', () => {
     const catalog = getNativeToolCatalog(server);
 
     expect(catalog.find((tool) => tool.name === 'get_document')?.description).toBe(
-      'Read one or more vault documents with include-gated bodies, frontmatter, headings, sections, and frontmatter references. Pass {help: true} for full help.'
+      'Read one or more vault documents with include-gated bodies, frontmatter, headings, semantic connections, sections, and frontmatter references. Pass {help: true} for full help.'
     );
   });
 

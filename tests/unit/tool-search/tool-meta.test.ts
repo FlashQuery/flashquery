@@ -305,7 +305,7 @@ args: {}
     const meta = loadToolMetaSync();
 
     expect(meta.get('get_document')?.description).toBe(
-      'Read one or more vault documents with include-gated bodies, frontmatter, headings, sections, and frontmatter references. Pass {help: true} for full help.'
+      'Read one or more vault documents with include-gated bodies, frontmatter, headings, semantic connections, sections, and frontmatter references. Pass {help: true} for full help.'
     );
     expect(meta.get('call_macro')?.description).toBe(CANONICAL_CALL_MACRO_DESCRIPTION);
     expect(meta.get('search_tools')?.helpPageBody).toContain('SearchResult');

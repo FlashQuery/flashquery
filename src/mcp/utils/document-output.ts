@@ -25,6 +25,7 @@ import { computeSectionChars, extractSection, extractMultipleSections, findHeadi
 import { computeVersionToken } from './document-version.js';
 import { isValidUuid } from '../../utils/uuid.js';
 import type { FlashQueryConfig } from '../../config/types.js';
+import { buildDocumentConnections, type DocumentConnectionsOptions, type DocumentConnectionsResult } from './document-connections.js';
 
 type DocumentOutputConfig = FlashQueryConfig;
 
@@ -67,6 +68,7 @@ export interface DocumentEnvelope {
   extracted_sections?: Array<{ heading: string; chars: number }>;
   frontmatter?: Record<string, unknown>;
   headings?: Array<{ level: number; text: string; chars: number }>;
+  connections?: DocumentConnectionsResult;
   followed_ref?: FollowedRefResult;
 }
 
@@ -82,6 +84,7 @@ export interface FollowedRefResult {
   extracted_sections?: Array<{ heading: string; chars: number }>;
   frontmatter?: Record<string, unknown>;
   headings?: Array<{ level: number; text: string; chars: number }>;
+  connections?: DocumentConnectionsResult;
 }
 
 export type DocumentOutputResponse = DocumentEnvelope;
@@ -227,12 +230,13 @@ export function buildConsolidatedResponse(
     modified: string;
     size: { chars: number };
   },
-  include: Array<'body' | 'frontmatter' | 'headings'>,
+  include: Array<'body' | 'frontmatter' | 'headings' | 'connections'>,
   options: {
     body?: string;
     extractedSections?: Array<{ heading: string; chars: number }>;
     frontmatter?: Record<string, unknown>;
     headings?: Array<{ level: number; text: string; chars: number }>;
+    connections?: DocumentConnectionsResult;
   }
 ): DocumentEnvelope {
   const effectiveInclude = include && include.length > 0 ? include : ['body' as const];
@@ -249,6 +253,9 @@ export function buildConsolidatedResponse(
   if (effectiveInclude.includes('headings') && options.headings !== undefined) {
     result.headings = options.headings;
   }
+  if (effectiveInclude.includes('connections') && options.connections !== undefined) {
+    result.connections = options.connections;
+  }
   return result;
 }
 
@@ -264,11 +271,12 @@ export function validateParameterCombinations(input: {
   include?: string[];
   sections?: string[];
   occurrence?: number;
+  connections?: DocumentConnectionsOptions;
 }): {
   error: 'invalid_input';
   message: string;
   details: {
-    conflict: 'sections_without_body' | 'occurrence_with_multi_section';
+    conflict: 'sections_without_body' | 'occurrence_with_multi_section' | 'connections_without_include';
     [k: string]: unknown;
   };
 } | null {
@@ -284,6 +292,17 @@ export function validateParameterCombinations(input: {
         conflict: 'sections_without_body',
         include,
         sections,
+      },
+    };
+  }
+
+  if (input.connections !== undefined && !include.includes('connections')) {
+    return {
+      error: 'invalid_input',
+      message: 'connections options require "connections" in include',
+      details: {
+        conflict: 'connections_without_include',
+        include,
       },
     };
   }
@@ -393,12 +412,13 @@ export class DocumentRequestError extends Error {
 export async function resolveAndBuildDocument(
   identifier: string,
   options: {
-    effectiveInclude: Array<'body' | 'frontmatter' | 'headings'>;
+    effectiveInclude: Array<'body' | 'frontmatter' | 'headings' | 'connections'>;
     sectionsList: string[];
     effectiveIncludeNested: boolean;
     occurrence: number;
     effectiveMaxDepth: number;
     followRef: string | undefined;
+    connections?: DocumentConnectionsOptions;
   },
   deps: {
     config: DocumentOutputConfig;
@@ -408,7 +428,7 @@ export async function resolveAndBuildDocument(
     scheduleDocumentEmbedding(input: ScheduleDocumentEmbeddingInput): Promise<void>;
   }
 ): Promise<DocumentOutputResponse> {
-  const { effectiveInclude, sectionsList, effectiveIncludeNested, occurrence, effectiveMaxDepth, followRef } = options;
+  const { effectiveInclude, sectionsList, effectiveIncludeNested, occurrence, effectiveMaxDepth, followRef, connections } = options;
   const { config: cfg, supabaseManager: sm, embeddingProvider: ep, logger: log } = deps;
 
   const resolved = await resolveDocumentIdentifier(cfg, sm.getClient(), identifier, log);
@@ -648,6 +668,25 @@ export async function resolveAndBuildDocument(
     if (effectiveInclude.includes('headings')) {
       followedRef.headings = buildHeadingEntries(targetContent, effectiveMaxDepth);
     }
+    if (effectiveInclude.includes('connections')) {
+      if (!targetResolved.fqcId) {
+        throw new DocumentRequestError({
+          error: 'not_found',
+          message: `follow_ref target '${targetIdentifier}' is not indexed in FlashQuery yet`,
+          identifier,
+          reference: followRef,
+          resolved_value: targetIdentifier,
+        });
+      }
+      const connectionsResult = await buildDocumentConnections({
+        supabase: sm.getClient(),
+        config: cfg,
+        sourceDocumentId: targetResolved.fqcId,
+        options: connections,
+      });
+      if (connectionsResult.error) throw new DocumentRequestError(connectionsResult.error);
+      followedRef.connections = connectionsResult.result;
+    }
 
     // ── Return source envelope + followed_ref nested; NO top-level body ───────
     return { ...envelope, followed_ref: followedRef };
@@ -658,6 +697,7 @@ export async function resolveAndBuildDocument(
   let extractedSections: Array<{ heading: string; chars: number }> | undefined;
   let frontmatterField: Record<string, unknown> | undefined;
   let headingsField: Array<{ level: number; text: string; chars: number }> | undefined;
+  let connectionsField: DocumentConnectionsResult | undefined;
 
   if (effectiveInclude.includes('body')) {
     if (sectionsList.length === 1) {
@@ -719,10 +759,22 @@ export async function resolveAndBuildDocument(
     headingsField = buildHeadingEntries(content, effectiveMaxDepth);
   }
 
+  if (effectiveInclude.includes('connections')) {
+    const connectionsResult = await buildDocumentConnections({
+      supabase: sm.getClient(),
+      config: cfg,
+      sourceDocumentId: fqcId,
+      options: connections,
+    });
+    if (connectionsResult.error) throw new DocumentRequestError(connectionsResult.error);
+    connectionsField = connectionsResult.result;
+  }
+
   return buildConsolidatedResponse(envelope, [...effectiveInclude], {
     body: responseBody,
     extractedSections,
     frontmatter: frontmatterField,
     headings: headingsField,
+    connections: connectionsField,
   });
 }

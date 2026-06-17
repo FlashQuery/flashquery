@@ -63,9 +63,9 @@ function description(summary: string, useWhen: string, doNotUseWhen: string, exa
 const D = {
   getDocument: description(
     'Read one or more vault documents and return structured document data with canonical expected-error envelopes using isError:false.',
-    'Use when you need document body, frontmatter, headings, sections, reference-following behavior, or recoverable not_found/invalid_input results.',
+    'Use when you need document body, frontmatter, headings, stored-vector semantic connections, sections, reference-following behavior, or recoverable not_found/invalid_input results.',
     'Do not use when you need to create or modify documents; use write_document or the current write/edit tool instead.',
-    'get_document({ "identifier": "Projects/Plan.md", "include": ["body", "frontmatter", "headings"] })'
+    'get_document({ "identifiers": "Projects/Plan.md", "include": ["body", "frontmatter", "headings", "connections"] })'
   ),
   archiveDocument: description(
     'Archive one or more documents and return JSON document identification blocks with status:"archived" and archived_at.',
