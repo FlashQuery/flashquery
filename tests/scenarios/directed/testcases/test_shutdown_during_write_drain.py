@@ -54,6 +54,10 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+import os as _os
+_EMBED_DIM = int(_os.environ.get("FQC_TEST_EMBEDDING_DIMENSIONS", "768"))
+
+
 class DelayedEmbeddingProvider:
     """OpenAI-compatible embedding endpoint that creates a deterministic SIGTERM window."""
 
@@ -80,7 +84,7 @@ class DelayedEmbeddingProvider:
                 time.sleep(parent._delay_seconds)
                 payload = json.dumps({
                     "data": [{
-                        "embedding": [0.0] * 1536,
+                        "embedding": [0.0] * _EMBED_DIM,
                     }],
                 }).encode("utf-8")
                 self.send_response(200)
@@ -105,6 +109,9 @@ class DelayedEmbeddingProvider:
 
 
 def _embedding_config(endpoint: str) -> dict[str, Any]:
+    # The embeddings-update branch moved document embeddings from llm.models (type=embedding)
+    # to the top-level embeddings: catalog consumed by the chunk scheduler. The provider
+    # must be declared in llm.providers so the catalog endpoint can reference it.
     return {
         "llm": {
             "providers": [{
@@ -113,24 +120,17 @@ def _embedding_config(endpoint: str) -> dict[str, Any]:
                 "endpoint": endpoint,
                 "api_key": "sk-test-delayed",
             }],
-            "models": [{
-                "name": "delayed-embed-model",
+            "models": [],
+            "purposes": [],
+        },
+        "embeddings": [{
+            "name": "primary",
+            "dimensions": _EMBED_DIM,
+            "endpoints": [{
                 "provider_name": "delayed-embeddings",
                 "model": "text-embedding-3-small",
-                "type": "embedding",
-                "dimensions": 1536,
-                "cost_per_million": {"input": 0.02, "output": 0.0},
-                "capabilities": {
-                    "tool_calling": True,
-                    "usage_on_tool_calls": True,
-                },
             }],
-            "purposes": [{
-                "name": "embedding",
-                "description": "Delayed D-70 embedding provider",
-                "models": ["delayed-embed-model"],
-            }],
-        },
+        }],
     }
 
 

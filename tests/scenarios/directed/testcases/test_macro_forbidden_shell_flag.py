@@ -3,7 +3,8 @@
 Test: Macro shell forbidden mutation flags are rejected before execution.
 
 Scenario:
-    1. Invoke call_macro with sed -i.
+    1. Invoke call_macro with find -exec (REQ-068: sed -i is now allowed as a
+       vault-jailed mutation; find -exec / find -delete remain forbidden).
     2. Assert the public MCP envelope is forbidden_shell_flag with isError=false.
 
 Coverage points: ML-10
@@ -39,18 +40,18 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         result = ctx.client.call_tool(
             "call_macro",
-            source='sed -i "s/a/b/" "/notes.md"',
+            source='find "/vault" -name "*.md" -delete',
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         result.expect_json_equals("error", "forbidden_shell_flag")
         result.expect_json_equals("message", "Macro shell flag is forbidden.")
-        result.expect_json_equals("details.verb", "sed")
-        result.expect_json_equals("details.flag", "-i")
-        result.expect_json_equals("details.reason", "sed_in_place_mutates_files")
+        result.expect_json_equals("details.verb", "find")
+        result.expect_json_equals("details.flag", "-delete")
+        result.expect_json_equals("details.reason", "find_delete_mutates_files")
 
         run.step(
-            label="call_macro returns forbidden_shell_flag for sed -i",
+            label="call_macro returns forbidden_shell_flag for find -delete",
             passed=(result.ok and result.status == "pass"),
             detail=expectation_detail(result) or result.error or "",
             timing_ms=result.timing_ms,

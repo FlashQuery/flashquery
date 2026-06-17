@@ -47,7 +47,7 @@ This document defines every behavioral coverage point we want to verify through 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
 | ML-09 | MACRO-SHELL-02 / T-S-009: `call_macro` rejects shell path arguments that escape the vault jail with a `forbidden_path` expected-error envelope. | test_macro_vault_jail_escape | 2026-05-14 | 2026-06-17 |
-| ML-10 | MACRO-SHELL-03 / T-S-010: `call_macro` rejects forbidden mutation flags such as `sed -i` before execution with a `forbidden_shell_flag` expected-error envelope. | test_macro_forbidden_shell_flag | 2026-05-14 | 2026-05-14 |
+| ML-10 | MACRO-SHELL-03 / T-S-010: `call_macro` rejects forbidden mutation flags such as `sed -i` before execution with a `forbidden_shell_flag` expected-error envelope. | test_macro_forbidden_shell_flag | 2026-05-14 | 2026-06-17 |
 
 ## Phase 135 Macro Dispatch and Permissions
 
@@ -208,7 +208,7 @@ Core CRUD operations on vault documents via MCP.
 | D-47 | get_document title fallback when fq_title missing — uses file basename (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-06-17 |
 | D-48 | get_document title coercion when fq_title is a number — returns string representation (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-06-17 |
 | D-49 | get_document title trim when fq_title has leading/trailing whitespace — returns trimmed string (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-06-17 |
-| D-50 | get_document title when frontmatter completely absent — returns file basename (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-50 | get_document title when frontmatter completely absent — returns file basename (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-06-17 |
 | D-51 | get_document with array identifiers returns array output; each element succeeds independently (VALIDATED) | test_batch_get_document | 2026-05-02 | 2026-06-17 |
 | D-52 | get_document batch partial failure — one identifier not found returns error object at position; other succeeds; MCP response is not isError (VALIDATED) | test_batch_get_document | 2026-05-02 | 2026-06-17 |
 | D-gdoc-error-1 | get_document missing single identifier returns canonical JSON `not_found` envelope with `isError:false` instead of runtime failure. | test_consolidated_get_document_errors | 2026-05-12 | 2026-06-17 |
@@ -229,7 +229,7 @@ Core CRUD operations on vault documents via MCP.
 | D-66 | get_document follow_ref + multi-section partial-failure aggregation per OQ #12 — exactly 2 entries (no_match + insufficient_occurrences with requested_count/found_count) (Phase 2 Gap 6) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
 | D-67 | get_document batch + follow_ref pre-resolution error variants (follow_ref_invalid_type + follow_ref_target_not_found per element) (Phase 2 Gap 7) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
 | D-69 | T-S-002 / REQ-003: public MCP write response remains successful and includes `warnings:["embedding_deferred"]` when background embedding is deferred by provider failure. | test_background_embed_failure_warning | 2026-05-24 | 2026-06-17 |
-| D-70 | T-S-003 / REQ-009: managed server shutdown during an in-flight public MCP write drains the active request before exit and leaves the written document visible. | test_shutdown_during_write_drain | 2026-05-24 | 2026-05-24 |
+| D-70 | T-S-003 / REQ-009: managed server shutdown during an in-flight public MCP write drains the active request before exit and leaves the written document visible. | test_shutdown_during_write_drain | 2026-05-24 | 2026-06-17 |
 | D-39a | get_document follow_ref + sections without "body" in include -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
 | D-39b | get_document follow_ref + multi-element sections + occurrence -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
 | D-39c | get_document follow_ref + multi-element sections (valid) -> sections extracted from target document (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |

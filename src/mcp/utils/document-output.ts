@@ -461,8 +461,11 @@ export async function resolveAndBuildDocument(
 
   log.info(`get_document: read ${relativePath}`);
 
-  // Background re-embed when hash is stale
-  if (fqcId && (!hashRow || hashRow.content_hash !== versionToken)) {
+  // Background re-embed when hash is stale.
+  // Only schedule when hashRow exists — if the document has no fqc_documents row yet,
+  // scheduleChangedDocumentChunks would fail with an FK violation. Unindexed files
+  // pick up their first embedding when scan_vault creates the DB row.
+  if (fqcId && hashRow && hashRow.content_hash !== versionToken) {
     const docTitle = typeof data[FM.TITLE] === 'string' ? (data[FM.TITLE] as string) : relativePath;
     const now = new Date().toISOString();
     log.debug(`get_document: stale hash detected for ${relativePath} — queuing background re-embed`);
