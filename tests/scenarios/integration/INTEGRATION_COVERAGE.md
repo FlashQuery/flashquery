@@ -124,7 +124,7 @@ Note: Test Plan §4.10.6 reserved `IS-09`, `IS-10`, `IS-11`, and `IA-09`; the li
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| IS-15 | T-Y-001: pooled record vector SQL supports concurrent `write_record` embed_fields writes and semantic `search_records` results with scores. | record_embed_pool_concurrency | 2026-06-17   | 2026-06-03   |
+| IS-15 | T-Y-001: pooled record vector SQL supports concurrent `write_record` embed_fields writes and semantic `search_records` results with scores. | record_embed_pool_concurrency | 2026-06-17   | 2026-06-17   |
 | IS-50 | T-Y-001 / REQ-042: first-time embedding enablement recipe leaves documents and memories discoverable through semantic search. | embedding_first_time_enablement_search | 2026-06-17   | 2026-06-17   |
 
 ## Phase 169 Embedding Chunks Lifecycle Search And Deployment Verification
@@ -158,7 +158,7 @@ Verifies that content written through one path is discoverable through the expec
 |--------|----------------------------------------------------------------------|-----------------------------|--------------|--------------|
 | IS-01  | Create document → appears in search_documents results (VALIDATED)                 | write_then_search            | 2026-06-03   | 2026-06-03   |
 | IS-02  | Create memory → appears in search_memories results (VALIDATED)                    | write_then_search            | 2026-06-03   | 2026-06-03   |
-| IS-03  | Create document + memory → both appear in search_all results (VALIDATED)          | cross_domain_search_embeddings | 2026-06-17   | 2026-06-03   |
+| IS-03  | Create document + memory → both appear in search_all results (VALIDATED)          | cross_domain_search_embeddings | 2026-06-17   | 2026-06-17   |
 | IS-04  | search_all with entity_types=['documents'] returns only documents (VALIDATED)     | cross_domain_search          | 2026-06-03   | 2026-06-03   |
 | IS-05  | search_all with entity_types=['memories'] returns only memories (VALIDATED)       | search_memories_only         | 2026-06-17   | 2026-06-17   |
 | IS-06  | Tagged document appears in tag-filtered search_documents (VALIDATED)              | tag_filtered_documents       | 2026-06-03   | 2026-06-03   |
@@ -191,8 +191,8 @@ Verifies behaviors that span more than one FlashQuery domain (documents, memorie
 
 | ID     | Behavior                                                                    | Covered By           | Date Updated | Last Passing |
 |--------|-----------------------------------------------------------------------------|----------------------|--------------|--------------|
-| IX-01  | Document and memory share a tag → search_all with that tag returns both (VALIDATED)      | cross_domain_search_embeddings | 2026-06-17   | 2026-06-03   |
-| IX-02  | Archived document → only memory found in search_all after archive (VALIDATED)            | archive_doc_memory_in_searchall | 2026-06-17   | 2026-06-03   |
+| IX-01  | Document and memory share a tag → search_all with that tag returns both (VALIDATED)      | cross_domain_search_embeddings | 2026-06-17   | 2026-06-17   |
+| IX-02  | Archived document → only memory found in search_all after archive (VALIDATED)            | archive_doc_memory_in_searchall | 2026-06-17   | 2026-06-17   |
 | IX-03  | Create via vault.write, update via update_document → search returns new content (VALIDATED) | write_document_then_search   | 2026-06-03   | 2026-06-03   |
 | IX-04  | Create document, get_document by fqc_id → returns correct content (VALIDATED)           | document_retrieval_by_id     | 2026-06-03   | 2026-06-03   |
 | IX-05  | Create document with tags, apply_tags to add more → all tags searchable (VALIDATED)     | apply_tags_composition       | 2026-06-03   | 2026-06-03   |

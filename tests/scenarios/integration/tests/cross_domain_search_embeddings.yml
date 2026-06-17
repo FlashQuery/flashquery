@@ -23,8 +23,14 @@ steps:
     content: "The Andromeda Galaxy is on a collision course with the Milky Way galaxy."
     tags: [cosmos, galaxies, cde-tag]
 
-  - sleep: 3
-    label: "Wait for fire-and-forget embedding to complete"
+  - label: "Backfill catalog embeddings for document and memory"
+    action: maintain_vault
+    args:
+      action: backfill_embeddings
+      embedding_name: primary
+      scope:
+        entity_types: [documents, memory]
+      max_rows: 0
 
   - label: "search_all returns both document and memory in same result (IS-03)"
     assert:

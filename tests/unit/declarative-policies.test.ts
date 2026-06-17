@@ -26,6 +26,7 @@ vi.mock('pg', () => {
       escapeIdentifier: vi.fn((s: string) => `"${s}"`),
       escapeLiteral: vi.fn((s: string) => `'${s}'`),
     },
+    types: { setTypeParser: vi.fn() },
   };
 });
 

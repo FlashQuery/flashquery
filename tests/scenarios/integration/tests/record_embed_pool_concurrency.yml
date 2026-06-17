@@ -13,12 +13,14 @@ extra_config:
       - register_plugin
       - write_record
       - search_records
+      - maintain_vault
 
 steps:
   - label: "Register an embeddable plugin table"
     action: register_plugin
     args:
       plugin_instance: pool
+      embedding_name: primary
       schema_yaml: |
         plugin:
           id: p146pool
@@ -81,6 +83,16 @@ steps:
           expect_json_equals:
             path: plugin_id
             value: p146pool
+
+  - label: "Backfill plugin record embeddings"
+    action: maintain_vault
+    args:
+      action: backfill_embeddings
+      scope:
+        entity_types: [records]
+        records:
+          plugin: p146pool
+      max_rows: 0
 
   - label: "Semantic record search returns pooled vector results"
     assert:
