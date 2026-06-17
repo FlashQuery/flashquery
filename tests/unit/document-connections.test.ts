@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildDocumentConnections } from '../../src/mcp/utils/document-connections.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 
-function makeConfig(): FlashQueryConfig {
+function makeConfig(input: { embeddings?: FlashQueryConfig['embeddings'] } = {}): FlashQueryConfig {
   return {
     instance: { id: 'unit', name: 'Unit', vault: { path: '/tmp/fq-unit', markdownExtensions: ['.md'] } },
     supabase: { url: 'https://example.invalid', serviceRoleKey: 'key', databaseUrl: 'postgresql://localhost/db' },
     embedding: { provider: 'none', model: '', dimensions: 1536 },
-    embeddings: [{ name: 'primary', provider: 'openai', model: 'text-embedding-3-small', dimensions: 1536, endpoints: [] }],
+    embeddings: input.embeddings ?? [{ name: 'primary', provider: 'openai', model: 'text-embedding-3-small', dimensions: 1536, endpoints: [] }],
     logging: { level: 'info', output: 'stderr' },
     locking: { enabled: false },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
@@ -25,6 +25,54 @@ function resolvedQuery(data: unknown) {
 }
 
 describe('document connection builder', () => {
+  it('returns unsupported when embeddings are not configured in flashquery.yml', async () => {
+    const supabase = {
+      from: vi.fn(),
+      rpc: vi.fn(),
+    };
+
+    const result = await buildDocumentConnections({
+      supabase: supabase as never,
+      config: makeConfig({ embeddings: [] }),
+      sourceDocumentId: 'source-doc',
+    });
+
+    expect(result.result).toBeUndefined();
+    expect(result.error).toMatchObject({
+      error: 'unsupported',
+      identifier: 'connections',
+      details: { reason: 'embeddings_not_configured' },
+    });
+    expect(supabase.from).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it('returns empty connections when embeddings are enabled but the document has no embedded chunks yet', async () => {
+    const rpc = vi.fn();
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'fqc_embeddings') {
+          return resolvedQuery([{ name: 'primary', dimensions: 1536, endpoints: [], status: 'active' }]);
+        }
+        if (table === 'fqc_chunks') {
+          return resolvedQuery([]);
+        }
+        throw new Error(`Unexpected table ${table}`);
+      }),
+      rpc,
+    };
+
+    const result = await buildDocumentConnections({
+      supabase: supabase as never,
+      config: makeConfig(),
+      sourceDocumentId: 'source-doc',
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.result).toEqual({ overall: [], source_chunks: [] });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it('uses stored chunk vectors, filters self-document hits, dedupes targets, and sorts by best similarity', async () => {
     const rpc = vi.fn()
       .mockResolvedValueOnce({

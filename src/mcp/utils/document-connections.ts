@@ -164,6 +164,15 @@ function zeroActiveEmbeddings(): ErrorEnvelope {
   };
 }
 
+function embeddingsNotConfigured(): ErrorEnvelope {
+  return {
+    error: 'unsupported',
+    message: 'Document connections are unavailable because no embeddings are configured in flashquery.yml',
+    identifier: 'connections',
+    details: { reason: 'embeddings_not_configured' },
+  };
+}
+
 function mergeBestConnection(
   map: Map<string, DocumentConnection>,
   connection: DocumentConnection
@@ -289,6 +298,7 @@ export async function buildDocumentConnections(input: {
 }): Promise<{ result?: DocumentConnectionsResult; error?: ErrorEnvelope }> {
   const limit = input.options?.limit ?? 50;
   const limitPerChunk = input.options?.limit_per_chunk ?? 5;
+  if ((input.config.embeddings ?? []).length === 0) return { error: embeddingsNotConfigured() };
   const entries = await selectEmbeddingEntries(input.supabase, input.config);
   const selectionResult = resolveEmbeddingSelection({
     entries,

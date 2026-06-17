@@ -44,7 +44,7 @@ async function insertDocument(input: {
   path: string;
   title: string;
   tags?: string[];
-  chunks: Array<{ heading: string; content: string; vector: number[] }>;
+  chunks: Array<{ heading: string; content: string; vector?: number[] }>;
 }): Promise<{ documentId: string; chunkIds: string[] }> {
   const documentId = randomUUID();
   const body = input.chunks
@@ -76,29 +76,48 @@ async function insertDocument(input: {
   for (const [index, chunk] of input.chunks.entries()) {
     const chunkId = randomUUID();
     chunkIds.push(chunkId);
-    await input.harness.client.query(
-      `INSERT INTO fqc_chunks (
-         id, instance_id, document_id, heading_path, heading_level, breadcrumb,
-         content, content_hash, chunk_index, embedding_primary, embedding_primary_model,
-         embedding_primary_dimensions, embedding_primary_provider, embedding_primary_truncated,
-         embedding_primary_indexed_at
-       )
-       VALUES (
-         $1, $2, $3, $4, 2, $4,
-         $5, $6, $7, $8::vector, 'model-primary',
-         3, 'integration', false, now()
-       )`,
-      [
-        chunkId,
-        input.harness.config.instance.id,
-        documentId,
-        chunk.heading,
-        chunk.content,
-        `hash-${chunkId}`,
-        index,
-        vectorLiteral(chunk.vector),
-      ]
-    );
+    if (chunk.vector) {
+      await input.harness.client.query(
+        `INSERT INTO fqc_chunks (
+           id, instance_id, document_id, heading_path, heading_level, breadcrumb,
+           content, content_hash, chunk_index, embedding_primary, embedding_primary_model,
+           embedding_primary_dimensions, embedding_primary_provider, embedding_primary_truncated,
+           embedding_primary_indexed_at
+         )
+         VALUES (
+           $1, $2, $3, $4, 2, $4,
+           $5, $6, $7, $8::vector, 'model-primary',
+           3, 'integration', false, now()
+         )`,
+        [
+          chunkId,
+          input.harness.config.instance.id,
+          documentId,
+          chunk.heading,
+          chunk.content,
+          `hash-${chunkId}`,
+          index,
+          vectorLiteral(chunk.vector),
+        ]
+      );
+    } else {
+      await input.harness.client.query(
+        `INSERT INTO fqc_chunks (
+           id, instance_id, document_id, heading_path, heading_level, breadcrumb,
+           content, content_hash, chunk_index
+         )
+         VALUES ($1, $2, $3, $4, 2, $4, $5, $6, $7)`,
+        [
+          chunkId,
+          input.harness.config.instance.id,
+          documentId,
+          chunk.heading,
+          chunk.content,
+          `hash-${chunkId}`,
+          index,
+        ]
+      );
+    }
   }
 
   return { documentId, chunkIds };
@@ -179,5 +198,46 @@ describe.skipIf(!HAS_SUPABASE).sequential('get_document connections integration'
     expect(payload.connections.source_chunks.map((chunk) => chunk.chunk_id)).toEqual(source.chunkIds);
     expect(payload.connections.source_chunks[0]?.connections.map((connection) => connection.target.path)).toContain('Alpha.md');
     expect(payload.connections.source_chunks[1]?.connections.map((connection) => connection.target.path)).toContain('Beta.md');
+  }, 120_000);
+
+  it('returns empty connections when embeddings are enabled but source chunk embeddings are not generated yet', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('query embedding should not run'));
+    harness = await createEmbeddingSearchHarness({
+      instanceId: 'get-document-connections-empty-it',
+      entries: [{ name: ENTRY_PRIMARY }],
+    });
+    const docs = captureDocumentServer(harness);
+
+    const source = await insertDocument({
+      harness,
+      path: 'Unembedded.md',
+      title: 'Unembedded',
+      chunks: [
+        { heading: 'Waiting', content: 'chunk exists but embedding_primary is null' },
+      ],
+    });
+    await insertDocument({
+      harness,
+      path: 'Neighbor.md',
+      title: 'Neighbor',
+      chunks: [{ heading: 'Neighbor', content: 'neighbor target', vector: [1, 0, 0] }],
+    });
+
+    const result = await docs.getDocument({
+      identifiers: 'Unembedded.md',
+      include: ['connections'],
+      connections: { limit: 5, limit_per_chunk: 5 },
+    });
+    const payload = parseToolJson<{
+      fq_id: string;
+      connections: {
+        overall: unknown[];
+        source_chunks: unknown[];
+      };
+    }>(result);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(payload.fq_id).toBe(source.documentId);
+    expect(payload.connections).toEqual({ overall: [], source_chunks: [] });
   }, 120_000);
 });
