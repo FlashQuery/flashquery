@@ -236,6 +236,14 @@ Core CRUD operations on vault documents via MCP.
 | D-39d | get_document follow_ref + sections: section_not_found on target returns error with followed_ref nested (post-resolution nesting) (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
 | D-39e | get_document follow_ref + sections + occurrence out of range -> occurrence_out_of_range with query/matches_found/matched_headings/requested_occurrence nested under followed_ref (per spec §4.5 Error 3 follow_ref variant + OQ #17) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
 | D-39f | get_document follow_ref pre-resolution follow_ref_path_not_found is NOT nested under followed_ref — stays at top level (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-71 | `get_document include=['connections']` returns a `connections` envelope with `overall` (scored document connections) and `source_chunks` (per-chunk connections) when the document has indexed chunk embeddings | test_get_document_connections | 2026-06-17 | 2026-06-17 |
+| D-72 | `connections.overall` entries include `score`, `target.path`, `target.title`, and `target.chunk_id`; connections are sorted by descending score | test_get_document_connections | 2026-06-17 | 2026-06-17 |
+| D-73 | Self-document connections excluded — the source document's own chunks never appear in `connections.overall` results | test_get_document_connections | 2026-06-17 | 2026-06-17 |
+| D-74 | `get_document include=['connections']` returns `{ overall: [], source_chunks: [] }` when the source document has no indexed chunk embeddings | test_get_document_connections | 2026-06-17 | 2026-06-17 |
+| D-75 | `connections.limit` parameter caps the number of entries in `connections.overall` | test_get_document_connections | 2026-06-17 | 2026-06-17 |
+| D-76 | `connections.limit_per_chunk` parameter caps connections returned per entry in `connections.source_chunks` | test_get_document_connections | 2026-06-17 | 2026-06-17 |
+| D-77 | `connections.embedding_names` with an unrecognized catalog entry name returns a clear error envelope | test_get_document_connections | 2026-06-17 | 2026-06-17 |
+| D-78 | `include: ['connections']` composes with other include values — `['body', 'connections']` returns both `body` and `connections` fields in the same response envelope | test_get_document_connections | 2026-06-17 | 2026-06-17 |
 
 ## Phase 139 MCP Broker Foundation
 
@@ -1028,7 +1036,7 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 
 | Category | Total | Covered | Uncovered |
 |----------|-------|---------|-----------|
-| Document Lifecycle | 27 | 27 | 0 |
+| Document Lifecycle | 35 | 35 | 0 |
 | Document Content Operations | 20 | 20 | 0 |
 | Vault Write Coherency | 17 | 17 | 0 |
 | Document Outline | 6 | 6 | 0 |
@@ -1046,7 +1054,7 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | LLM Tools | 112 | 111 | 1 |
 | Macro Language | 26 | 26 | 0 |
 | Host Help Convention Parity | 33 | 33 | 0 |
-| **Total** | **473** | **468** | **5** |
+| **Total** | **481** | **476** | **5** |
 
 ---
 
@@ -2121,3 +2129,13 @@ Behaviors verifying the `call_model` and `get_llm_usage` MCP tools introduced in
 | D-chunk-15 | REQ-CHUNK-012 AC4: archived documents are excluded from chunk-based semantic search results by default. | test_chunk_search_result_shape | 2026-06-17 | 2026-06-17 |
 | D-chunk-16 | REQ-CHUNK-012 AC5: `search` in mixed mode returns document-centric results with `matched_chunks` from chunk semantic results merged with filesystem-only results by document path. | test_chunk_search_result_shape | 2026-06-17 | 2026-06-17 |
 | D-chunk-17 | REQ-CHUNK-011 AC7: per-chunk provider failures in lifecycle responses include `entity_type: "document_chunk"`, `chunk_id`, `document_id`, and `heading_path` in `failures[]`. | test_chunk_lifecycle_failure_shape | 2026-06-17 | 2026-06-17 |
+
+---
+
+### test_get_document_connections
+Covers: D-71, D-72, D-73, D-74, D-75, D-76, D-77, D-78
+Status: PASS (2026-06-17) — all 12 steps pass
+
+Phase 1 (managed server, real embeddings): creates a source document with two thematically distinct sections and three semantically similar target documents, forces a vault scan, waits for async chunk embedding, then verifies: connections envelope structure (D-71), overall entry shape and descending-score sort (D-72), self-exclusion of the source document (D-73), `limit` capping overall count (D-75), `limit_per_chunk` capping per-chunk connections (D-76), unknown `embedding_names` returns an error (D-77), `include=['body','connections']` returns both fields (D-78).
+
+Phase 2 (managed server, broken embedding endpoint): catalog entry registered but endpoint unreachable so chunk vectors stay NULL; verifies `connections` returns `{ overall: [], source_chunks: [] }` (D-74).
