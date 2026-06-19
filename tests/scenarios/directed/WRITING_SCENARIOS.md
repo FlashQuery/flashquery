@@ -132,7 +132,7 @@ with TestContext(
     ...
 ```
 
-**Always pass `vault_path=getattr(args, "vault_path", None)`.** The suite runner supplies this via `SimpleNamespace` in `--managed` shared mode so each test can see the shared vault; standalone runs default to `None` and the framework picks a temp directory. Skipping this argument is the most common cause of "file created but not found on disk" failures in shared mode.
+**Always pass `vault_path=getattr(args, "vault_path", None)`.** The suite runner supplies this via `SimpleNamespace` in `--managed` shared mode so each test can see the shared vault. In external-server mode, pass `run_suite.py --vault-path /path/to/vault` or set `VAULT_PATH` in the runner environment when the server's vault differs from `flashquery.yml` / `.env.test` (for example, a Docker container with a temporary bind mount). Skipping this argument is the most common cause of "file created but not found on disk" failures in shared or external mode.
 
 ### Opt-in flags
 

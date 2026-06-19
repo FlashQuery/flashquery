@@ -13,7 +13,9 @@ Usage:
     python run_suite.py --managed --seed 42           # reproducible shuffled order
     python run_suite.py --per-test-server             # fresh server per test (isolation diagnostic)
     python run_suite.py --managed --stop-on-fail      # stop after first failure
-    python run_suite.py --url http://localhost:3001/mcp  # run against existing server
+    python run_suite.py --url http://localhost:3001     # run against existing server
+    python run_suite.py --url http://localhost:3001 --vault-path /path/to/vault
+                                                       # existing server with host-side vault checks
 
 The runner auto-discovers all test_*.py files in the testcases directory,
 imports each one, and calls its run_test() function. Results are collected
@@ -528,7 +530,11 @@ def _run_single_test(
     return {"run": run_dict, "server_logs": test_server_logs, "coverage": coverage}
 
 
-def _print_config_banner(fqc_dir: str | None, server_mode: str) -> None:
+def _print_config_banner(
+    fqc_dir: str | None,
+    server_mode: str,
+    vault_path_override: str | None = None,
+) -> None:
     """Print a configuration summary to stderr before any tests run."""
     info = config_summary(fqc_dir)
     W = 68
@@ -562,7 +568,9 @@ def _print_config_banner(fqc_dir: str | None, server_mode: str) -> None:
         print("  Vault:        (temp dir — created per test)", file=sys.stderr)
         print("  Server URL:   (auto-assigned port — per-test mode)", file=sys.stderr)
     else:
-        if info["vault_path"]:
+        if vault_path_override:
+            print(f"  Vault:        {vault_path_override} (--vault-path)", file=sys.stderr)
+        elif info["vault_path"]:
             print(f"  Vault:        {info['vault_path']}", file=sys.stderr)
         if info["server_url"]:
             print(f"  Server URL:   {info['server_url']}", file=sys.stderr)
@@ -649,7 +657,7 @@ def run_suite(args: argparse.Namespace) -> int:
         random.seed(seed_used)
         random.shuffle(test_files)
 
-    _print_config_banner(args.fqc_dir, server_mode)
+    _print_config_banner(args.fqc_dir, server_mode, args.vault_path)
     print(f"Discovered {len(test_files)} test(s) in {testcases_dir}", file=sys.stderr)
     if seed_used is not None:
         print(f"Order: shuffled (seed={seed_used})", file=sys.stderr)
@@ -814,7 +822,7 @@ def run_suite(args: argparse.Namespace) -> int:
                 fqc_dir=args.fqc_dir,
                 url=args.url,
                 secret=args.secret,
-                vault_path=None,
+                vault_path=args.vault_path,
                 managed=False,
                 port_range=None,
                 output_json=False,
@@ -1010,6 +1018,16 @@ def main() -> None:
     parser.add_argument(
         "--secret", type=str, default=None,
         help="Auth secret (when not using --managed).",
+    )
+    parser.add_argument(
+        "--vault-path",
+        type=str,
+        default=os.environ.get("VAULT_PATH"),
+        help=(
+            "Vault path used by tests for host-side fixture and disk checks "
+            "when running against an external server. Defaults to VAULT_PATH "
+            "from the runner environment."
+        ),
     )
     parser.add_argument(
         "--managed", action="store_true",
