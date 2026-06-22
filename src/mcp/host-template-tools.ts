@@ -79,7 +79,7 @@ function parseTemplateToolPayload(text: string):
   | { payload: undefined; isError: true; errorResult: CallToolResult } {
   const parsed = parseLlmJson(text, templatePayloadSchema);
   if (parsed.ok) {
-    return { payload: parsed.data as Record<string, unknown>, isError: parsed.data.ok === false };
+    return { payload: parsed.data, isError: parsed.data.ok === false };
   }
   if (!isJsonLikeText(text)) {
     return { payload: undefined, isError: false };
