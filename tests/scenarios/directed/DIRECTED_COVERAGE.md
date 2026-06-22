@@ -96,6 +96,8 @@ Note: Test Plan §4.10.5 originally reserved `M-03` through `M-20`; the live mat
 | ML-30 | MACRO-EVAL-06 / T-S-013: a macro that falls off the end returns `{ result: null }`. | test_macro_falloff_null | 2026-05-15 | 2026-06-17 |
 | ML-31 | MACRO-EVAL-06 / MACRO-BI-03 / T-S-014: `fail "msg"` returns `macro_aborted` and statements after `fail` do not execute. | test_macro_fail_halts | 2026-05-15 | 2026-06-17 |
 | ML-32 | MACRO-EVAL-07 / T-S-015: running the same macro source twice through public `call_macro` gets isolated scope and distinct task IDs. | test_macro_repeated_invocation_isolation | 2026-05-15 | 2026-06-17 |
+| ML-33 | T-S-001 / Phase 170: public `call_macro` consumes repairable JSON-like MCP tool text, exposes repaired fields to macro branching, and keeps the success envelope free of repair metadata. | test_macro_json_repair | 2026-06-22 | 2026-06-22 |
+| ML-34 | T-S-002 / Phase 170: generated host-template MCP tools expose structuredContent for success and structured error signaling for document-parameter failures. | test_host_template_json_repair | 2026-06-22 | 2026-06-22 |
 
 ### Macro Language Directed Plan Crosswalk
 

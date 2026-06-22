@@ -334,6 +334,7 @@ correctly end-to-end across the write path (`fqc_llm_usage` row recording) and r
 | IL-42  | Template metadata freshness reaches discovery surface: vault.write template (`fq_template: true`, `fq_expose_as_tool: true`, `fq_desc: A`) → list_purposes shows description A in template_tools → update_document rewrites frontmatter with `fq_desc: B` → next list_purposes shows description B (template registry reads frontmatter fresh from disk per call) | llm_template_metadata_freshness | 2026-06-18   | 2026-06-18   |
 | IL-43  | POST-01 / §3.11.1.1 delegated purpose workflow with `tools: ["tier:read-write"]` exposes corrected tier-derived tools through `call_model` metadata, then composes that surface with the corrected `insert_in_doc` final path and read-back. Deterministic delegated dispatch is covered by the directed mock-provider and E2E layers. | delegated_tier_eligibility   | 2026-06-17   | 2026-06-17   |
 | IL-44  | §3.11.1.1 I-tier-5 split: explicit `maintain_vault` remains rejected through hard-exclusion diagnostics, while an explicit admin-style fixture without hard exclusion remains reachable through delegated registry assembly. | tests/integration/tool-registry.test.ts (`I-tier-5`, `I-tier-5b`) | 2026-05-13   | 2026-05-13   |
+| IL-45  | T-Y-001 / Phase 170: `call_macro` invokes `fq.call_model`, the mock provider returns repairable JSON-like tool-call arguments, and the macro branches on the repaired `calls_log` fields. | macro_call_model_json_repair | 2026-06-22   | 2026-06-22   |
 
 ## INT-MCB — MCP Broker Phase A
 

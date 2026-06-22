@@ -1,0 +1,114 @@
+name: macro_call_model_json_repair
+description: >
+  T-Y-001: call_macro invokes fq.call_model through a mock OpenAI provider whose
+  tool-call arguments are JSON-like text; the LLM client repairs those arguments,
+  the agent loop dispatches the tool, and the macro branches on the repaired call log.
+coverage:
+  - IL-45
+server_modes: [managed]
+
+mock_openai:
+  responses:
+    - choices:
+        - message:
+            role: assistant
+            content: null
+            tool_calls:
+              - id: call_get_document
+                type: function
+                function:
+                  name: get_document
+                  arguments: "{identifiers: \"_integration/macro/model-json-repair-${run.id}.md\", include: [\"body\",], marker: \"repair-${run.id}\", count: 7,}"
+          finish_reason: tool_calls
+      usage:
+        prompt_tokens: 13
+        completion_tokens: 5
+    - choices:
+        - message:
+            role: assistant
+            content: "IL-45 complete"
+          finish_reason: stop
+      usage:
+        prompt_tokens: 17
+        completion_tokens: 4
+
+extra_config:
+  host_mcp_tools:
+    tools:
+      - call_macro
+      - call_model
+      - get_document
+      - write_document
+      - archive_document
+  llm:
+    providers:
+      - name: mock
+        type: openai-compatible
+        endpoint: "${mock_openai.endpoint}"
+        api_key: sk-test
+    models:
+      - name: json-repair-agent
+        provider_name: mock
+        model: json-repair-agent
+        type: language
+        cost_per_million:
+          input: 0
+          output: 0
+        capabilities:
+          tool_calling: true
+          usage_on_tool_calls: true
+          strict_tools: true
+          parallel_tool_calls: true
+    purposes:
+      - name: macro_json_repair_agent
+        description: Macro call_model JSON repair fixture
+        models: [json-repair-agent]
+        tools: [get_document]
+        defaults:
+          max_iterations: 3
+          timeout_ms: 30000
+
+steps:
+  - label: "Create macro call_model repair target"
+    action: vault.write
+    name: macro_doc
+    path: "macro/model-json-repair-${run.id}.md"
+    title: "Macro Model JSON Repair ${run.id}"
+    content: "Macro model JSON repair body ${run.id}."
+    tags: [macro-json-repair]
+
+  - label: "IL-45: call_macro branches on repaired call_model tool-call arguments"
+    assert:
+      op: call_macro
+      args:
+        source: |
+          model = fq.call_model({
+            resolver: "purpose",
+            name: "macro_json_repair_agent",
+            return_messages: true,
+            messages: [
+              {
+                role: "user",
+                content: "Call get_document once with malformed JSON-like arguments for ${macro_doc.path}, then finish."
+              }
+            ]
+          })
+          iteration = first $model.metadata.tools.calls_log
+          tool = first $iteration.tool_calls
+          include = first $tool.arguments.include
+          if $tool.arguments.identifiers == "${macro_doc.path}" then
+            exit { branched: "yes", identifier: $tool.arguments.identifiers, include: $include, status: $tool.status, response: $model.response }
+          else
+            exit { branched: "no", identifier: $tool.arguments.identifiers, status: $tool.status }
+          fi
+      expect_json_equals:
+        - path: result.branched
+          value: "yes"
+        - path: result.identifier
+          value: "${macro_doc.path}"
+        - path: result.include
+          value: body
+        - path: result.status
+          value: success
+        - path: result.response
+          value: "IL-45 complete"
