@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import type {
   Arg,
   Call,
@@ -22,6 +23,7 @@ import {
   type WarningCode,
   type MacroSuccessPayload,
 } from '../mcp/utils/response-formats.js';
+import { parseLlmJson } from '../llm/json-repair.js';
 import { NullMcpBroker } from '../services/mcp-broker.js';
 import { MacroPreflightError, collectInputVarContract, validateInputVars } from './preflight.js';
 import { preflightProgram } from './preflight.js';
@@ -961,11 +963,8 @@ function pushTrace(context: MacroInvocationContext, step: Omit<TraceStep, 'at'>)
 
 function parseToolResultPayload(result: ToolResult): unknown {
   const text = result.content[0]?.text ?? 'null';
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
+  const parsed = parseLlmJson(text, z.unknown());
+  return parsed.ok ? parsed.data : text;
 }
 
 function isToolResult(value: unknown): value is ToolResult {

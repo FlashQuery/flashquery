@@ -1,9 +1,106 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateProgram, isTruthy, MacroRuntimeError } from '../../src/macro/evaluator.js';
 import type { Program } from '../../src/macro/types.js';
+import type { ToolResult } from '../../src/mcp/utils/response-formats.js';
 import { basicBuiltins, parseProgram, parseToolPayload, resultOf } from './macro-test-helpers.js';
 
 describe('macro evaluator expression semantics', () => {
+  it('T-U-011 repairs fenced tool result JSON so macro field access works', async () => {
+    const result = await evaluateProgram(parseProgram('payload = demo.fetch({})\nexit $payload.answer'), {
+      allowedToolNames: ['demo.fetch'],
+      toolRegistry: { demo: { label: 'Demo', tools: { fetch: async () => null } } },
+      dispatchTool: async (): Promise<ToolResult> => ({
+        content: [
+          {
+            type: 'text',
+            text: '```json\n{answer: 42, nested: { ok: true, },}\n```',
+          },
+        ],
+      }),
+    });
+
+    expect(resultOf(parseToolPayload(result))).toBe(42);
+  });
+
+  it('T-U-012 repairs expected-error tool envelopes before extracting fields', async () => {
+    const result = await evaluateProgram(parseProgram('demo.fail({})'), {
+      allowedToolNames: ['demo.fail'],
+      toolRegistry: {
+        demo: {
+          label: 'Demo',
+          tools: {
+            fail: async (): Promise<ToolResult> => ({
+              content: [
+                {
+                  type: 'text',
+                  text: '```json\n{error: "invalid_input", message: "Bad payload", details: { field: "name", },}\n```',
+                },
+              ],
+            }),
+          },
+        },
+      },
+    });
+
+    expect(result.isError).toBe(false);
+    expect(parseToolPayload(result)).toMatchObject({
+      error: 'invalid_input',
+      message: 'Bad payload',
+      details: { field: 'name' },
+    });
+  });
+
+  it('T-U-013 preserves irreparable plain text as raw string fallback for value paths', async () => {
+    const result = await evaluateProgram(parseProgram('payload = demo.fetch({})\nexit $payload'), {
+      allowedToolNames: ['demo.fetch'],
+      toolRegistry: { demo: { label: 'Demo', tools: { fetch: async () => null } } },
+      dispatchTool: async (): Promise<ToolResult> => ({
+        content: [{ type: 'text', text: 'plain non-json answer' }],
+      }),
+    });
+
+    expect(resultOf(parseToolPayload(result))).toBe('plain non-json answer');
+  });
+
+  it('T-U-014 keeps token extraction from repaired model metadata payloads', async () => {
+    const result = await evaluateProgram(parseProgram('payload = fq.call_model({})\nexit $payload'), {
+      allowedToolNames: ['fq.call_model'],
+      toolRegistry: { fq: { label: 'FlashQuery', tools: { call_model: async () => null } } },
+      dispatchTool: async (): Promise<ToolResult> => ({
+        content: [
+          {
+            type: 'text',
+            text: '```json\n{ result: "ok", metadata: { tokens: { input: 3, output: 5, }, }, }\n```',
+          },
+        ],
+      }),
+    });
+
+    expect(parseToolPayload(result)).toMatchObject({
+      result: { result: 'ok', metadata: { tokens: { input: 3, output: 5 } } },
+      token_total: 8,
+      model_calls: 1,
+    });
+
+    const cumulative = await evaluateProgram(parseProgram('payload = fq.call_model({})\nexit $payload'), {
+      allowedToolNames: ['fq.call_model'],
+      toolRegistry: { fq: { label: 'FlashQuery', tools: { call_model: async () => null } } },
+      dispatchTool: async (): Promise<ToolResult> => ({
+        content: [
+          {
+            type: 'text',
+            text: '```json\n{ metadata: { trace_cumulative: { total_tokens: { input: 7, output: 11, }, }, }, }\n```',
+          },
+        ],
+      }),
+    });
+
+    expect(parseToolPayload(cumulative)).toMatchObject({
+      token_total: 18,
+      model_calls: 1,
+    });
+  });
+
   it('T-U-035 deep equality matches same-typed equal values', async () => {
     for (const source of ['exit 5 == 5', 'exit "x" == "x"', 'exit [1,2] == [1,2]', 'exit null == null']) {
       const result = await evaluateProgram(parseProgram(source), { builtins: basicBuiltins() });
