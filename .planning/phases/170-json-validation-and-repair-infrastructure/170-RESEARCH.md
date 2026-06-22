@@ -358,12 +358,12 @@ Source: helper names and behavior verified in `src/mcp/utils/response-formats.ts
 |---|-------|---------|---------------|
 | A1 | Over-broad JSON-like detection can warn on ordinary prose if implemented naively. | Common Pitfalls | Planner may not include enough negative prose tests. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should public workflow verification include directed scenarios, YAML scenarios, or both?**
    - What we know: The context allows either or both, but matrices must be updated for any added scenario coverage. [CITED: .planning/phases/170-json-validation-and-repair-infrastructure/170-CONTEXT.md]
-   - What's unclear: Which scenario layer gives the best time/value tradeoff after unit, integration, and E2E coverage land. [ASSUMED]
-   - Recommendation: Require at least the Vitest integration/E2E commands from the roadmap; add directed/YAML only where behavior is publicly observable and update matrices. [CITED: JSON Validation Test Plan.md §2.4-§2.5]
+   - RESOLVED: Phase 170 uses both directed scenarios and YAML integration scenarios for public workflow verification. Plan 04 adds T-S-001, T-S-002, and T-Y-001, updates `tests/scenarios/directed/DIRECTED_COVERAGE.md` with ML-33 and ML-34, and updates `tests/scenarios/integration/INTEGRATION_COVERAGE.md` with IL-45.
+   - Rationale: The canonical Test Plan defines directed and YAML scenario coverage IDs for the public macro and host-template flows, and the planner chose the fullest traceability path because Phase 170 is a single cohesive milestone. [CITED: JSON Validation Test Plan.md §2.4-§2.5, §4.4, §7]
 
 ## Environment Availability
 
