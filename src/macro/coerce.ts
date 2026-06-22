@@ -19,13 +19,14 @@ export function coerceCallToolResult(result: CallToolResult): MacroValue {
 
   const firstContent = result.content[0];
   if (isTextContent(firstContent)) {
+    if (!isJsonLikeText(firstContent.text)) {
+      return firstContent.text;
+    }
     const parsed = parseLlmJson(firstContent.text, z.unknown());
     if (parsed.ok) {
       return toMacroValue(parsed.data);
     }
-    if (isJsonLikeText(firstContent.text)) {
-      logger.warn(`Brokered tool result looked like JSON but could not be parsed: ${parsed.summary}`);
-    }
+    logger.warn(`Brokered tool result looked like JSON but could not be parsed: ${parsed.summary}`);
     return firstContent.text;
   }
 
@@ -51,7 +52,12 @@ function isJsonLikeText(value: string): boolean {
     trimmed.startsWith('{') ||
     trimmed.startsWith('[') ||
     trimmed.startsWith('```json') ||
-    trimmed.startsWith('```')
+    trimmed.startsWith('```') ||
+    trimmed.startsWith('"') ||
+    trimmed === 'true' ||
+    trimmed === 'false' ||
+    trimmed === 'null' ||
+    /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?(?:\s*)$/.test(trimmed)
   );
 }
 

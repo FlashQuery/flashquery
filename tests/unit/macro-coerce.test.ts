@@ -55,12 +55,28 @@ describe('brokered CallToolResult macro coercion', () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
+  it('T-U-029 parses JSON scalar text content when structuredContent is absent', () => {
+    expect(coerceCallToolResult({ content: [{ type: 'text', text: '42' }] })).toBe(42);
+    expect(coerceCallToolResult({ content: [{ type: 'text', text: 'null' }] })).toBeNull();
+    expect(coerceCallToolResult({ content: [{ type: 'text', text: 'true' }] })).toBe(true);
+    expect(coerceCallToolResult({ content: [{ type: 'text', text: '"hello"' }] })).toBe('hello');
+  });
+
   it('T-U-030 binds non-JSON text content as a raw string without warning', () => {
     const result: CallToolResult = {
       content: [{ type: 'text', text: 'plain answer' }],
     };
 
     expect(coerceCallToolResult(result)).toBe('plain answer');
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('T-U-030 preserves comma-containing prose as a raw string without repair', () => {
+    const result: CallToolResult = {
+      content: [{ type: 'text', text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.' }],
+    };
+
+    expect(coerceCallToolResult(result)).toBe('Lorem ipsum dolor sit amet, consectetur adipiscing elit.');
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
