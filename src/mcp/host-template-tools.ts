@@ -8,10 +8,11 @@ import {
   dispatchTemplateToolCall,
   type TemplateToolDefinition,
 } from '../llm/template-tools.js';
+import { parseLlmJson } from '../llm/json-repair.js';
 import type { NativeToolDefinition } from '../llm/tool-registry.js';
 import { logger } from '../logging/logger.js';
 import type { ToolSearchService } from '../services/tool-search/tool-search-service.js';
-import type { HostTemplateRefreshSummary } from './utils/response-formats.js';
+import { jsonRuntimeError, type HostTemplateRefreshSummary } from './utils/response-formats.js';
 import { getRegisteredMcpServers } from './request-lifecycle-registry.js';
 import { getNativeToolCatalog, registerUncatalogedTool } from './tool-catalog.js';
 
@@ -71,23 +72,46 @@ function zodRawShapeForJsonSchema(schema: unknown): z.ZodRawShape {
   );
 }
 
-function parseTemplateToolPayload(text: string): { payload: Record<string, unknown> | undefined; isError: boolean } {
-  try {
-    const payload = JSON.parse(text) as unknown;
-    if (!isRecord(payload)) return { payload: undefined, isError: false };
-    return { payload, isError: payload['ok'] === false };
-  } catch {
+const templatePayloadSchema = z.object({ ok: z.boolean().optional() }).catchall(z.unknown());
+
+function parseTemplateToolPayload(text: string):
+  | { payload: Record<string, unknown> | undefined; isError: boolean; errorResult?: undefined }
+  | { payload: undefined; isError: true; errorResult: CallToolResult } {
+  const parsed = parseLlmJson(text, templatePayloadSchema);
+  if (parsed.ok) {
+    return { payload: parsed.data as Record<string, unknown>, isError: parsed.data.ok === false };
+  }
+  if (!isJsonLikeText(text)) {
     return { payload: undefined, isError: false };
   }
+  return {
+    payload: undefined,
+    isError: true,
+    errorResult: jsonRuntimeError({
+      error: 'invalid_json_payload',
+      message: 'Structured JSON payload could not be parsed.',
+      details: {
+        site: 'host_template_tool',
+        failure: parsed.failure,
+        summary: parsed.summary,
+      },
+    }),
+  };
 }
 
-function callResultFromTemplateText(text: string): CallToolResult {
-  const { payload, isError } = parseTemplateToolPayload(text);
+export function callResultFromTemplateText(text: string): CallToolResult {
+  const { payload, isError, errorResult } = parseTemplateToolPayload(text);
+  if (errorResult !== undefined) return errorResult;
   return {
     content: [{ type: 'text', text }],
     ...(payload === undefined ? {} : { structuredContent: payload }),
     ...(isError ? { isError: true } : {}),
   };
+}
+
+function isJsonLikeText(text: string): boolean {
+  const trimmed = text.trimStart();
+  return trimmed.startsWith('{') || trimmed.startsWith('[') || trimmed.startsWith('```');
 }
 
 function emptySummary(sessions: number): HostTemplateRefreshSummary {
