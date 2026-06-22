@@ -17,7 +17,7 @@
 
 | Phase | Name | Goal | Requirements | Success Criteria |
 |-------|------|------|--------------|------------------|
-| 170 | JSON Validation and Repair Infrastructure | Ship `jsonrepair`-backed parsing infrastructure plus all current parse-site retrofits and public workflow verification. | REQ-001 through REQ-011 | 8 |
+| 170 | JSON Validation and Repair Infrastructure | 3/4 | In Progress|  |
 
 ## Phase Details
 
@@ -27,12 +27,20 @@
 
 **Requirements:** REQ-001, REQ-002, REQ-003, REQ-004, REQ-005, REQ-006, REQ-007, REQ-008, REQ-009, REQ-010, REQ-011
 
-**Plans:** 4 plans
+**Plans:** 3/4 plans executed
 
 Plans:
-- [ ] 170-01-PLAN.md — Utility foundation: `jsonrepair`, pure parser, and parser unit coverage.
-- [ ] 170-02-PLAN.md — High-priority silent-failure retrofits for macro evaluator, host templates, and macro task transitions.
-- [ ] 170-03-PLAN.md — Compatibility retrofits for provider arguments, brokered coercion, and native unchanged regressions.
+**Wave 1**
+
+- [x] 170-01-PLAN.md — Utility foundation: `jsonrepair`, pure parser, and parser unit coverage.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 170-02-PLAN.md — High-priority silent-failure retrofits for macro evaluator, host templates, and macro task transitions.
+- [x] 170-03-PLAN.md — Compatibility retrofits for provider arguments, brokered coercion, and native unchanged regressions.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 170-04-PLAN.md — Public workflow verification through integration, E2E, directed scenario, YAML scenario, and coverage matrices.
 
 **Implementation lanes inside the single phase:**
