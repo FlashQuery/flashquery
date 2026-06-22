@@ -1,5 +1,6 @@
 import * as http from 'node:http';
 import * as https from 'node:https';
+import { z } from 'zod';
 import type { FlashQueryConfig } from '../config/types.js';
 import { logger } from '../logging/logger.js';
 import { isFinishReason } from '../constants/llm.js';
@@ -7,6 +8,7 @@ import { computeCost, recordLlmUsage } from './cost-tracker.js';
 import { syncLlmConfigToDb } from './config-sync.js';
 import { validatePersistedPurposeTemplateAdmissions } from './purpose-template-bindings.js';
 import { PurposeResolver } from './resolver.js';
+import { parseLlmJson } from './json-repair.js';
 import type { LlmChatMessage, LlmChatResult, LlmChatToolCall } from './types.js';
 import { LlmHttpError, LlmNetworkError } from './errors.js';
 import type { ChatMessage, LlmClient, LlmCompletionResult } from './runtime-types.js';
@@ -131,6 +133,8 @@ function getAbortSignal(parameters?: Record<string, unknown>): AbortSignal | und
   return signal instanceof AbortSignal ? signal : undefined;
 }
 
+const TOOL_CALL_ARGUMENTS_SCHEMA = z.record(z.string(), z.unknown());
+
 // ─────────────────────────────────────────────────────────────────────────────
 // OpenAICompatibleLlmClient
 // ─────────────────────────────────────────────────────────────────────────────
@@ -160,16 +164,15 @@ export class OpenAICompatibleLlmClient implements LlmClient {
     providerName: string,
     args: unknown
   ): Record<string, unknown> {
+    const invalidArgumentsError = () =>
+      new Error(`LLM error: ${providerName} returned invalid tool call arguments JSON.`);
+
     if (typeof args === 'string') {
-      try {
-        const parsed = JSON.parse(args) as unknown;
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          return parsed as Record<string, unknown>;
-        }
-      } catch {
-        throw new Error(`LLM error: ${providerName} returned invalid tool call arguments JSON.`);
+      const parsed = parseLlmJson(args, TOOL_CALL_ARGUMENTS_SCHEMA);
+      if (parsed.ok) {
+        return parsed.data;
       }
-      throw new Error(`LLM error: ${providerName} returned invalid tool call arguments JSON.`);
+      throw invalidArgumentsError();
     }
 
     if (args && typeof args === 'object' && !Array.isArray(args)) {

@@ -883,12 +883,47 @@ describe('OpenAICompatibleLlmClient.chat', () => {
     expect(stopWithToolsResult.message.tool_calls?.[0].function.arguments).toEqual({ query: 'beta' });
   });
 
-  it('chat() rejects invalid tool call arguments JSON', async () => {
+  it('T-U-025: chat() rejects invalid tool call arguments JSON', async () => {
     __setNextResponse({
       status: 200,
-      body: makeOpenAIToolCallBody({ args: '{"query":' }),
+      body: makeOpenAIToolCallBody({ args: 'not json' }),
     });
     await expect(client.chat('gpt-4o', SAMPLE_MESSAGES)).rejects.toThrow('invalid tool call arguments JSON');
+  });
+
+  it('T-U-024: chat() repairs provider tool call argument strings before dispatch', async () => {
+    __setNextResponse({
+      status: 200,
+      body: makeOpenAIToolCallBody({ args: '{query: "alpha", limit: 2,}' }),
+    });
+
+    const result = await client.chat('gpt-4o', SAMPLE_MESSAGES);
+
+    expect(result.message.tool_calls?.[0].function.arguments).toEqual({ query: 'alpha', limit: 2 });
+  });
+
+  it('T-U-026: chat() rejects repaired non-object tool call argument values', async () => {
+    __setNextResponse({
+      status: 200,
+      body: makeOpenAIToolCallBody({ args: '["query", "alpha",]' }),
+    });
+
+    await expect(client.chat('gpt-4o', SAMPLE_MESSAGES)).rejects.toThrow('invalid tool call arguments JSON');
+  });
+
+  it('T-U-027: chat() preserves object and missing tool call argument behavior', async () => {
+    __setNextResponse({
+      status: 200,
+      body: makeOpenAIToolCallBody({ args: { query: 'object-arg' } }),
+    });
+    const objectResult = await client.chat('gpt-4o', SAMPLE_MESSAGES);
+    expect(objectResult.message.tool_calls?.[0].function.arguments).toEqual({ query: 'object-arg' });
+
+    const missingArgsBody = makeOpenAIToolCallBody();
+    delete missingArgsBody.choices[0].message.tool_calls[0].function.arguments;
+    __setNextResponse({ status: 200, body: missingArgsBody });
+    const missingResult = await client.chat('gpt-4o', SAMPLE_MESSAGES);
+    expect(missingResult.message.tool_calls?.[0].function.arguments).toEqual({});
   });
 
   it('chat() accepts empty/null assistant content with tool calls and rejects empty/null content without tool calls', async () => {
