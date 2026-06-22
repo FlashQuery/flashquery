@@ -479,6 +479,43 @@ describe('macro ToolRegistry construction', () => {
     expect(handler).toHaveBeenCalledTimes(0);
   });
 
+  it('T-U-033 preserves native FlashQuery tool response valid JSON parsing behavior', async () => {
+    const result = await buildToolRegistry({
+      config: makeConfig({ hostMcpTools: { tools: ['search'] } }),
+      callerContext: { origin: 'host' },
+      broker: new NullBroker(),
+      catalog: [
+        nativeTool('search', vi.fn().mockResolvedValue({
+          content: [{ type: 'text', text: '{"ok":true,"items":["alpha",2,null]}' }],
+        })),
+      ],
+      nativeDispatchContext: nativeDispatchContext(),
+    });
+
+    await expect(result.registry.fq.tools.search({}, {} as Parameters<ToolFn>[1])).resolves.toEqual({
+      ok: true,
+      items: ['alpha', 2, null],
+    });
+  });
+
+  it('T-U-034 preserves native FlashQuery tool response raw-text fallback behavior', async () => {
+    const result = await buildToolRegistry({
+      config: makeConfig({ hostMcpTools: { tools: ['search'] } }),
+      callerContext: { origin: 'host' },
+      broker: new NullBroker(),
+      catalog: [
+        nativeTool('search', vi.fn().mockResolvedValue({
+          content: [{ type: 'text', text: 'plain native response' }],
+        })),
+      ],
+      nativeDispatchContext: nativeDispatchContext(),
+    });
+
+    await expect(result.registry.fq.tools.search({}, {} as Parameters<ToolFn>[1])).resolves.toBe(
+      'plain native response'
+    );
+  });
+
   it('approves pending TOFU schema drift and restores registry plus index state', async () => {
     const added: BrokeredTool[][] = [];
     const removed: string[][] = [];

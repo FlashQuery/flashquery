@@ -1,14 +1,25 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   coerceBrokerToolArguments,
   coerceCallToolResult,
   isCallToolErrorResult,
 } from '../../src/macro/coerce.js';
+import { logger } from '../../src/logging/logger.js';
 import type { MacroValue } from '../../src/macro/evaluator.js';
 
+vi.mock('../../src/logging/logger.js', () => ({
+  logger: {
+    warn: vi.fn(),
+  },
+}));
+
 describe('brokered CallToolResult macro coercion', () => {
-  it('T-U-016 treats isError as fail-fast before value binding', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('T-U-032 treats isError as fail-fast before value binding', () => {
     const result: CallToolResult = {
       isError: true,
       content: [{ type: 'text', text: 'oops' }],
@@ -18,7 +29,7 @@ describe('brokered CallToolResult macro coercion', () => {
     expect(() => coerceCallToolResult(result)).toThrow(/Cannot coerce brokered error result/);
   });
 
-  it('T-U-017 binds structuredContent before text content', () => {
+  it('T-U-028 binds structuredContent before text content', () => {
     const result: CallToolResult = {
       structuredContent: { answer: 42, nested: { ok: true } },
       content: [{ type: 'text', text: '{"answer":"wrong"}' }],
@@ -27,7 +38,7 @@ describe('brokered CallToolResult macro coercion', () => {
     expect(coerceCallToolResult(result)).toEqual({ answer: 42, nested: { ok: true } });
   });
 
-  it('T-U-018 parses JSON text content when structuredContent is absent', () => {
+  it('T-U-029 parses JSON text content when structuredContent is absent', () => {
     const result: CallToolResult = {
       content: [{ type: 'text', text: '{"count":2,"items":["a",null,true]}' }],
     };
@@ -35,12 +46,32 @@ describe('brokered CallToolResult macro coercion', () => {
     expect(coerceCallToolResult(result)).toEqual({ count: 2, items: ['a', null, true] });
   });
 
-  it('T-U-019 binds non-JSON text content as a raw string', () => {
+  it('T-U-029 repairs JSON-like text content when structuredContent is absent', () => {
+    const result: CallToolResult = {
+      content: [{ type: 'text', text: '{count: 2, items: ["a", null, true,],}' }],
+    };
+
+    expect(coerceCallToolResult(result)).toEqual({ count: 2, items: ['a', null, true] });
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('T-U-030 binds non-JSON text content as a raw string without warning', () => {
     const result: CallToolResult = {
       content: [{ type: 'text', text: 'plain answer' }],
     };
 
     expect(coerceCallToolResult(result)).toBe('plain answer');
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('T-U-031 binds malformed JSON-like text as a raw string and logs one warning', () => {
+    const result: CallToolResult = {
+      content: [{ type: 'text', text: '{"count": true false}' }],
+    };
+
+    expect(coerceCallToolResult(result)).toBe('{"count": true false}');
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Brokered tool result looked like JSON'));
   });
 
   it('T-U-020 binds multimodal content as the full envelope converted to MacroValue', () => {

@@ -1,4 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+import { parseLlmJson } from '../llm/json-repair.js';
+import { logger } from '../logging/logger.js';
 import type { MacroValue } from './runtime-types.js';
 
 export function isCallToolErrorResult(result: CallToolResult): boolean {
@@ -16,11 +19,14 @@ export function coerceCallToolResult(result: CallToolResult): MacroValue {
 
   const firstContent = result.content[0];
   if (isTextContent(firstContent)) {
-    try {
-      return toMacroValue(JSON.parse(firstContent.text) as unknown);
-    } catch {
-      return firstContent.text;
+    const parsed = parseLlmJson(firstContent.text, z.unknown());
+    if (parsed.ok) {
+      return toMacroValue(parsed.data);
     }
+    if (isJsonLikeText(firstContent.text)) {
+      logger.warn(`Brokered tool result looked like JSON but could not be parsed: ${parsed.summary}`);
+    }
+    return firstContent.text;
   }
 
   return toMacroValue(result);
@@ -36,6 +42,16 @@ function isTextContent(value: unknown): value is { type: 'text'; text: string } 
     value !== null &&
     (value as { type?: unknown }).type === 'text' &&
     typeof (value as { text?: unknown }).text === 'string'
+  );
+}
+
+function isJsonLikeText(value: string): boolean {
+  const trimmed = value.trimStart();
+  return (
+    trimmed.startsWith('{') ||
+    trimmed.startsWith('[') ||
+    trimmed.startsWith('```json') ||
+    trimmed.startsWith('```')
   );
 }
 
