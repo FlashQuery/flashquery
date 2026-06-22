@@ -610,6 +610,67 @@ describe('call_model template-tool masquerade public E2E contracts', () => {
     }
   }, 120000);
 
+  it('T-E-001 T-E-003 maps generated host template success responses to MCP structuredContent', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      finalTextResponse('unused', 1, 1),
+    ]);
+    await provider.start();
+    try {
+      await withManagedMcp(provider, async (client) => {
+        const result = await client.callTool({
+          name: 'flashquery_skill_research_skill',
+          arguments: { topic: 'json repair public success' },
+        }) as {
+          content: Array<{ text: string }>;
+          isError?: boolean;
+          structuredContent?: Record<string, unknown>;
+        };
+
+        expect(result.isError).toBeFalsy();
+        expect(result.structuredContent).toMatchObject({
+          ok: true,
+          result: { content: expect.stringContaining('Research skill says json repair public success.') },
+        });
+        expect(result.structuredContent).not.toHaveProperty('repaired');
+      }, {
+        templatesYaml: '  default_access: permissive\n  host_access: permissive\n  host_templates: []',
+      });
+    } finally {
+      await provider.stop();
+    }
+  }, 120000);
+
+  it('T-E-002 T-E-004 maps generated host template dispatch errors to MCP structuredContent and isError', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      finalTextResponse('unused', 1, 1),
+    ]);
+    await provider.start();
+    try {
+      await withManagedMcp(provider, async (client) => {
+        const result = await client.callTool({
+          name: 'flashquery_skill_source_skill',
+          arguments: { topic: 'json repair public error', source: 'Docs/Missing.md' },
+        }) as {
+          content: Array<{ text: string }>;
+          isError?: boolean;
+          structuredContent?: Record<string, unknown>;
+        };
+
+        expect(result.isError).toBe(true);
+        expect(result.structuredContent).toMatchObject({
+          ok: false,
+          error: {
+            code: 'template_param_doc_not_found',
+          },
+        });
+      }, {
+        templatesYaml: '  default_access: permissive\n  host_access: permissive\n  host_templates: []',
+      });
+    } finally {
+      await provider.stop();
+    }
+  }, 120000);
+
   it('T-E-009 restrictive host_access excludes unbound templates from tools/list', async () => {
     const provider = new ScriptedOpenAiProvider([
       finalTextResponse('unused', 1, 1),

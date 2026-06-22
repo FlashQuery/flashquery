@@ -41,6 +41,8 @@ export default defineConfig({
       'tests/integration/supabase-schema-verify.test.ts',
       'tests/integration/template-tools.integration.test.ts',
       'tests/integration/macro-parse-error.test.ts',
+      'tests/integration/macro-json-repair.test.ts',
+      'tests/integration/host-template-json-repair.test.ts',
       'tests/integration/macro-shell-verbs.integration.test.ts',
       'tests/integration/macro-tool-dispatch.test.ts',
       'tests/integration/macro-concurrency.test.ts',
