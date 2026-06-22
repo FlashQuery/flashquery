@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.2
 milestone_name: JSON Validation
-status: milestone_complete
-last_updated: 2026-06-22T19:36:24.729Z
-last_activity: 2026-06-22
+status: Awaiting next milestone
+last_updated: "2026-06-22T21:02:59.974Z"
+last_activity: 2026-06-22 — Milestone v4.2 completed and archived
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
   completed_plans: 4
-  percent: 0
-stopped_at: Milestone complete (Phase 170 was final phase)
+  percent: 100
 ---
 
 # FlashQuery Core — State
@@ -21,14 +20,14 @@ stopped_at: Milestone complete (Phase 170 was final phase)
 See: .planning/PROJECT.md (updated 2026-06-22)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns - across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Milestone complete
+**Current focus:** Awaiting next milestone
 
 ## Current Position
 
-Phase: 170
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-06-22
+Phase: Milestone v4.2 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-22 — Milestone v4.2 completed and archived
 
 ## Performance Metrics
 
@@ -52,8 +51,7 @@ Full decision log lives in `.planning/PROJECT.md` (Key Decisions) and the milest
 
 ### Todos
 
-- Define v4.2 requirements and one-phase roadmap from the JSON Validation requirements/test plan.
-- Execute Phase 170 with inline TDD: failing test, observed RED, implementation, observed GREEN for each behavior slice.
+None. Start the next milestone with `/gsd-new-milestone`.
 
 ### Blockers
 
@@ -61,9 +59,9 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-06-22T18:09:22.164Z
-**Next action:** execute Phase 170 after reviewing `.planning/REQUIREMENTS.md` and `.planning/ROADMAP.md`.
-**Context needed:** Product source docs in `../flashquery-product/Roadmap/Features/Graph Document Intelligence (Jun 2026)/`, plus `.planning/REQUIREMENTS.md` and `.planning/ROADMAP.md`.
+**Last session:** 2026-06-22T21:04:00Z
+**Next action:** start the next milestone with `/gsd-new-milestone`.
+**Context needed:** `.planning/PROJECT.md`, `.planning/ROADMAP.md`, `.planning/MILESTONES.md`, and any new product source docs for the next milestone.
 
 ## Deferred Items
 
@@ -76,8 +74,10 @@ Carried tech debt at v4.1 close (2026-06-15):
 | tech_debt | operator-configurable `max_heading_level` deferred (H1–H6 hard-coded) | accepted |
 
 Open-artifact audit was clean at close. Two prior debug artifacts resolved during close: `cate-pi-brave-search-boundary` (misfiled Cate session) removed; `root-folder-dsstore-remove` relocated to `milestones/stale-artifacts/`.
-| Phase 170-json-validation-and-repair-infrastructure P02 | 7min | 3 tasks | 6 files |
-| Phase 170 P03 | 6min | 2 tasks | 6 files |
+
+## v4.2 Deferred Items
+
+None. The milestone audit passed with no implementation tech debt.
 
 ## v4.0 Deferred Items
 
@@ -85,4 +85,4 @@ Open-artifact audit was clean at close. Two prior debug artifacts resolved durin
 
 ## Operator Next Steps
 
-- Execute Phase 170 with the inline red/green cadence documented in `.planning/ROADMAP.md`.
+- Start the next milestone with /gsd-new-milestone
