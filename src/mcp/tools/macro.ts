@@ -21,6 +21,7 @@ import { extractMacroFences } from '../../macro/fence-extractor.js';
 import { selectMacroSourceBlock, splitMacroSourceRef } from '../../macro/source-ref.js';
 import type { MacroCallerContext, MacroSelfSnapshot } from '../../macro/types.js';
 import type { NativeToolDefinition, NativeToolDispatchContext } from '../../llm/tool-registry.js';
+import { parseLlmJson } from '../../llm/json-repair.js';
 import type { BrokeredTool, McpBroker } from '../../services/mcp-broker.js';
 import { NullMcpBroker } from '../../services/mcp-broker.js';
 import type { SchemaDriftDecisionInput } from '../../services/mcp-broker.js';
@@ -453,7 +454,10 @@ export async function runMacroSource(options: RunMacroSourceOptions): Promise<Ru
       },
     });
     try {
-      transitionTaskFromResult(taskRegistry, task, result, options.onTaskTransition);
+      const transitionResult = transitionTaskFromResult(taskRegistry, task, result, options.onTaskTransition);
+      if (transitionResult !== undefined) {
+        return { result: transitionResult, registryBuild };
+      }
     } catch (error) {
       taskRegistry.fail(task.task_id);
       throw error;
@@ -737,32 +741,52 @@ function expectedMacroErrorResult(error: unknown): ToolResult {
   });
 }
 
-function transitionTaskFromResult(
+const macroResultEnvelopeSchema = z.object({}).catchall(z.unknown());
+
+export function transitionTaskFromResult(
   taskRegistry: MacroTaskRegistry,
   task: MacroTaskRecord,
   result: Awaited<ReturnType<typeof evaluateProgram>>,
   onTransition: MacroTaskTransitionListener | undefined
-): void {
-  const payload = parseResultPayload(result);
-  if (isCancelledPayload(payload)) {
+): ToolResult | undefined {
+  const parsed = parseResultPayload(result);
+  if (!parsed.ok) {
+    taskRegistry.fail(task.task_id, onTransition);
+    return parsed.result;
+  }
+  if (isCancelledPayload(parsed.payload)) {
     taskRegistry.cancel(task.task_id, task.session_id, onTransition);
     taskRegistry.clearCancellationRequest(task.task_id);
     return;
   }
-  if (result.isError === true || isExpectedFailurePayload(payload)) {
+  if (result.isError === true || isExpectedFailurePayload(parsed.payload)) {
     taskRegistry.fail(task.task_id, onTransition);
     return;
   }
   taskRegistry.complete(task.task_id, onTransition);
+  return undefined;
 }
 
-function parseResultPayload(result: Awaited<ReturnType<typeof evaluateProgram>>): unknown {
+export function parseResultPayload(result: Awaited<ReturnType<typeof evaluateProgram>>):
+  | { ok: true; payload: Record<string, unknown> }
+  | { ok: false; result: ToolResult } {
   const text = result.content[0]?.type === 'text' ? result.content[0].text : '';
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
+  const parsed = parseLlmJson(text, macroResultEnvelopeSchema);
+  if (parsed.ok) {
+    return { ok: true, payload: parsed.data };
   }
+  return {
+    ok: false,
+    result: jsonRuntimeError({
+      error: 'invalid_json_payload',
+      message: 'Structured JSON payload could not be parsed.',
+      details: {
+        site: 'macro_task_result',
+        failure: parsed.failure,
+        summary: parsed.summary,
+      },
+    }),
+  };
 }
 
 function isCancelledPayload(payload: unknown): boolean {
