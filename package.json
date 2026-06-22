@@ -1,6 +1,6 @@
 {
   "name": "flashquery",
-  "version": "4.1.0",
+  "version": "5.0.0",
   "description": "Open source, local-first data management layer for AI workflows",
   "type": "module",
   "bin": {

@@ -3,7 +3,7 @@ import type { FlashQueryConfig } from '../../config/types.js';
 import type { ActiveEmbeddingEntry } from '../../embedding/background-embed.js';
 import type { ErrorEnvelope } from './response-formats.js';
 
-export interface DocumentConnectionTarget {
+interface DocumentConnectionTarget {
   chunk_id: string;
   document_id: string;
   path: string;
@@ -12,13 +12,13 @@ export interface DocumentConnectionTarget {
   content?: string;
 }
 
-export interface DocumentConnection {
+interface DocumentConnection {
   id: string;
   score: number;
   target: DocumentConnectionTarget;
 }
 
-export interface SourceChunkConnectionBucket {
+interface SourceChunkConnectionBucket {
   chunk_id: string;
   heading_path?: string;
   breadcrumb?: string;
@@ -60,6 +60,12 @@ function embeddingColumnName(entryName: string): string {
 
 function vectorRpcArgument(value: unknown): string {
   return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
+function stringScalar(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return String(value);
+  return '';
 }
 
 function normalizeEmbeddingRow(row: EmbeddingRow): EmbeddingCatalogEntry {
@@ -212,7 +218,7 @@ async function connectionsForEntry(input: {
 
   const buckets: SourceChunkConnectionBucket[] = [];
   for (const sourceRow of sourceRows ?? []) {
-    const sourceChunkId = String(sourceRow.id ?? '');
+    const sourceChunkId = stringScalar(sourceRow.id);
     const sourceVector = sourceRow[embeddingColumn];
     if (!sourceChunkId || sourceVector === undefined || sourceVector === null) continue;
 
@@ -230,11 +236,11 @@ async function connectionsForEntry(input: {
 
     const byTarget = new Map<string, DocumentConnection>();
     for (const row of (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>) {
-      const targetDocumentId = String(row.document_id ?? '');
-      const targetChunkId = String(row.chunk_id ?? '');
+      const targetDocumentId = stringScalar(row.document_id);
+      const targetChunkId = stringScalar(row.chunk_id);
       if (!targetDocumentId || !targetChunkId || targetDocumentId === input.sourceDocumentId) continue;
-      const path = String(row.path ?? '');
-      const title = String(row.title ?? path);
+      const path = stringScalar(row.path);
+      const title = stringScalar(row.title) || path;
       const score = typeof row.similarity === 'number' ? row.similarity : Number(row.similarity ?? 0);
       if (!path || !Number.isFinite(score)) continue;
       mergeBestConnection(byTarget, {

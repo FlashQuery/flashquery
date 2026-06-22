@@ -445,10 +445,82 @@ Template access is covered in more detail in `Document Reference System.md`, but
 - Top-level `templates.default_access` controls whether purposes without an explicit template list get all exposed templates (`permissive`, the default) or none (`restrictive`).
 - Top-level `templates.host_access` / `templates.host_templates` control whether eligible templates are exposed directly on the host MCP tool surface (callable without a purpose). See "Host template tools" in `Document Reference System.md`.
 
-## Embedding Purpose
+## Embedding Catalog
 
-FlashQuery can represent embedding generation through the same LLM structure. When a purpose named `embedding` exists, FlashQuery uses that purpose first for semantic-search embeddings and ignores the legacy top-level `embedding:` provider path for routing.
+Semantic search uses the top-level `embeddings:` catalog in `flashquery.yml`. Each catalog entry names an embedding column family, its native vector width, and one or more provider endpoints from the `llm.providers` list. The `llm:` section still defines the provider accounts/endpoints, but embedding routing is configured through `embeddings:`, not through an `llm.purposes[]` entry.
 
+```yaml
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+      api_key: ${OPENAI_API_KEY}
+
+  models:
+    - name: fast
+      provider_name: openai
+      model: gpt-4.1-mini
+      type: language
+      cost_per_million:
+        input: 0.40
+        output: 1.60
+
+  purposes:
+    - name: default
+      description: General assistant calls.
+      models:
+        - fast
+
+embeddings:
+  - name: primary
+    dimensions: 1536
+    endpoints:
+      - provider_name: openai
+        model: text-embedding-3-small
+        rate_limit:
+          min_delay_ms: 100
+```
+
+Embedding catalog entries must declare the native `dimensions` of the model they use. FlashQuery creates per-entry storage such as `embedding_primary`; `dimensions` is not sent to providers as a dimensions-reduction request parameter. Use `maintain_vault` lifecycle actions such as `backfill_embeddings`, `rebuild_embeddings`, and `retire_embedding` to operate on catalog entries.
+
+Legacy configs may still contain older embedding-purpose or singular `embedding:` settings for compatibility, but new installs should use the catalog form shown in `flashquery.example.yml`.
+
+For local Ollama embeddings, point a catalog endpoint at an Ollama provider:
+
+```yaml
+llm:
+  providers:
+    - name: local-ollama
+      type: ollama
+      endpoint: http://127.0.0.1:11434
+
+  models:
+    - name: local-chat
+      provider_name: local-ollama
+      model: llama3.2
+      type: language
+      cost_per_million:
+        input: 0
+        output: 0
+
+  purposes:
+    - name: default
+      description: Local chat calls.
+      models:
+        - local-chat
+
+embeddings:
+  - name: primary
+    dimensions: 768
+    endpoints:
+      - provider_name: local-ollama
+        model: nomic-embed-text
+```
+
+The model entry used by `call_model` does not need to declare `type: embedding`; the catalog endpoint supplies the concrete embedding model name.
+
+<!-- Historical configuration reference:
 ```yaml
 llm:
   models:
@@ -467,8 +539,7 @@ llm:
       models:
         - embeddings
 ```
-
-Embedding models should declare `type: embedding` and `dimensions`. The dimensions must match the actual embedding model. If the `embedding` purpose is missing, FlashQuery falls back to the legacy top-level `embedding:` section when present; if neither path is usable, semantic search is disabled through the null embedding provider.
+-->
 
 ## Discovery
 

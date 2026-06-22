@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-06-22
+
+> This release rebuilds FlashQuery's embedding system around named catalog entries, document chunks, and explicit lifecycle operations. It gives operators safer migration and repair tools while making semantic document search more precise and inspectable.
+
+### Added
+- **BREAKING:** Add the top-level `embeddings:` catalog for named embedding entries with per-entry dimensions, endpoints, rate limits, and vector storage.
+- Add embedding lifecycle maintenance through `maintain_vault`: `backfill_embeddings`, `rebuild_embeddings`, `retire_embedding`, `abort`, and lifecycle job status.
+- Add document chunk parsing, storage, embedding, and chunk-aware semantic search with `matched_chunks` result metadata.
+- Add `get_document include:["connections"]` to return stored-vector semantic connections between document chunks.
+- Add plugin record embedding registration, per-plugin embedding column management, and semantic `search_records` support.
+- Add embedding diagnostics, drift detection, startup validation, pending retry visibility, and first-time/legacy schema reset workflows.
+
+### Changed
+- **BREAKING:** Move new semantic-search configuration from legacy singular embedding routes to named `embeddings:` catalog entries.
+- Change document semantic search to use chunk vectors instead of whole-document vectors, returning document-centered results with matched chunk details.
+- Change embedding writes and retries to fan out by catalog entry and report entry-scoped deferred warnings such as `embedding_deferred:primary`.
+- Change embedding provider handling to preserve native vector widths and avoid treating `dimensions` as a provider-side reduction parameter.
+- Update example config and user-facing docs for the catalog-based embedding model and lifecycle operations.
+
+### Fixed
+- Fix chunk insert idempotency to avoid duplicate primary-key insertion during embedding writes.
+- Fix read-triggered chunk re-embedding when the document row is absent.
+- Fix document update paths to upsert document rows before embedding work for unindexed files.
+- Fix record semantic search to use pooled RPCs and improve lifecycle job finalization/ownership.
+- Fix embedding test and local Ollama configuration failures uncovered during the chunk migration.
+
 ## [4.1.0] - 2026-06-10
 
 > This release surfaces vault templates directly on FlashQuery's host MCP tool list — eligible templates become first-class `flashquery_*` tools that any connected AI client can call without going through a delegated `call_model` purpose. It also gives macros surgical, line-level editing of vault files through path-jailed shell verbs.
@@ -478,7 +504,8 @@ This release introduces native filesystem navigation to the vault. The new `crea
 
 ---
 
-[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v4.1.0...HEAD
+[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v5.0.0...HEAD
+[5.0.0]: https://github.com/FlashQuery/flashquery/compare/v4.1.0...v5.0.0
 [4.1.0]: https://github.com/FlashQuery/flashquery/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/FlashQuery/flashquery/compare/v3.2.0...v4.0.0
 [3.2.0]: https://github.com/FlashQuery/flashquery/compare/v3.1.0...v3.2.0

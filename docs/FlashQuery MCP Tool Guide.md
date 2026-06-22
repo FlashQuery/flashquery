@@ -913,25 +913,33 @@ Use `write_document` to create files inside directories, `move_document` to move
 **Status:** final
 **Category:** system
 **Tier:** admin
-**Use when:** Running administrative vault sync, repair, or background job status checks after external file changes.
+**Use when:** Running administrative vault sync, repair, embedding lifecycle maintenance, or background job status checks after external file changes.
 **Do not use when:** A normal read/write tool can answer the request; normal tools return current authoritative state.
 
 **Behavior**
 
-Delegates to the maintenance service. `sync` scans external filesystem changes. `repair` reconciles tracked document state. Arrays can include `sync` and `repair`, with repair running before sync. `background` is valid only for `sync`; `dry_run` is valid only for `repair`; `status` requires `job_id`.
+Delegates to the maintenance service. `sync` scans external filesystem changes. `repair` reconciles tracked document state. Arrays can include `sync` and `repair`, with repair running before sync. Lifecycle actions operate on the `embeddings:` catalog: `backfill_embeddings` fills missing vectors, `rebuild_embeddings` refreshes stale or selected vectors, `retire_embedding` removes a catalog entry and its vector artifacts, and `abort` requests cancellation of a running lifecycle job. `status` requires `job_id`.
 
 **Inputs**
 
 | Field | Type | Required | Default | Description |
 |---|---:|---:|---:|---|
-| `action` | `"sync" \| "repair" \| "status" \| ("sync" \| "repair")[]` | yes | none | Maintenance action or run action array. |
-| `dry_run` | `boolean` | no | `false` | Only valid for repair. |
-| `background` | `boolean` | no | `false` | Only valid for sync. |
-| `job_id` | `string` | status | none | Required for `action: "status"`. |
+| `action` | `"sync" \| "repair" \| "status" \| "backfill_embeddings" \| "rebuild_embeddings" \| "retire_embedding" \| "abort" \| ("sync" \| "repair")[]` | yes | none | Maintenance action or sync/repair action array. |
+| `dry_run` | `boolean` | no | `false` | Valid for repair and supported lifecycle actions. |
+| `background` | `boolean` | no | `false` | Valid for sync and supported lifecycle actions. |
+| `job_id` | `string` | status/abort | none | Required for `action: "status"` or `action: "abort"`. |
+| `embedding_name` | `string` | action/scope-specific | none | Embedding catalog entry name for core lifecycle actions. |
+| `scope` | `object` | lifecycle action-specific | none | Entity scope for `backfill_embeddings` and `rebuild_embeddings`. |
+| `max_rows` | `integer` | rebuild | `0` for backfill | Strict in-scope row ceiling; `0` means unlimited. |
+| `max_documents_in_response` | `integer` | no | `1000` | Cap for document lifecycle reporting. |
+| `confirm` | `string` | rebuild/retire | none | Confirmation string for destructive or expensive lifecycle actions. |
+| `stale_only` | `boolean` | no | `false` | Narrow `rebuild_embeddings` to stale rows. |
+| `mismatched_width_only` | `boolean` | no | `false` | Narrow `rebuild_embeddings` to width-mismatched rows. |
+| `drop_stamping_columns` | `boolean` | no | `true` | Retire option for stamping columns. |
 
 **Output**
 
-Success returns the maintenance service payload. Run results include action timing, `dry_run`, counts for scanned/added/updated/repaired/archived, and optional warnings. Background sync returns job metadata; status returns job status. Expected validation errors use canonical JSON; runtime maintenance failures set `isError: true`.
+Success returns the maintenance service payload. Run results include action timing, counts, lifecycle breakdowns, failures, warnings, and optional job metadata. Background sync and lifecycle actions return job metadata; `status` returns job status. Expected validation errors use canonical JSON; runtime maintenance failures set `isError: true`.
 
 **Examples**
 
@@ -939,6 +947,25 @@ Success returns the maintenance service payload. Run results include action timi
 mcp__flashquery__maintain_vault({
   action: ["repair", "sync"],
   dry_run: false
+})
+```
+
+```js
+mcp__flashquery__maintain_vault({
+  action: "backfill_embeddings",
+  embedding_name: "primary",
+  scope: { entity_types: ["documents"] },
+  dry_run: true
+})
+```
+
+```js
+mcp__flashquery__maintain_vault({
+  action: "rebuild_embeddings",
+  embedding_name: "primary",
+  scope: { entity_types: ["documents", "memory"] },
+  max_rows: 1000,
+  confirm: "primary"
 })
 ```
 
