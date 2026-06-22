@@ -75,6 +75,23 @@ describe('macro task result transitions', () => {
     expect(registry.get('task-malformed', 'session-a')).toBeUndefined();
   });
 
+  it('fails repaired expected-error envelopes instead of completing tasks', () => {
+    const registry = new MacroTaskRegistry();
+    const task = registry.create({ taskId: 'task-expected-error', sessionId: 'session-a' });
+    const transitions: string[] = [];
+
+    const replacement = transitionTaskFromResult(
+      registry,
+      task,
+      toolResult('{error: "invalid_input", message: "Bad input", details: {reason: "x",},}'),
+      (record) => transitions.push(record.status)
+    );
+
+    expect(replacement).toBeUndefined();
+    expect(transitions).toEqual(['failed']);
+    expect(registry.get('task-expected-error', 'session-a')).toBeUndefined();
+  });
+
   it('parseResultPayload repairs structured envelopes and rejects unreadable ones', () => {
     expect(parseResultPayload(toolResult('{task_id: "task-success", result: "ok",}'))).toMatchObject({
       ok: true,

@@ -911,6 +911,17 @@ describe('OpenAICompatibleLlmClient.chat', () => {
     await expect(client.chat('gpt-4o', SAMPLE_MESSAGES)).rejects.toThrow('invalid tool call arguments JSON');
   });
 
+  it('chat() rejects provider-native non-object tool call argument values', async () => {
+    for (const args of [['query', 'alpha'], true, 7]) {
+      __setNextResponse({
+        status: 200,
+        body: makeOpenAIToolCallBody({ args }),
+      });
+
+      await expect(client.chat('gpt-4o', SAMPLE_MESSAGES)).rejects.toThrow('invalid tool call arguments JSON');
+    }
+  });
+
   it('T-U-027: chat() preserves object and missing tool call argument behavior', async () => {
     __setNextResponse({
       status: 200,

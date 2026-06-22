@@ -797,7 +797,7 @@ function isCancelledPayload(payload: unknown): boolean {
 }
 
 function isExpectedFailurePayload(payload: unknown): boolean {
-  return isRecord(payload) && payload['error'] === 'macro_aborted';
+  return isRecord(payload) && typeof payload['error'] === 'string';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

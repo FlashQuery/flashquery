@@ -167,6 +167,10 @@ export class OpenAICompatibleLlmClient implements LlmClient {
     const invalidArgumentsError = () =>
       new Error(`LLM error: ${providerName} returned invalid tool call arguments JSON.`);
 
+    if (args === undefined || args === null) {
+      return {};
+    }
+
     if (typeof args === 'string') {
       const parsed = parseLlmJson(args, TOOL_CALL_ARGUMENTS_SCHEMA);
       if (parsed.ok) {
@@ -179,7 +183,7 @@ export class OpenAICompatibleLlmClient implements LlmClient {
       return args as Record<string, unknown>;
     }
 
-    return {};
+    throw invalidArgumentsError();
   }
 
   private normalizeToolCalls(providerName: string, rawToolCalls: unknown): LlmChatToolCall[] | undefined {
