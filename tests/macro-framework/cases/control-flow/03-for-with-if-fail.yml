@@ -22,7 +22,7 @@ covers:
   - MTF-C-003   # if/then/fi conditional
   - MTF-C-004   # fail() builtin raises macro_aborted
 
-golden_version: "0.3.0"
+golden_version: "0.4.0"
 golden_run_at: 2026-05-18T23:36:01.752Z
 
 deps: []
@@ -59,8 +59,8 @@ predicted_expect:
 
 reconciliation:
   predicted_matched_captured: true
-  captured_at: "2026-05-21T12:41:58Z"
-  golden_version: "0.3.0"
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
   divergence_kind: clean_match
   notes: |
     Clean three-oracle reconciliation. Captured by generic capture runner.

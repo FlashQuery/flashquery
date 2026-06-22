@@ -1,0 +1,48 @@
+id: mtf-s-1402-filter-gt-numeric
+name: filter — ordering operator (>) on a numeric field
+intent: |
+  §14.3.1: ordering operators compare numerically; only rows above the threshold are kept.
+description: |
+  filter with the > operator over a numeric confidence field. Exercises the
+  numeric ordering path (both operands numeric). Graph-EDI §14.3.0/§14.3.1.
+
+covers:
+  - MTF-S-200
+
+golden_version: "0.4.0"
+golden_run_at: 2026-06-22T00:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  rows = [ { id: 1, conf: 0.5 }, { id: 2, conf: 0.9 }, { id: 3, conf: 0.85 } ]
+  result = filter $rows "conf" ">" 0.8
+  exit { result: $result }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result: { result: [{ id: 2, conf: 0.9 }, { id: 3, conf: 0.85 }] }
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result: { result: [{ id: 2, conf: 0.9 }, { id: 3, conf: 0.85 }] }
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

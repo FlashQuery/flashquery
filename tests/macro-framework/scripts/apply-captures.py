@@ -30,6 +30,17 @@ except ImportError:
     print("pyyaml required", file=sys.stderr); sys.exit(2)
 
 
+def golden_version():
+    """Read GOLDEN_VERSION from the golden model's version.ts (single source
+    of truth) so the reconciliation block always reflects the current golden."""
+    vfile = Path(__file__).parent.parent / "macro-golden-model" / "src" / "version.ts"
+    m = re.search(r'GOLDEN_VERSION\s*=\s*"([^"]+)"', vfile.read_text())
+    return m.group(1) if m else "0.0.0"
+
+
+GOLDEN_VERSION = golden_version()
+
+
 def normalize(v):
     if v is None: return None
     if isinstance(v, dict): return {k: normalize(v[k]) for k in v if v[k] is not None}
@@ -107,7 +118,7 @@ def build_reconciliation_block(matched, divergence, captured_iso, tool_calls, tr
         "reconciliation:\n"
         f"  predicted_matched_captured: {pmc}\n"
         f"  captured_at: \"{captured_iso}\"\n"
-        f"  golden_version: \"0.3.0\"\n"
+        f"  golden_version: \"{GOLDEN_VERSION}\"\n"
         f"  divergence_kind: {dk}\n"
         f"  notes: |\n"
         f"    {notes.rstrip()}"

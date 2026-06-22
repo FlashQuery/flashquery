@@ -80,8 +80,16 @@ These cannot be shadowed by variable assignment. Assignment to a builtin name ra
 ```
 echo, status, task_id, list_tasks, count, unique, append, concat,
 add, sub, mul, div, mod, sleep, slow_op, fail, exit, input_var, range,
-grep, find, sed, cat, wc, head, tail, ls
+grep, find, sed, cat, wc, head, tail, ls,
+filter, sort, first, last, keys, contains, join, map, any, all
 ```
+
+> **Data builtins (§14).** The ten general-purpose collection builtins —
+> `filter, sort, first, last, keys, contains, join, map, any, all` — are all
+> live. They share one error model and two-tier validation; see §1.7 for the
+> shared semantics (illustrated with `filter`). Several are natural data names,
+> so a binding LHS must be renamed (e.g. `last_val = ...`, not `last = ...`) or
+> the parser raises `builtin_name_shadowing`.
 
 When generating macros, prefer non-conflicting names: `phase` instead of `status`, `result_value` instead of `exit`, `summary` instead of `status`.
 
@@ -170,6 +178,44 @@ greeting = echo "hello" $name             # binds the string "hello <name>"
 line     = echo $count " items"           # stringifies + joins its args
 slug     = echo $title | sed "s/ /-/g"    # transform a bound VALUE through sed (now works)
 ```
+
+---
+
+## 1.7 Data builtins — `filter` (§14.3.1)
+
+`filter` is the first of the ten §14 collection builtins. It returns the subset
+of a list of objects whose `$field` satisfies a comparison against `$value`.
+
+**Signature:** `filter $list $field $op $value` → list
+
+```
+edges = svc.fetch_edges({})
+stale_edges = filter $edges.payload.edges "stale" "==" true
+strong      = filter $edges.payload.edges "confidence" ">" 0.8
+nested      = filter $rows "metadata.qualifiers.temporal" "==" "current"
+```
+
+**Semantics (these are language-wide invariants shared by all ten data builtins, per §14.3.0):**
+
+- **Arity is fixed at 4.** Wrong count → `filter_argument_count`. Named (`--flag`) args are not accepted → `filter_named_argument`.
+- **`$op`** is one of the six comparison operators: `==`, `!=`, `<`, `>`, `<=`, `>=`. Any other value → `filter_operator_invalid`.
+- **Comparison semantics match binary expressions exactly.** `==`/`!=` use recursive `deepEqual` (no coercion). The ordering operators (`<`/`<=`/`>`/`>=`) require **both** the field value and `$value` to be numeric, else `comparison_type_mismatch` (the same shared code `$x < "a"` already raises).
+- **`$field` resolves through the same mechanism as `$obj.field`**, including dotted nested paths (`"metadata.qualifiers.temporal"`) split on `.` and walked left to right. A missing leaf compares as `null` (§4.1); a row that is not an object throws (§4.3).
+- **Empty input is never an error** → returns `[]`.
+- **Non-mutating** — returns a new list; the input is never modified.
+
+**Two validation tiers (§14.3.0 — `validate-if-literal, defer-if-dynamic`).** A fault visible in the parsed program is caught at **preflight** and surfaces as `error.code: invalid_input`; a fault that depends on a runtime value surfaces during execution as `error.code: tool_call_failed`:
+
+| Fault | Tier | Envelope |
+|---|---|---|
+| Wrong arity (3 or 5 args) | Preflight | `invalid_input` + `filter_argument_count` |
+| Named arg supplied | Preflight | `invalid_input` + `filter_named_argument` |
+| `$op` a **string literal** outside the six | Preflight | `invalid_input` + `filter_operator_invalid` |
+| `$op` a **variable** that resolves to an invalid operator | Runtime | `tool_call_failed` + `filter_operator_invalid` |
+| First arg not a list (runtime value) | Runtime | `tool_call_failed` + `filter_type_mismatch` |
+| Ordering operator on a non-numeric field value | Runtime | `tool_call_failed` + `comparison_type_mismatch` |
+
+`filter` is a value/data builtin, so its **runtime** faults use `MacroRuntimeError` → `error.code: tool_call_failed`. Only the statically-visible (preflight) faults use `invalid_input`.
 
 ---
 

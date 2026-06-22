@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "generated_at": "2026-06-08T23:33:20.581Z",
+  "generated_at": "2026-06-22T18:38:42.345Z",
   "cells": {
     "MTF-G-001": {
       "count": 4,
@@ -299,6 +299,149 @@
         "mtf-s-924-field-access-error-paths-preserved",
         "mtf-s-925-field-access-non-object-throws",
         "mtf-s-926-field-access-on-list-throws"
+      ]
+    },
+    "MTF-S-200": {
+      "count": 15,
+      "last_verified": "2026-06-22T18:05:30.193Z",
+      "tests": [
+        "mtf-e-1407-filter-arity-too-few",
+        "mtf-e-1408-filter-arity-too-many",
+        "mtf-e-1409-filter-named-arg",
+        "mtf-e-1410-filter-literal-bad-op",
+        "mtf-e-1411-filter-dynamic-bad-op",
+        "mtf-e-1412-filter-not-a-list",
+        "mtf-e-1413-filter-ordering-non-numeric",
+        "mtf-e-1414-filter-non-object-row",
+        "mtf-s-1400-filter-basic-eq",
+        "mtf-s-1401-filter-neq",
+        "mtf-s-1402-filter-gt-numeric",
+        "mtf-s-1403-filter-nested-field",
+        "mtf-s-1404-filter-empty-list",
+        "mtf-s-1405-filter-missing-field-null",
+        "mtf-s-1406-filter-dynamic-op-valid"
+      ]
+    },
+    "MTF-S-201": {
+      "count": 12,
+      "last_verified": "2026-06-22T18:38:42.345Z",
+      "tests": [
+        "mtf-e-1425-sort-arity",
+        "mtf-e-1426-sort-named-arg",
+        "mtf-e-1427-sort-literal-bad-direction",
+        "mtf-e-1428-sort-dynamic-bad-direction",
+        "mtf-e-1429-sort-mixed-field-type",
+        "mtf-e-1430-sort-not-a-list",
+        "mtf-e-1431-sort-literal-field-type",
+        "mtf-s-1420-sort-asc-numeric",
+        "mtf-s-1421-sort-desc-numeric",
+        "mtf-s-1422-sort-string-asc",
+        "mtf-s-1423-sort-nulls-last",
+        "mtf-s-1424-sort-empty"
+      ]
+    },
+    "MTF-S-202": {
+      "count": 4,
+      "last_verified": "2026-06-22T18:38:42.345Z",
+      "tests": [
+        "mtf-e-1434-first-arity",
+        "mtf-e-1435-first-not-a-list",
+        "mtf-s-1432-first-ok",
+        "mtf-s-1433-first-empty"
+      ]
+    },
+    "MTF-S-203": {
+      "count": 4,
+      "last_verified": "2026-06-22T18:38:42.345Z",
+      "tests": [
+        "mtf-e-1438-last-arity",
+        "mtf-e-1439-last-not-a-list",
+        "mtf-s-1436-last-ok",
+        "mtf-s-1437-last-empty"
+      ]
+    },
+    "MTF-S-204": {
+      "count": 4,
+      "last_verified": "2026-06-22T18:38:42.345Z",
+      "tests": [
+        "mtf-e-1442-keys-arity",
+        "mtf-e-1443-keys-not-a-record",
+        "mtf-s-1440-keys-ok",
+        "mtf-s-1441-keys-empty"
+      ]
+    },
+    "MTF-S-205": {
+      "count": 6,
+      "last_verified": "2026-06-22T18:38:42.345Z",
+      "tests": [
+        "mtf-e-1448-contains-arity",
+        "mtf-e-1449-contains-not-a-list",
+        "mtf-s-1444-contains-true",
+        "mtf-s-1445-contains-false",
+        "mtf-s-1446-contains-object",
+        "mtf-s-1447-contains-empty"
+      ]
+    },
+    "MTF-S-206": {
+      "count": 7,
+      "last_verified": "2026-06-22T18:38:42.345Z",
+      "tests": [
+        "mtf-e-1452-join-arity",
+        "mtf-e-1453-join-literal-separator-type",
+        "mtf-e-1454-join-dynamic-separator-type",
+        "mtf-e-1455-join-not-a-list",
+        "mtf-e-1456-join-element-type",
+        "mtf-s-1450-join-ok",
+        "mtf-s-1451-join-empty"
+      ]
+    },
+    "MTF-S-207": {
+      "count": 7,
+      "last_verified": "2026-06-22T18:38:42.345Z",
+      "tests": [
+        "mtf-e-1461-map-arity",
+        "mtf-e-1462-map-not-a-list",
+        "mtf-e-1463-map-non-object-row",
+        "mtf-s-1457-map-ok",
+        "mtf-s-1458-map-missing-field-null",
+        "mtf-s-1459-map-nested-field",
+        "mtf-s-1460-map-empty"
+      ]
+    },
+    "MTF-S-208": {
+      "count": 8,
+      "last_verified": "2026-06-22T18:38:42.345Z",
+      "tests": [
+        "mtf-e-1467-any-arity",
+        "mtf-e-1468-any-literal-bad-op",
+        "mtf-e-1469-any-dynamic-bad-op",
+        "mtf-e-1470-any-not-a-list",
+        "mtf-e-1471-any-comparison-mismatch",
+        "mtf-s-1464-any-true",
+        "mtf-s-1465-any-false",
+        "mtf-s-1466-any-empty"
+      ]
+    },
+    "MTF-S-209": {
+      "count": 6,
+      "last_verified": "2026-06-22T18:38:42.345Z",
+      "tests": [
+        "mtf-e-1475-all-arity",
+        "mtf-e-1476-all-literal-bad-op",
+        "mtf-e-1477-all-not-a-list",
+        "mtf-s-1472-all-true",
+        "mtf-s-1473-all-false",
+        "mtf-s-1474-all-empty-vacuous"
+      ]
+    },
+    "MTF-S-210": {
+      "count": 4,
+      "last_verified": "2026-06-22T18:38:42.345Z",
+      "tests": [
+        "mtf-e-1478-rename-sub-argument-count",
+        "mtf-e-1479-rename-unique-type-mismatch",
+        "mtf-e-1480-rename-append-type-mismatch",
+        "mtf-e-1481-rename-range-type-mismatch"
       ]
     },
     "MTF-C-001": {

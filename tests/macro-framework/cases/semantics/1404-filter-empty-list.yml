@@ -1,0 +1,47 @@
+id: mtf-s-1404-filter-empty-list
+name: filter — empty input returns empty list
+intent: |
+  §14.3.0: empty input is never an error; filter returns [].
+description: |
+  filter over an empty list. Graph-EDI §14.3.0 empty-input invariant.
+
+covers:
+  - MTF-S-200
+
+golden_version: "0.4.0"
+golden_run_at: 2026-06-22T00:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  rows = []
+  result = filter $rows "stale" "==" true
+  exit { result: $result }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result: { result: [] }
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result: { result: [] }
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

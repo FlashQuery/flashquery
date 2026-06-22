@@ -48,8 +48,8 @@ When golden and production genuinely disagree, the divergence is triaged
 against the **spec** — never against whichever engine you happen to trust — and
 filed in `GOLDEN_GAPS.md` (golden bug) or `PRODUCTION_GAPS.md` (production bug).
 
-Today the corpus is **510 pilots** across **83 coverage cells** (78 exercised);
-the suite is **511 Vitest tests** (510 pilots + 1 framework self-test).
+Today the corpus is **593 pilots** across **94 coverage cells** (89 exercised);
+the suite is **594 Vitest tests** (593 pilots + 1 framework self-test).
 
 ---
 
@@ -114,7 +114,7 @@ Conventions:
 ```sh
 # from the flashquery/ repo root
 
-# Run the whole suite (510 pilots)
+# Run the whole suite (593 pilots)
 npm run test:macro-framework
 
 # Verbose per-pilot output

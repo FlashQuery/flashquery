@@ -99,6 +99,25 @@ export class MacroPreflightError extends Error {
   }
 }
 
+// §14.3.0 — statically-visible faults on the data builtins (filter, sort, …):
+// wrong arity, named arguments, and *literal* operator/direction/field/separator
+// values. Distinct from the input-var `MacroPreflightError` (which carries the
+// four input-var contract arrays); this one surfaces as `invalid_input` with a
+// lean `{ reason, line }` details block — matching production, whose generic
+// `MacroPreflightError('invalid_input', msg, { reason, line })` renders details
+// verbatim. Runtime (value-dependent) faults on the same builtins use
+// `MacroRuntimeError` → `tool_call_failed` instead.
+export class MacroBuiltinPreflightError extends Error {
+  constructor(
+    public readonly reason: string,
+    message: string,
+    public readonly line?: number,
+  ) {
+    super(message);
+    this.name = "MacroBuiltinPreflightError";
+  }
+}
+
 export class ForbiddenPathError extends Error {
   constructor(
     public readonly macroPath: string,
@@ -501,6 +520,9 @@ export async function evaluate(program: Program, opts: EvaluateOptions): Promise
   // ----- Pre-flight: shell-verb flag rejections (REQ-044) -----
   preScanForbiddenFlags(program);
 
+  // ----- Pre-flight: §14 data-builtin static checks (arity / named / literal op) -----
+  preflightBuiltins(program);
+
   // ----- Pre-flight: input_var contract validation (REQ-007) -----
   const { required, optional } = collectInputVarContract(program);
   const provided = Object.keys(inputVars);
@@ -572,6 +594,170 @@ function serializeAst(program: Program): string {
 }
 
 // ----- input_var contract collector -----
+
+// §14.3.0 — static pre-execution validation for the data builtins. Mirrors
+// production's `preflightProgram` (src/macro/preflight.ts): runs on BOTH the
+// dry-run and real-execution paths, before any statement executes, so a fault
+// visible in the AST surfaces identically as `error.code: invalid_input`.
+// Value-dependent faults are deferred to the builtin body at runtime.
+const FILTER_OPERATORS = new Set(["==", "!=", "<", ">", "<=", ">="]);
+
+// §14.3 — static shape of each data builtin: fixed arity, plus the positional
+// indices (if any) of a $field (string), $op (one of six), $direction
+// (asc/desc), or $separator (string) argument whose *literal* value is checked
+// at preflight. Dynamic ($var / interpolated) values defer to runtime.
+interface DataBuiltinSpec {
+  arity: number;
+  fieldArg?: number;
+  opArg?: number;
+  directionArg?: number;
+  separatorArg?: number;
+}
+const DATA_BUILTIN_SPECS: Record<string, DataBuiltinSpec> = {
+  filter: { arity: 4, fieldArg: 1, opArg: 2 },
+  sort: { arity: 3, fieldArg: 1, directionArg: 2 },
+  first: { arity: 1 },
+  last: { arity: 1 },
+  keys: { arity: 1 },
+  contains: { arity: 2 },
+  join: { arity: 2, separatorArg: 1 },
+  map: { arity: 2, fieldArg: 1 },
+  any: { arity: 4, fieldArg: 1, opArg: 2 },
+  all: { arity: 4, fieldArg: 1, opArg: 2 },
+};
+
+// A literal value node that is NOT a string literal — used to flag a non-string
+// $field / $separator literal at preflight. VarRef / FieldAccess / Call etc. are
+// dynamic and defer to runtime.
+function isNonStringLiteral(expr: Expr): boolean {
+  return (
+    expr.kind === "NumLit" ||
+    expr.kind === "BoolLit" ||
+    expr.kind === "NullLit" ||
+    expr.kind === "ListLit" ||
+    expr.kind === "ObjectLit"
+  );
+}
+
+// A non-interpolated string literal whose value is statically known.
+function staticStringLit(expr: Expr): string | null {
+  return expr.kind === "StringLit" && !expr.raw.includes("$") ? expr.raw : null;
+}
+
+export function preflightBuiltins(program: Program): void {
+  for (const stmt of program.statements) preflightBuiltinStmt(stmt);
+}
+
+function preflightBuiltinStmt(stmt: Statement): void {
+  switch (stmt.kind) {
+    case "Binding":
+      preflightBuiltinExpr(stmt.value);
+      return;
+    case "Pipeline":
+      stmt.stages.forEach(preflightBuiltinCall);
+      return;
+    case "ToolCall":
+      if (stmt.arg) preflightBuiltinExpr(stmt.arg);
+      return;
+    case "ForLoop":
+      preflightBuiltinExpr(stmt.iterable);
+      stmt.body.forEach(preflightBuiltinStmt);
+      return;
+    case "WhileLoop":
+      preflightBuiltinExpr(stmt.cond);
+      stmt.body.forEach(preflightBuiltinStmt);
+      return;
+    case "IfStmt":
+      preflightBuiltinExpr(stmt.cond);
+      stmt.thenBody.forEach(preflightBuiltinStmt);
+      stmt.elseBody?.forEach(preflightBuiltinStmt);
+      return;
+    case "ContinueStmt":
+    case "BreakStmt":
+      return;
+  }
+}
+
+function preflightBuiltinExpr(expr: Expr): void {
+  switch (expr.kind) {
+    case "StringLit":
+    case "NumLit":
+    case "BoolLit":
+    case "NullLit":
+    case "VarRef":
+      return;
+    case "ListLit":
+      expr.items.forEach(preflightBuiltinExpr);
+      return;
+    case "ObjectLit":
+      expr.entries.forEach((entry) => preflightBuiltinExpr(entry.value));
+      return;
+    case "FieldAccess":
+      preflightBuiltinExpr(expr.target);
+      return;
+    case "Negation":
+      preflightBuiltinExpr(expr.expr);
+      return;
+    case "BinaryOp":
+      preflightBuiltinExpr(expr.left);
+      preflightBuiltinExpr(expr.right);
+      return;
+    case "RangeOp":
+      preflightBuiltinExpr(expr.start);
+      preflightBuiltinExpr(expr.end);
+      return;
+    case "Pipeline":
+      expr.stages.forEach(preflightBuiltinCall);
+      return;
+    case "ToolCall":
+      if (expr.arg) preflightBuiltinExpr(expr.arg);
+      return;
+  }
+}
+
+function preflightBuiltinCall(call: Call): void {
+  // Recurse into argument expressions first (nested calls, e.g. `filter (sort …) …`).
+  for (const arg of call.args) preflightBuiltinExpr(arg.value);
+
+  const spec = DATA_BUILTIN_SPECS[call.name];
+  if (!spec) return;
+  const name = call.name;
+
+  const named = call.args.filter((a) => a.kind === "NamedArg");
+  if (named.length > 0) {
+    throw new MacroBuiltinPreflightError(`${name}_named_argument`, `${name} does not accept named arguments.`, call.line);
+  }
+  const positional = call.args.filter((a) => a.kind === "PositionalArg");
+  if (positional.length !== spec.arity) {
+    throw new MacroBuiltinPreflightError(
+      `${name}_argument_count`,
+      `${name} expects exactly ${spec.arity} argument(s), got ${positional.length}.`,
+      call.line,
+    );
+  }
+  if (spec.fieldArg !== undefined && isNonStringLiteral(positional[spec.fieldArg].value)) {
+    throw new MacroBuiltinPreflightError(`${name}_field_type`, `${name} field must be a string.`, call.line);
+  }
+  if (spec.separatorArg !== undefined && isNonStringLiteral(positional[spec.separatorArg].value)) {
+    throw new MacroBuiltinPreflightError("join_separator_type", "join separator must be a string.", call.line);
+  }
+  if (spec.opArg !== undefined) {
+    const op = staticStringLit(positional[spec.opArg].value);
+    if (op !== null && !FILTER_OPERATORS.has(op)) {
+      throw new MacroBuiltinPreflightError(
+        `${name}_operator_invalid`,
+        `${name} operator must be one of ==, !=, <, >, <=, >= (got "${op}").`,
+        call.line,
+      );
+    }
+  }
+  if (spec.directionArg !== undefined) {
+    const dir = staticStringLit(positional[spec.directionArg].value);
+    if (dir !== null && dir !== "asc" && dir !== "desc") {
+      throw new MacroBuiltinPreflightError("sort_direction_invalid", `sort direction must be "asc" or "desc" (got "${dir}").`, call.line);
+    }
+  }
+}
 
 function collectInputVarContract(program: Program): {
   required: string[];
@@ -1468,7 +1654,7 @@ async function evalBinaryOp(
   }
 }
 
-function valueEquals(a: Value, b: Value): boolean {
+export function valueEquals(a: Value, b: Value): boolean {
   if (a === b) return true;
   if (a === null || b === null) return false;
   if (typeof a !== typeof b) return false;

@@ -152,11 +152,11 @@ describe('macro input_var preflight', () => {
     const result = await evaluateProgram(
       parseProgram(`
         phrases = input_var "phrases"
-        last = null
+        last_seen = null
         for phrase in $phrases do
-          last = $phrase
+          last_seen = $phrase
         done
-        exit $last
+        exit $last_seen
       `),
       { inputVars: { phrases: ['a', 'b', 'c'] } }
     );

@@ -1,0 +1,44 @@
+id: mtf-s-1459-map-nested-field
+name: map — nested dotted field
+intent: |
+  §14.3.8: dotted nested paths supported.
+
+covers:
+  - MTF-S-207
+
+golden_version: "0.4.0"
+golden_run_at: 2026-06-22T00:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  r = map [ { m: { k: 7 } } ] "m.k"
+  exit { r: $r }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result: { r: [7] }
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result: { r: [7] }
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

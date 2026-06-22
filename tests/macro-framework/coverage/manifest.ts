@@ -301,6 +301,122 @@ export const CELLS: Cell[] = [
     added_in: "2026-05-19",
   },
 
+  // ─── MTF-S §14 data builtins ─────────────────────────────────────────
+  // The ten general-purpose collection builtins (Graph-EDI §14.3): filter,
+  // sort, first, last, keys, contains, join, map, any, all. One cell per
+  // builtin family; each exercises positive paths and negatives at BOTH
+  // validation tiers (preflight → invalid_input; runtime → tool_call_failed).
+  {
+    id: "MTF-S-200",
+    category: "MTF-S",
+    description:
+      "§14.3.1 `filter $list $field $op $value` — subset a list of objects. Positive: all six operators (==/!=/</>/<=/>=), nested dotted-field resolution, missing-field-null comparison, empty-input → [], dynamic (variable) operator runtime path. Negative — preflight tier (invalid_input): wrong arity, named arg, literal bad operator. Negative — runtime tier (tool_call_failed): dynamic bad operator, non-list operand (filter_type_mismatch), ordering on non-numeric (comparison_type_mismatch), non-object row (invalid_field_target).",
+    density_target: 15,
+    source_citations: ["Graph-EDI-§14.3.0", "Graph-EDI-§14.3.1"],
+    status: "actionable",
+    added_in: "2026-06-22",
+  },
+  {
+    id: "MTF-S-201",
+    category: "MTF-S",
+    description:
+      "§14.3.2 `sort $list $field $direction` — stable, non-mutating. asc/desc numeric, lexicographic string, NULLS LAST (null/missing field sorts to end both directions). Negatives — preflight: arity, named, literal bad direction, literal non-string field. Runtime: dynamic bad direction (sort_direction_invalid), non-list (sort_type_mismatch), mixed/non-scalar field values (sort_field_type_mismatch).",
+    density_target: 12,
+    source_citations: ["Graph-EDI-§14.3.0", "Graph-EDI-§14.3.2"],
+    status: "actionable",
+    added_in: "2026-06-22",
+  },
+  {
+    id: "MTF-S-202",
+    category: "MTF-S",
+    description:
+      "§14.3.3 `first $list` → item|null. Positive, empty→null. Negatives: arity (preflight first_argument_count), non-list (runtime first_type_mismatch).",
+    density_target: 4,
+    source_citations: ["Graph-EDI-§14.3.3"],
+    status: "actionable",
+    added_in: "2026-06-22",
+  },
+  {
+    id: "MTF-S-203",
+    category: "MTF-S",
+    description:
+      "§14.3.4 `last $list` → item|null. Positive, empty→null. Negatives: arity (preflight last_argument_count), non-list (runtime last_type_mismatch).",
+    density_target: 4,
+    source_citations: ["Graph-EDI-§14.3.4"],
+    status: "actionable",
+    added_in: "2026-06-22",
+  },
+  {
+    id: "MTF-S-204",
+    category: "MTF-S",
+    description:
+      "§14.3.5 `keys $object` → list of strings (insertion order). Positive, empty {}→[]. Negatives: arity (preflight keys_argument_count), non-record (runtime keys_type_mismatch).",
+    density_target: 4,
+    source_citations: ["Graph-EDI-§14.3.5"],
+    status: "actionable",
+    added_in: "2026-06-22",
+  },
+  {
+    id: "MTF-S-205",
+    category: "MTF-S",
+    description:
+      "§14.3.6 `contains $list $value` → boolean. Recursive deepEqual membership (incl. objects). Positive true/false, empty→false. Negatives: arity (preflight contains_argument_count), non-list (runtime contains_type_mismatch).",
+    density_target: 6,
+    source_citations: ["Graph-EDI-§14.3.6"],
+    status: "actionable",
+    added_in: "2026-06-22",
+  },
+  {
+    id: "MTF-S-206",
+    category: "MTF-S",
+    description:
+      "§14.3.7 `join $list $separator` → string. No implicit stringification. Positive, empty→\"\". Negatives — preflight: arity, literal non-string separator (join_separator_type). Runtime: dynamic non-string separator, non-list (join_type_mismatch), non-string element (join_element_type).",
+    density_target: 8,
+    source_citations: ["Graph-EDI-§14.3.0", "Graph-EDI-§14.3.7"],
+    status: "actionable",
+    added_in: "2026-06-22",
+  },
+  {
+    id: "MTF-S-207",
+    category: "MTF-S",
+    description:
+      "§14.3.8 `map $list $field` → list. Length-preserving projection; missing field→null; dotted nested paths. Positive, empty→[]. Negatives: arity (preflight map_argument_count), non-list (runtime map_type_mismatch), non-object row (runtime invalid_field_target).",
+    density_target: 8,
+    source_citations: ["Graph-EDI-§14.3.8"],
+    status: "actionable",
+    added_in: "2026-06-22",
+  },
+  {
+    id: "MTF-S-208",
+    category: "MTF-S",
+    description:
+      "§14.3.9 `any $list $field $op $value` → boolean. Short-circuits; empty→false. Same field/op/comparison rules as filter. Negatives — preflight: arity, literal bad op (any_operator_invalid). Runtime: dynamic bad op, non-list (any_type_mismatch), comparison_type_mismatch.",
+    density_target: 8,
+    source_citations: ["Graph-EDI-§14.3.0", "Graph-EDI-§14.3.9"],
+    status: "actionable",
+    added_in: "2026-06-22",
+  },
+  {
+    id: "MTF-S-209",
+    category: "MTF-S",
+    description:
+      "§14.3.10 `all $list $field $op $value` → boolean. Short-circuits; empty→true (vacuous). Same field/op/comparison rules as filter. Negatives — preflight: arity, literal bad op (all_operator_invalid). Runtime: non-list (all_type_mismatch).",
+    density_target: 7,
+    source_citations: ["Graph-EDI-§14.3.0", "Graph-EDI-§14.3.10"],
+    status: "actionable",
+    added_in: "2026-06-22",
+  },
+  {
+    id: "MTF-S-210",
+    category: "MTF-S",
+    description:
+      "§14.3.0 reason-code renames — the four pre-existing outliers normalized: sub arity→sub_argument_count, unique non-list→unique_type_mismatch, append non-list→append_type_mismatch, range non-integer→range_type_mismatch. All surface as runtime tool_call_failed with the new reason.",
+    density_target: 4,
+    source_citations: ["Graph-EDI-§14.3.0"],
+    status: "actionable",
+    added_in: "2026-06-22",
+  },
+
   // ─── MTF-C — Control flow ────────────────────────────────────────────
   // for/while/if/fail/exit; fall-off semantics.
   {

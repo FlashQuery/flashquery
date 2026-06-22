@@ -108,6 +108,51 @@ function preflightPipeline(pipeline: Pipeline): void {
   pipeline.stages.forEach(preflightCall);
 }
 
+// §14.3 — the six comparison operators the data builtins accept.
+const FILTER_OPERATORS = new Set(['==', '!=', '<', '>', '<=', '>=']);
+
+// §14.3 — static shape of each data builtin: fixed arity, plus the positional
+// indices (if any) of a $field (string), $op (one of six), $direction
+// (asc/desc), or $separator (string) argument whose *literal* value is checked
+// at preflight. Dynamic ($var / interpolated) values defer to runtime.
+interface DataBuiltinSpec {
+  arity: number;
+  fieldArg?: number;
+  opArg?: number;
+  directionArg?: number;
+  separatorArg?: number;
+}
+const DATA_BUILTIN_SPECS: Record<string, DataBuiltinSpec> = {
+  filter: { arity: 4, fieldArg: 1, opArg: 2 },
+  sort: { arity: 3, fieldArg: 1, directionArg: 2 },
+  first: { arity: 1 },
+  last: { arity: 1 },
+  keys: { arity: 1 },
+  contains: { arity: 2 },
+  join: { arity: 2, separatorArg: 1 },
+  map: { arity: 2, fieldArg: 1 },
+  any: { arity: 4, fieldArg: 1, opArg: 2 },
+  all: { arity: 4, fieldArg: 1, opArg: 2 },
+};
+
+// A literal value node that is NOT a string literal — flags a non-string
+// $field / $separator literal at preflight. VarRef / FieldAccess / Call are
+// dynamic and defer to runtime.
+function isNonStringLiteral(expr: Expr): boolean {
+  return (
+    expr.kind === 'NumLit' ||
+    expr.kind === 'BoolLit' ||
+    expr.kind === 'NullLit' ||
+    expr.kind === 'ListLit' ||
+    expr.kind === 'ObjectLit'
+  );
+}
+
+// A non-interpolated string literal whose value is statically known.
+function staticStringLit(expr: Expr): string | null {
+  return expr.kind === 'StringLit' && !expr.raw.includes('$') ? expr.raw : null;
+}
+
 function preflightCall(call: Call): void {
   call.args.forEach((arg) => preflightExpr(arg.value));
 
@@ -116,6 +161,61 @@ function preflightCall(call: Call): void {
       reason: 'exit_argument_count',
       line: call.line,
     });
+  }
+
+  // §14.3.0 — statically-visible faults on the data builtins: named arguments,
+  // wrong arity, and *literal* operator / direction / field / separator values.
+  // Surface at preflight as `invalid_input`. Value-dependent faults defer to the
+  // builtin body (runtime → tool_call_failed).
+  const spec = DATA_BUILTIN_SPECS[call.name];
+  if (!spec) return;
+  const name = call.name;
+
+  const named = call.args.filter((arg) => arg.kind === 'NamedArg');
+  if (named.length > 0) {
+    throw new MacroPreflightError('invalid_input', `${name} does not accept named arguments.`, {
+      reason: `${name}_named_argument`,
+      line: call.line,
+    });
+  }
+  const positional = call.args.filter((arg) => arg.kind === 'PositionalArg');
+  if (positional.length !== spec.arity) {
+    throw new MacroPreflightError(
+      'invalid_input',
+      `${name} expects exactly ${spec.arity} argument(s), got ${positional.length}.`,
+      { reason: `${name}_argument_count`, line: call.line }
+    );
+  }
+  if (spec.fieldArg !== undefined && isNonStringLiteral(positional[spec.fieldArg].value)) {
+    throw new MacroPreflightError('invalid_input', `${name} field must be a string.`, {
+      reason: `${name}_field_type`,
+      line: call.line,
+    });
+  }
+  if (spec.separatorArg !== undefined && isNonStringLiteral(positional[spec.separatorArg].value)) {
+    throw new MacroPreflightError('invalid_input', 'join separator must be a string.', {
+      reason: 'join_separator_type',
+      line: call.line,
+    });
+  }
+  if (spec.opArg !== undefined) {
+    const op = staticStringLit(positional[spec.opArg].value);
+    if (op !== null && !FILTER_OPERATORS.has(op)) {
+      throw new MacroPreflightError(
+        'invalid_input',
+        `${name} operator must be one of ==, !=, <, >, <=, >= (got "${op}").`,
+        { reason: `${name}_operator_invalid`, line: call.line }
+      );
+    }
+  }
+  if (spec.directionArg !== undefined) {
+    const dir = staticStringLit(positional[spec.directionArg].value);
+    if (dir !== null && dir !== 'asc' && dir !== 'desc') {
+      throw new MacroPreflightError('invalid_input', `sort direction must be "asc" or "desc" (got "${dir}").`, {
+        reason: 'sort_direction_invalid',
+        line: call.line,
+      });
+    }
   }
 }
 

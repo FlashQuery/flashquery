@@ -1,0 +1,48 @@
+id: mtf-s-1403-filter-nested-field
+name: filter — nested dotted field resolution
+intent: |
+  §14.3.0: $field resolves through dotted nested paths (metadata.qualifiers...) like $obj.field.
+description: |
+  filter on a dotted field path ("meta.kind"), walking the nested object.
+  Graph-EDI §14.3.0 field resolution.
+
+covers:
+  - MTF-S-200
+
+golden_version: "0.4.0"
+golden_run_at: 2026-06-22T00:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  rows = [ { id: 1, meta: { kind: "current" } }, { id: 2, meta: { kind: "stale" } } ]
+  result = filter $rows "meta.kind" "==" "current"
+  exit { result: $result }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result: { result: [{ id: 1, meta: { kind: "current" } }] }
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result: { result: [{ id: 1, meta: { kind: "current" } }] }
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

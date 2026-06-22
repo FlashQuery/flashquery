@@ -34,7 +34,7 @@ covers:
   - MTF-S-006   # walk-up scope under nested loops
   - MTF-C-007   # nested for-loop iteration counting
 
-golden_version: "0.3.0"
+golden_version: "0.4.0"
 golden_run_at: 2026-05-18T23:36:01.752Z
 
 deps: []
@@ -77,8 +77,8 @@ predicted_expect:
 
 reconciliation:
   predicted_matched_captured: true
-  captured_at: "2026-05-21T12:41:58Z"
-  golden_version: "0.3.0"
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
   divergence_kind: clean_match
   notes: |
     Clean three-oracle reconciliation. Captured by generic capture runner.

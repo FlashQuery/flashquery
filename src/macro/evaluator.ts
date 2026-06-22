@@ -636,7 +636,7 @@ async function evalRange(
     !Number.isInteger(end)
   ) {
     throw new MacroRuntimeError('Range operands must be integers.', undefined, {
-      reason: 'range_operand_type_mismatch',
+      reason: 'range_type_mismatch',
     });
   }
   return buildRange(start, end, start <= end ? 1 : -1);

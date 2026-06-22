@@ -1,0 +1,51 @@
+id: mtf-e-1428-sort-dynamic-bad-direction
+name: sort — dynamic bad direction (runtime)
+intent: |
+  §14.3.0: $var direction defers to runtime.
+
+covers:
+  - MTF-S-201
+
+golden_version: "0.4.0"
+golden_run_at: 2026-06-22T00:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  d = "up"
+  r = sort [ { v: 1 } ] "v" $d
+  exit { r: $r }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+    details:
+      reason: sort_direction_invalid
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+    details:
+      reason: sort_direction_invalid
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

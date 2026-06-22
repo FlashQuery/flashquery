@@ -19,7 +19,7 @@ describe('macro warning propagation', () => {
 
   it('T-U-210 returns broker_unavailable once for brokered _exists false results', async () => {
     const result = await evaluateProgram(
-      parseProgram('first = brave_search._exists()\nsecond = brave_search._exists()\nexit { first: $first, second: $second }'),
+      parseProgram('first_exists = brave_search._exists()\nsecond = brave_search._exists()\nexit { first: $first_exists, second: $second }'),
       { broker: new NullMcpBroker() }
     );
 

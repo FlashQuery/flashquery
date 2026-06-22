@@ -1,0 +1,50 @@
+id: mtf-e-1475-all-arity
+name: all — wrong arity (preflight)
+intent: |
+  §14.3.10: all arity is 4.
+
+covers:
+  - MTF-S-209
+
+golden_version: "0.4.0"
+golden_run_at: 2026-06-22T00:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  r = all [ { s: true } ] "s" "=="
+  exit { r: $r }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: invalid_input
+    details:
+      reason: all_argument_count
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: error
+  error:
+    code: invalid_input
+    details:
+      reason: all_argument_count
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

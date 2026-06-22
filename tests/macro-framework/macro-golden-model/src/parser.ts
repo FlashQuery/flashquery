@@ -136,6 +136,8 @@ export const BUILTIN_NAMES = new Set<string>([
   "grep", "find", "sed", "cat", "wc", "head", "tail", "ls",
   // Input contract
   "input_var",
+  // §14 data builtins (Graph-EDI §14.3).
+  "filter", "sort", "first", "last", "keys", "contains", "join", "map", "any", "all",
   // Tier 2: termination extension (REQ-105). Macro-callable builtin that
   // raises `MacroNeedsUserInputError`. Named here so binding LHS may not
   // shadow it.

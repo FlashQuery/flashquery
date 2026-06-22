@@ -18,6 +18,7 @@ import {
   MacroPermissionError,
   MacroPrescanError,
   MacroPreflightError,
+  MacroBuiltinPreflightError,
   MacroRuntimeError,
   ForbiddenPathError,
   type SelfBinding,
@@ -238,6 +239,19 @@ function classifyError(e: unknown): { code: keyof typeof MACRO_ERROR_CODES; mess
         // GG-008: propagate arg_kind + line for input_var_key_must_be_literal.
         ...(e.details.arg_kind ? { arg_kind: e.details.arg_kind as Value } : {}),
         ...(e.details.line !== undefined ? { line: e.details.line as Value } : {}),
+      },
+    };
+  }
+  if (e instanceof MacroBuiltinPreflightError) {
+    // §14.3.0 — statically-visible data-builtin fault. Surfaces as
+    // `invalid_input` with a lean `{ reason, line }` details block, matching
+    // production's generic `MacroPreflightError('invalid_input', …)` envelope.
+    return {
+      code: "invalid_input",
+      message: e.message,
+      details: {
+        reason: e.reason,
+        ...(e.line !== undefined ? { line: e.line as Value } : {}),
       },
     };
   }

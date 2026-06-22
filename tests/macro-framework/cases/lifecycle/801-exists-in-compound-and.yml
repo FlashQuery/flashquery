@@ -22,7 +22,7 @@ covers:
   - MTF-L-101   # _exists() introspection
   - MTF-L-102   # NEW cell: REQ-112a expression-position usability
 
-golden_version: "0.3.0"
+golden_version: "0.4.0"
 golden_run_at: 2026-05-19T14:10:00Z
 
 deps: []
@@ -56,8 +56,8 @@ predicted_expect:
 
 reconciliation:
   predicted_matched_captured: true
-  captured_at: "2026-05-21T12:41:58Z"
-  golden_version: "0.3.0"
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
   divergence_kind: clean_match
   notes: |
     Clean three-oracle reconciliation. Captured by generic capture runner.

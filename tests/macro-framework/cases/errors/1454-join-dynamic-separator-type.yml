@@ -1,0 +1,51 @@
+id: mtf-e-1454-join-dynamic-separator-type
+name: join — dynamic non-string separator (runtime)
+intent: |
+  §14.3.0: $var separator defers to runtime.
+
+covers:
+  - MTF-S-206
+
+golden_version: "0.4.0"
+golden_run_at: 2026-06-22T00:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  s = 5
+  r = join [ "a" ] $s
+  exit { r: $r }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+    details:
+      reason: join_separator_type
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+    details:
+      reason: join_separator_type
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

@@ -1,0 +1,55 @@
+id: mtf-e-1412-filter-not-a-list
+name: filter — first argument not a list (runtime)
+intent: |
+  §14.3.0: a non-list first operand (a runtime value) is caught at runtime as filter_type_mismatch.
+description: |
+  filter where the first argument is a record, not a list. The type is only
+  known at runtime (the operand is a VarRef), so the fault surfaces as
+  tool_call_failed + filter_type_mismatch. Graph-EDI §14.3.0 (runtime tier).
+
+covers:
+  - MTF-S-200
+
+golden_version: "0.4.0"
+golden_run_at: 2026-06-22T00:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  notalist = { id: 1, stale: true }
+  bad = filter $notalist "stale" "==" true
+  exit { result: $bad }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+    details:
+      reason: filter_type_mismatch
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+    details:
+      reason: filter_type_mismatch
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

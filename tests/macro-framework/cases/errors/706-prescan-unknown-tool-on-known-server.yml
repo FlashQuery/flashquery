@@ -10,7 +10,7 @@ description: |
   call `basic.does_not_exist`. Pre-scan must reject the call with
   unknown_tool before any dispatch happens.
 covers: [MTF-E-006]
-golden_version: "0.3.0"
+golden_version: "0.4.0"
 golden_run_at: 2026-05-19T16:00:00Z
 deps: []
 require_embedding: false
@@ -38,8 +38,8 @@ predicted_expect:
 
 reconciliation:
   predicted_matched_captured: true
-  captured_at: "2026-05-21T12:41:58Z"
-  golden_version: "0.3.0"
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
   divergence_kind: clean_match
   notes: |
     Clean three-oracle reconciliation. Captured by generic capture runner.

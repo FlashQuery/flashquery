@@ -4,17 +4,17 @@ name: |-
 intent: |
   iterator binds fresh per iteration
 covers: [MTF-C-009]
-golden_version: "0.3.0"
+golden_version: "0.4.0"
 golden_run_at: 2026-05-19T22:55:00Z
 deps: []
 require_embedding: false
 require_git: false
 macro: |
-  last = null
+  last_val = null
   for i in [1, 2, 3] do
-    last = $i
+    last_val = $i
   done
-  exit { last: $last }
+  exit { last: $last_val }
 input_vars: {}
 vault: {}
 tools: {}
@@ -25,8 +25,8 @@ predicted_expect:
     tool_call_count: 0
 reconciliation:
   predicted_matched_captured: true
-  captured_at: "2026-05-21T12:41:58Z"
-  golden_version: "0.3.0"
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
   divergence_kind: clean_match
   notes: |
     Clean three-oracle reconciliation. Captured by generic capture runner.

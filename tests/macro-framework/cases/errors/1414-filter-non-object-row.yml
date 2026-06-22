@@ -1,0 +1,55 @@
+id: mtf-e-1414-filter-non-object-row
+name: filter — non-object row throws on field access (runtime)
+intent: |
+  §14.3.1/§4.3: field access on a non-object row throws invalid_field_target.
+description: |
+  filter over a list of numbers. Resolving "$field" on a number is field access
+  on a non-object, which throws invalid_field_target (§4.3) at runtime, surfacing
+  as tool_call_failed. Graph-EDI §14.3.1 (runtime tier, field-access reuse).
+
+covers:
+  - MTF-S-200
+
+golden_version: "0.4.0"
+golden_run_at: 2026-06-22T00:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  rows = [ 1, 2, 3 ]
+  bad = filter $rows "x" "==" 1
+  exit { result: $bad }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+    details:
+      reason: invalid_field_target
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+    details:
+      reason: invalid_field_target
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

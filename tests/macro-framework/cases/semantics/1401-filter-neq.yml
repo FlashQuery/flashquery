@@ -1,0 +1,48 @@
+id: mtf-s-1401-filter-neq
+name: filter — != on a string field
+intent: |
+  §14.3.1: filter with != keeps rows whose $field is not equal to $value (deepEqual, no coercion).
+description: |
+  filter with the != operator over object literals with a string field.
+  Graph-EDI §14.3.1.
+
+covers:
+  - MTF-S-200
+
+golden_version: "0.4.0"
+golden_run_at: 2026-06-22T00:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  rows = [ { id: 1, rel: "contains" }, { id: 2, rel: "references" }, { id: 3, rel: "contains" } ]
+  result = filter $rows "rel" "!=" "contains"
+  exit { result: $result }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result: { result: [{ id: 2, rel: "references" }] }
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result: { result: [{ id: 2, rel: "references" }] }
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

@@ -1,0 +1,56 @@
+id: mtf-e-1410-filter-literal-bad-op
+name: filter — literal bad operator (preflight)
+intent: |
+  §14.3.0 validate-if-literal: a string-literal operator outside the six is caught at preflight.
+description: |
+  filter with a literal "~=" operator. Because the operand is a non-interpolated
+  string literal, the fault is statically visible and surfaces at preflight as
+  invalid_input + filter_operator_invalid. Pairs with mtf-e-1411 (same fault via
+  a variable → runtime tier). Graph-EDI §14.3.0.
+
+covers:
+  - MTF-S-200
+
+golden_version: "0.4.0"
+golden_run_at: 2026-06-22T00:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  rows = [ { id: 1, stale: true } ]
+  bad = filter $rows "stale" "~=" true
+  exit { result: $bad }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: invalid_input
+    details:
+      reason: filter_operator_invalid
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: error
+  error:
+    code: invalid_input
+    details:
+      reason: filter_operator_invalid
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

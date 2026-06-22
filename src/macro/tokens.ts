@@ -143,6 +143,17 @@ export const BUILTIN_NAMES = [
   'head',
   'tail',
   'ls',
+  // §14 data builtins (Graph-EDI §14.3).
+  'filter',
+  'sort',
+  'first',
+  'last',
+  'keys',
+  'contains',
+  'join',
+  'map',
+  'any',
+  'all',
 ] as const;
 
 export const allTokens = [

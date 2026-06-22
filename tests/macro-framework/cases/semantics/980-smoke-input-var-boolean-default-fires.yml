@@ -32,7 +32,7 @@ covers:
   - MTF-L-002  # input_var contract collection (required + optional)
   - MTF-L-010  # input_var --default literal types (boolean — REQ-112e)
 
-golden_version: "0.3.0"
+golden_version: "0.4.0"
 golden_run_at: 2026-05-19T22:00:00Z
 
 deps: []
@@ -68,8 +68,8 @@ predicted_expect:
 # ratifies de-facto behavior; no PG entry needed.
 reconciliation:
   predicted_matched_captured: true
-  captured_at: "2026-05-21T12:41:58Z"
-  golden_version: "0.3.0"
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
   divergence_kind: clean_match
   notes: |
     Clean three-oracle reconciliation. Captured by generic capture runner.

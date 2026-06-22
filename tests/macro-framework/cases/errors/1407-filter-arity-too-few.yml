@@ -1,0 +1,55 @@
+id: mtf-e-1407-filter-arity-too-few
+name: filter — too few arguments (preflight)
+intent: |
+  §14.3.0: filter arity is fixed at 4; a 3-arg call is a statically-visible fault caught at preflight.
+description: |
+  filter called with 3 positional args. Arity is visible in the AST, so the
+  fault surfaces at preflight as invalid_input + filter_argument_count.
+  Graph-EDI §14.3.0 (preflight tier).
+
+covers:
+  - MTF-S-200
+
+golden_version: "0.4.0"
+golden_run_at: 2026-06-22T00:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  rows = [ { id: 1, stale: true } ]
+  bad = filter $rows "stale" "=="
+  exit { result: $bad }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: invalid_input
+    details:
+      reason: filter_argument_count
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: error
+  error:
+    code: invalid_input
+    details:
+      reason: filter_argument_count
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

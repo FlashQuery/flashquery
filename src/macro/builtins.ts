@@ -82,7 +82,7 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     const list = positional[0];
     if (!isMacroValueArray(list)) {
       throw new MacroRuntimeError('unique expects exactly one list argument.', undefined, {
-        reason: 'unique_argument_type',
+        reason: 'unique_type_mismatch',
       });
     }
     const output: MacroValue[] = [];
@@ -99,10 +99,222 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     const list = positional[0];
     if (!isMacroValueArray(list)) {
       throw new MacroRuntimeError('append first argument must be a list.', undefined, {
-        reason: 'append_argument_type',
+        reason: 'append_type_mismatch',
       });
     }
     return [...list, ...positional.slice(1)];
+  },
+  // §14.3.1 `filter $list $field $op $value` → list. Returns the subset of a
+  // list of objects whose `$field $op $value` is true. Arity, named-args, and a
+  // *literal* bad operator are caught upstream at preflight (preflightCall →
+  // invalid_input); the value-dependent faults below surface at runtime as
+  // tool_call_failed. Empty input → []. Non-mutating.
+  filter: (positional) => {
+    const list = positional[0];
+    const fieldRaw = positional[1];
+    const opRaw = positional[2];
+    const value = positional[3];
+
+    if (!isMacroValueArray(list)) {
+      throw new MacroRuntimeError('filter expects a list as its first argument.', undefined, {
+        reason: 'filter_type_mismatch',
+      });
+    }
+    if (typeof fieldRaw !== 'string') {
+      throw new MacroRuntimeError('filter field must be a string.', undefined, {
+        reason: 'filter_field_type',
+      });
+    }
+    if (typeof opRaw !== 'string' || !FILTER_OPERATORS.has(opRaw)) {
+      throw new MacroRuntimeError('filter operator must be one of ==, !=, <, >, <=, >=.', undefined, {
+        reason: 'filter_operator_invalid',
+      });
+    }
+
+    const output: MacroValue[] = [];
+    for (const row of list) {
+      const fieldValue = resolveFieldPath(row, fieldRaw);
+      if (compareWithOp(fieldValue, opRaw, value)) output.push(row);
+    }
+    return output;
+  },
+  // §14.3.2 `sort $list $field $direction` → list. Stable, non-mutating. Numeric
+  // fields sort numerically; string fields lexicographically; null field values
+  // (incl. a missing leaf) sort to the END under both directions (NULLS LAST),
+  // preserving input order. Mixed / non-scalar non-null values →
+  // sort_field_type_mismatch.
+  sort: (positional) => {
+    const list = positional[0];
+    const fieldRaw = positional[1];
+    const directionRaw = positional[2];
+    if (!isMacroValueArray(list)) {
+      throw new MacroRuntimeError('sort expects a list as its first argument.', undefined, {
+        reason: 'sort_type_mismatch',
+      });
+    }
+    if (typeof fieldRaw !== 'string') {
+      throw new MacroRuntimeError('sort field must be a string.', undefined, {
+        reason: 'sort_field_type',
+      });
+    }
+    if (directionRaw !== 'asc' && directionRaw !== 'desc') {
+      throw new MacroRuntimeError('sort direction must be "asc" or "desc".', undefined, {
+        reason: 'sort_direction_invalid',
+      });
+    }
+    const decorated = list.map((row, index) => ({ row, index, key: resolveFieldPath(row, fieldRaw) }));
+    let kind: 'number' | 'string' | null = null;
+    for (const item of decorated) {
+      if (item.key === null) continue;
+      if (typeof item.key === 'number') {
+        if (kind === 'string') throw sortFieldMismatch();
+        kind = 'number';
+      } else if (typeof item.key === 'string') {
+        if (kind === 'number') throw sortFieldMismatch();
+        kind = 'string';
+      } else {
+        throw sortFieldMismatch();
+      }
+    }
+    const asc = directionRaw === 'asc';
+    decorated.sort((a, b) => {
+      const aNull = a.key === null;
+      const bNull = b.key === null;
+      if (aNull && bNull) return a.index - b.index;
+      if (aNull) return 1; // NULLS LAST (both directions)
+      if (bNull) return -1;
+      let cmp: number;
+      if (kind === 'number') cmp = (a.key as number) - (b.key as number);
+      else cmp = (a.key as string) < (b.key as string) ? -1 : (a.key as string) > (b.key as string) ? 1 : 0;
+      if (cmp === 0) return a.index - b.index; // stable
+      return asc ? cmp : -cmp;
+    });
+    return decorated.map((item) => item.row);
+  },
+  // §14.3.3 `first $list` → item | null. Non-mutating.
+  first: (positional) => {
+    const list = positional[0];
+    if (!isMacroValueArray(list)) {
+      throw new MacroRuntimeError('first expects a list.', undefined, { reason: 'first_type_mismatch' });
+    }
+    return list.length > 0 ? (list[0] ?? null) : null;
+  },
+  // §14.3.4 `last $list` → item | null. Non-mutating.
+  last: (positional) => {
+    const list = positional[0];
+    if (!isMacroValueArray(list)) {
+      throw new MacroRuntimeError('last expects a list.', undefined, { reason: 'last_type_mismatch' });
+    }
+    return list.length > 0 ? (list[list.length - 1] ?? null) : null;
+  },
+  // §14.3.5 `keys $object` → list of strings (insertion order). Empty → [].
+  keys: (positional) => {
+    const obj = positional[0];
+    if (!isRecord(obj)) {
+      throw new MacroRuntimeError('keys expects a record.', undefined, { reason: 'keys_type_mismatch' });
+    }
+    return Object.keys(obj);
+  },
+  // §14.3.6 `contains $list $value` → boolean. Recursive deepEqual membership.
+  contains: (positional) => {
+    const list = positional[0];
+    const value = positional[1];
+    if (!isMacroValueArray(list)) {
+      throw new MacroRuntimeError('contains expects a list as its first argument.', undefined, {
+        reason: 'contains_type_mismatch',
+      });
+    }
+    return list.some((item) => deepEqual(item, value));
+  },
+  // §14.3.7 `join $list $separator` → string. Every element must be a string
+  // (no implicit stringification). Empty → "".
+  join: (positional) => {
+    const list = positional[0];
+    const separator = positional[1];
+    if (typeof separator !== 'string') {
+      throw new MacroRuntimeError('join separator must be a string.', undefined, {
+        reason: 'join_separator_type',
+      });
+    }
+    if (!isMacroValueArray(list)) {
+      throw new MacroRuntimeError('join expects a list as its first argument.', undefined, {
+        reason: 'join_type_mismatch',
+      });
+    }
+    const parts: string[] = [];
+    for (const item of list) {
+      if (typeof item !== 'string') {
+        throw new MacroRuntimeError('join elements must all be strings.', undefined, {
+          reason: 'join_element_type',
+        });
+      }
+      parts.push(item);
+    }
+    return parts.join(separator);
+  },
+  // §14.3.8 `map $list $field` → list. Length-preserving projection: a missing
+  // field contributes null; a non-object row throws (invalid_field_target).
+  // Dotted nested paths supported. Empty → [].
+  map: (positional) => {
+    const list = positional[0];
+    const fieldRaw = positional[1];
+    if (!isMacroValueArray(list)) {
+      throw new MacroRuntimeError('map expects a list as its first argument.', undefined, {
+        reason: 'map_type_mismatch',
+      });
+    }
+    if (typeof fieldRaw !== 'string') {
+      throw new MacroRuntimeError('map field must be a string.', undefined, { reason: 'map_field_type' });
+    }
+    return list.map((row) => resolveFieldPath(row, fieldRaw));
+  },
+  // §14.3.9 `any $list $field $op $value` → boolean. Short-circuits on first match. Empty → false.
+  any: (positional) => {
+    const list = positional[0];
+    const fieldRaw = positional[1];
+    const opRaw = positional[2];
+    const value = positional[3];
+    if (!isMacroValueArray(list)) {
+      throw new MacroRuntimeError('any expects a list as its first argument.', undefined, {
+        reason: 'any_type_mismatch',
+      });
+    }
+    if (typeof fieldRaw !== 'string') {
+      throw new MacroRuntimeError('any field must be a string.', undefined, { reason: 'any_field_type' });
+    }
+    if (typeof opRaw !== 'string' || !FILTER_OPERATORS.has(opRaw)) {
+      throw new MacroRuntimeError('any operator must be one of ==, !=, <, >, <=, >=.', undefined, {
+        reason: 'any_operator_invalid',
+      });
+    }
+    for (const row of list) {
+      if (compareWithOp(resolveFieldPath(row, fieldRaw), opRaw, value)) return true;
+    }
+    return false;
+  },
+  // §14.3.10 `all $list $field $op $value` → boolean. Short-circuits on first failure. Empty → true (vacuous).
+  all: (positional) => {
+    const list = positional[0];
+    const fieldRaw = positional[1];
+    const opRaw = positional[2];
+    const value = positional[3];
+    if (!isMacroValueArray(list)) {
+      throw new MacroRuntimeError('all expects a list as its first argument.', undefined, {
+        reason: 'all_type_mismatch',
+      });
+    }
+    if (typeof fieldRaw !== 'string') {
+      throw new MacroRuntimeError('all field must be a string.', undefined, { reason: 'all_field_type' });
+    }
+    if (typeof opRaw !== 'string' || !FILTER_OPERATORS.has(opRaw)) {
+      throw new MacroRuntimeError('all operator must be one of ==, !=, <, >, <=, >=.', undefined, {
+        reason: 'all_operator_invalid',
+      });
+    }
+    for (const row of list) {
+      if (!compareWithOp(resolveFieldPath(row, fieldRaw), opRaw, value)) return false;
+    }
+    return true;
   },
   concat: (positional, named) => {
     requireNamedArgs('concat', named, []);
@@ -123,7 +335,7 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
   },
   sub: (positional, named) => {
     requireNamedArgs('sub', named, []);
-    requireArgCount('sub', positional, 1, Number.POSITIVE_INFINITY, 'arithmetic_argument_count');
+    requireArgCount('sub', positional, 1, Number.POSITIVE_INFINITY, 'sub_argument_count');
     const numbers = positional.map((value) => requireNumber(value, 'sub'));
     const first = numbers[0] ?? 0;
     if (numbers.length === 1) return -first;
@@ -235,7 +447,7 @@ export function buildRange(start: number, end: number, step: number): MacroValue
   for (const value of [start, end, step]) {
     if (!Number.isInteger(value)) {
       throw new MacroRuntimeError('Range operands must be integers.', undefined, {
-        reason: 'range_operand_type_mismatch',
+        reason: 'range_type_mismatch',
       });
     }
   }
@@ -295,7 +507,7 @@ function requireInteger(value: MacroValue, builtin: string): number {
   const number = requireNumber(value, builtin);
   if (!Number.isInteger(number)) {
     throw new MacroRuntimeError(`${builtin} expects integer arguments.`, undefined, {
-      reason: 'range_operand_type_mismatch',
+      reason: 'range_type_mismatch',
     });
   }
   return number;
@@ -384,4 +596,66 @@ function deepEqual(left: MacroValue, right: MacroValue): boolean {
 
 function isRecord(value: MacroValue): value is Record<string, MacroValue> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+// §14.3.1 — the six comparison operators `filter` accepts.
+const FILTER_OPERATORS = new Set(['==', '!=', '<', '>', '<=', '>=']);
+
+// §4 field resolution for `filter`'s `$field` argument: dotted nested path,
+// split on `.` and walked left to right. A missing leaf yields null (REQ-112d);
+// a step through null / a non-object / a list throws `invalid_field_target` —
+// matching the evaluator's `stepField`.
+function resolveFieldPath(target: MacroValue, path: string): MacroValue {
+  let current: MacroValue = target;
+  for (const part of path.split('.')) {
+    if (current === null || typeof current !== 'object' || Array.isArray(current)) {
+      throw new MacroRuntimeError(`Cannot access .${part} on ${describeType(current)}.`, undefined, {
+        reason: 'invalid_field_target',
+        field: part,
+      });
+    }
+    const next = (current as Record<string, MacroValue>)[part];
+    current = next === undefined ? null : next;
+  }
+  return current;
+}
+
+// Apply one of the six comparison operators with the language's existing
+// semantics (§14.3.0): ==/!= are recursive deepEqual (no coercion); the ordering
+// ops require BOTH operands numeric, else the shared `comparison_type_mismatch`.
+function compareWithOp(fieldValue: MacroValue, op: string, value: MacroValue): boolean {
+  if (op === '==') return deepEqual(fieldValue, value);
+  if (op === '!=') return !deepEqual(fieldValue, value);
+  if (typeof fieldValue !== 'number' || typeof value !== 'number') {
+    throw new MacroRuntimeError('Ordering comparisons require numeric operands.', undefined, {
+      reason: 'comparison_type_mismatch',
+      op,
+    });
+  }
+  switch (op) {
+    case '<':
+      return fieldValue < value;
+    case '<=':
+      return fieldValue <= value;
+    case '>':
+      return fieldValue > value;
+    default:
+      return fieldValue >= value;
+  }
+}
+
+function describeType(value: MacroValue): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'list';
+  return typeof value;
+}
+
+// §14.3.2 — raised when a `sort` field's non-null values are not uniformly
+// orderable (a mix of number and string, or any non-scalar/boolean value).
+function sortFieldMismatch(): MacroRuntimeError {
+  return new MacroRuntimeError(
+    'sort field values must be uniformly orderable (all numbers or all strings).',
+    undefined,
+    { reason: 'sort_field_type_mismatch' }
+  );
 }

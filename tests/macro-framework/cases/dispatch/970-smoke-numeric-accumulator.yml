@@ -39,7 +39,7 @@ covers:
   - MTF-L-007  # range operator
   - MTF-L-008  # for-loop with continue (REQ-104)
 
-golden_version: "0.3.0"
+golden_version: "0.4.0"
 golden_run_at: 2026-05-19T21:00:00Z
 
 deps: []
@@ -103,8 +103,8 @@ predicted_expect:
 # accumulator pattern walked-up the outer-scope total correctly.
 reconciliation:
   predicted_matched_captured: true
-  captured_at: "2026-05-21T12:41:58Z"
-  golden_version: "0.3.0"
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
   divergence_kind: clean_match
   notes: |
     Clean three-oracle reconciliation. Captured by generic capture runner.

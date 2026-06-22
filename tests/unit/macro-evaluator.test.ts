@@ -206,12 +206,13 @@ describe('macro evaluator expression semantics', () => {
     expect(resultOf(parseToolPayload(result))).toEqual([2, 3, 4]);
   });
 
-  it('T-U-046 rejects non-integer range operands with range_operand_type_mismatch', async () => {
+  it('T-U-046 rejects non-integer range operands with range_type_mismatch', async () => {
+    // §14.3.0 rename: range_operand_type_mismatch → range_type_mismatch.
     const result = await evaluateProgram(parseProgram('exit 1.5..5'), { builtins: basicBuiltins() });
     expect(result.isError).toBe(true);
     expect(parseToolPayload(result)).toMatchObject({
       error: 'tool_call_failed',
-      details: { reason: 'range_operand_type_mismatch' },
+      details: { reason: 'range_type_mismatch' },
     });
   });
 

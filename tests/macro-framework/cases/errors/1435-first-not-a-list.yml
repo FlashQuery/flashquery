@@ -1,0 +1,51 @@
+id: mtf-e-1435-first-not-a-list
+name: first — non-list (runtime)
+intent: |
+  §14.3.3: non-list → first_type_mismatch.
+
+covers:
+  - MTF-S-202
+
+golden_version: "0.4.0"
+golden_run_at: 2026-06-22T00:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  n = 5
+  r = first $n
+  exit { r: $r }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+    details:
+      reason: first_type_mismatch
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+    details:
+      reason: first_type_mismatch
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

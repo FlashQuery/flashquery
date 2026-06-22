@@ -1,0 +1,48 @@
+id: mtf-s-1405-filter-missing-field-null
+name: filter — missing field compares as null
+intent: |
+  §14.3.0/§4.1: a row missing $field resolves the leaf to null; filter ... == null keeps it.
+description: |
+  filter where one row lacks the "stale" field. Per REQ-112d the missing leaf
+  resolves to null, so `== null` matches exactly that row. Graph-EDI §14.3.0.
+
+covers:
+  - MTF-S-200
+
+golden_version: "0.4.0"
+golden_run_at: 2026-06-22T00:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  rows = [ { id: 1, stale: true }, { id: 2 }, { id: 3, stale: false } ]
+  result = filter $rows "stale" "==" null
+  exit { result: $result }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result: { result: [{ id: 2 }] }
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result: { result: [{ id: 2 }] }
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

@@ -19,6 +19,7 @@ import {
   MacroFailError,
   MacroNeedsUserInputError,
   MacroPreflightError,
+  MacroBuiltinPreflightError,
   ForbiddenPathError,
   MacroForbiddenFlagError,
   MacroPermissionError,
@@ -269,6 +270,14 @@ async function main() {
         error: "invalid_input",
         message: e.message,
         details: e.details,
+      };
+      console.error("INVALID INPUT (pre-flight):");
+      console.error(JSON.stringify(envelope, null, 2));
+    } else if (e instanceof MacroBuiltinPreflightError) {
+      const envelope = {
+        error: "invalid_input",
+        message: e.message,
+        details: { reason: e.reason, ...(e.line !== undefined ? { line: e.line } : {}) },
       };
       console.error("INVALID INPUT (pre-flight):");
       console.error(JSON.stringify(envelope, null, 2));

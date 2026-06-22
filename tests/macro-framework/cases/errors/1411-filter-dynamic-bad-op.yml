@@ -1,0 +1,57 @@
+id: mtf-e-1411-filter-dynamic-bad-op
+name: filter — dynamic bad operator (runtime)
+intent: |
+  §14.3.0 defer-if-dynamic: a $var operator that resolves to an invalid operator is caught at runtime.
+description: |
+  filter where $op is a variable bound to "~=". The preflight literal-operator
+  check is skipped (operand is a VarRef), so the same fault as mtf-e-1410 surfaces
+  at the runtime tier as tool_call_failed + filter_operator_invalid. This is the
+  two-tier proof: same reason code, different envelope code. Graph-EDI §14.3.0.
+
+covers:
+  - MTF-S-200
+
+golden_version: "0.4.0"
+golden_run_at: 2026-06-22T00:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  rows = [ { id: 1, stale: true } ]
+  op = "~="
+  bad = filter $rows "stale" $op true
+  exit { result: $bad }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+    details:
+      reason: filter_operator_invalid
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+    details:
+      reason: filter_operator_invalid
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

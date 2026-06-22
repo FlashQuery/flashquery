@@ -4,20 +4,20 @@ name: |-
 intent: |
   break stops loop on first match
 covers: [MTF-C-009]
-golden_version: "0.3.0"
+golden_version: "0.4.0"
 golden_run_at: 2026-05-19T22:55:00Z
 deps: []
 require_embedding: false
 require_git: false
 macro: |
-  first = null
+  first_match = null
   for n in [3, 1, 4, 1, 5] do
     if $n == 4 then
-      first = $n
+      first_match = $n
       break
     fi
   done
-  exit { first: $first }
+  exit { first: $first_match }
 input_vars: {}
 vault: {}
 tools: {}
@@ -28,8 +28,8 @@ predicted_expect:
     tool_call_count: 0
 reconciliation:
   predicted_matched_captured: true
-  captured_at: "2026-05-21T12:41:58Z"
-  golden_version: "0.3.0"
+  captured_at: "2026-06-22T18:53:49Z"
+  golden_version: "0.4.0"
   divergence_kind: clean_match
   notes: |
     Clean three-oracle reconciliation. Captured by generic capture runner.
