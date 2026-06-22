@@ -55,6 +55,15 @@ describe('brokered CallToolResult macro coercion', () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
+  it('T-U-029 repairs fenced JSON-like text content when structuredContent is absent', () => {
+    const result: CallToolResult = {
+      content: [{ type: 'text', text: '```json\n{answer: 42, branch: "repaired", nested: { ok: true, },}\n```' }],
+    };
+
+    expect(coerceCallToolResult(result)).toEqual({ answer: 42, branch: 'repaired', nested: { ok: true } });
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
   it('T-U-029 parses JSON scalar text content when structuredContent is absent', () => {
     expect(coerceCallToolResult({ content: [{ type: 'text', text: '42' }] })).toBe(42);
     expect(coerceCallToolResult({ content: [{ type: 'text', text: 'null' }] })).toBeNull();

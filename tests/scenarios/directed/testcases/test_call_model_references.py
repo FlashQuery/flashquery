@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 import uuid as _uuid
@@ -23,7 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 from fqc_test_utils import TestRun, FQCServer  # noqa: E402
-from fqc_client import FQCClient, _find_project_dir, _load_env_file  # noqa: E402
+from fqc_client import FQCClient  # noqa: E402
 
 TEST_NAME = "test_call_model_references"
 
@@ -44,38 +43,12 @@ COVERAGE = [
     "L-33", "L-33a", "L-33b", "L-33c", "L-33d", "L-33e",
 ]
 
-CONFIGURED_LLM = {
-    "llm": {
-        "providers": [
-            {
-                "name": "openai",
-                "type": "ollama",
-                "endpoint": "${OLLAMA_URL}",
-            },
-        ],
-        "models": [
-            {
-                "name": "fast",
-                "provider_name": "openai",
-                "model": "${OLLAMA_LLM_MODEL}",
-                "type": "language",
-                "cost_per_million": {"input": 0.15, "output": 0.6},
-            },
-        ],
-        "purposes": [],
-    }
-}
-
 
 def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
-    project_dir = Path(args.fqc_dir) if args.fqc_dir else _find_project_dir()
-    env_vars = _load_env_file(project_dir) if project_dir else {}
-    if "OPENAI_API_KEY" not in os.environ:
-        os.environ["OPENAI_API_KEY"] = env_vars.get("OPENAI_API_KEY") or "sk-test-placeholder"
 
     try:
-        with FQCServer(fqc_dir=args.fqc_dir, extra_config=CONFIGURED_LLM) as server:
+        with FQCServer(fqc_dir=args.fqc_dir, require_llm=True) as server:
             client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
             run_id = _uuid.uuid4().hex[:8]
 
