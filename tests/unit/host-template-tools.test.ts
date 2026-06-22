@@ -44,6 +44,25 @@ describe('host template tool payload parsing', () => {
     expect(JSON.stringify(details).length).toBeLessThan(600);
   });
 
+  it('T-U-017a rejects JSON-like non-object payloads as invalid host-template envelopes', () => {
+    const arrayResult = callResultFromTemplateText('[{"id":1}]');
+    const fencedScalarResult = callResultFromTemplateText('```json\n42\n```');
+
+    for (const result of [arrayResult, fencedScalarResult]) {
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toBeUndefined();
+      expect(parseText(result)).toMatchObject({
+        error: 'invalid_json_payload',
+        message: 'Structured JSON payload must be an object envelope.',
+        details: {
+          site: 'host_template_tool',
+          reason: 'expected_object_envelope',
+          failure: 'schema',
+        },
+      });
+    }
+  });
+
   it('T-U-018 leaves ordinary prose text-only without isError', () => {
     const result = callResultFromTemplateText('ordinary prose answer');
 

@@ -84,6 +84,23 @@ function parseTemplateToolPayload(text: string):
   if (!isJsonLikeText(text)) {
     return { payload: undefined, isError: false };
   }
+  const parsedJsonValue = parseLlmJson(text, z.unknown());
+  if (parsedJsonValue.ok && !isRecord(parsedJsonValue.data)) {
+    return {
+      payload: undefined,
+      isError: true,
+      errorResult: jsonRuntimeError({
+        error: 'invalid_json_payload',
+        message: 'Structured JSON payload must be an object envelope.',
+        details: {
+          site: 'host_template_tool',
+          reason: 'expected_object_envelope',
+          failure: parsed.failure,
+          summary: parsed.summary,
+        },
+      }),
+    };
+  }
   return {
     payload: undefined,
     isError: true,
