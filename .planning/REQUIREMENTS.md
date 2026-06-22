@@ -12,10 +12,10 @@
 
 ### Shared Utility
 
-- [ ] **REQ-001**: FlashQuery adds `jsonrepair` as a runtime dependency in `dependencies`, with lockfile updates and ESM-compatible production build behavior.
-- [ ] **REQ-002**: User can call a stateless `src/llm/` `parseLlmJson<T>()` utility that repairs common LLM JSON defects, parses JSON, validates with a supplied Zod schema, and returns non-throwing typed success or failure metadata.
-- [ ] **REQ-003**: Retry-capable callers can distinguish syntax failures from schema failures and access machine-readable Zod issues plus concise human-readable summaries without the parser making LLM calls.
-- [ ] **REQ-011**: Repair metadata is internally testable through parser results while public success envelopes avoid broad new required top-level fields solely because repair occurred.
+- [x] **REQ-001**: FlashQuery adds `jsonrepair` as a runtime dependency in `dependencies`, with lockfile updates and ESM-compatible production build behavior.
+- [x] **REQ-002**: User can call a stateless `src/llm/` `parseLlmJson<T>()` utility that repairs common LLM JSON defects, parses JSON, validates with a supplied Zod schema, and returns non-throwing typed success or failure metadata.
+- [x] **REQ-003**: Retry-capable callers can distinguish syntax failures from schema failures and access machine-readable Zod issues plus concise human-readable summaries without the parser making LLM calls.
+- [x] **REQ-011**: Repair metadata is internally testable through parser results while public success envelopes avoid broad new required top-level fields solely because repair occurred.
 
 ### High-Priority Parse Site Retrofits
 
@@ -57,9 +57,9 @@ This milestone must execute in one GSD phase. Inside that phase, implementation 
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| REQ-001 | Phase 170 | Pending |
-| REQ-002 | Phase 170 | Pending |
-| REQ-003 | Phase 170 | Pending |
+| REQ-001 | Phase 170 | Complete |
+| REQ-002 | Phase 170 | Complete |
+| REQ-003 | Phase 170 | Complete |
 | REQ-004 | Phase 170 | Complete |
 | REQ-005 | Phase 170 | Complete |
 | REQ-006 | Phase 170 | Complete |
@@ -67,7 +67,7 @@ This milestone must execute in one GSD phase. Inside that phase, implementation 
 | REQ-008 | Phase 170 | Complete |
 | REQ-009 | Phase 170 | Complete |
 | REQ-010 | Phase 170 | Complete |
-| REQ-011 | Phase 170 | Pending |
+| REQ-011 | Phase 170 | Complete |
 
 **Coverage:**
 - v4.2 requirements: 11 total

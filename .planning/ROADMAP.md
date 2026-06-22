@@ -3,7 +3,7 @@
 ## Milestones
 
 - [x] **v4.1 Embedding Chunks Migration** - Phases 168-169 (shipped 2026-06-15)
-- [ ] **v4.2 JSON Validation** - Phase 170 (planning 2026-06-22)
+- [x] **v4.2 JSON Validation** - Phase 170 (planning 2026-06-22) (completed 2026-06-22)
 
 ## Current Milestone
 
@@ -17,7 +17,7 @@
 
 | Phase | Name | Goal | Requirements | Success Criteria |
 |-------|------|------|--------------|------------------|
-| 170 | JSON Validation and Repair Infrastructure | 3/4 | In Progress|  |
+| 170 | JSON Validation and Repair Infrastructure | 4/4 | Complete    | 2026-06-22 |
 
 ## Phase Details
 
@@ -27,7 +27,7 @@
 
 **Requirements:** REQ-001, REQ-002, REQ-003, REQ-004, REQ-005, REQ-006, REQ-007, REQ-008, REQ-009, REQ-010, REQ-011
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 **Wave 1**
@@ -41,7 +41,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 170-04-PLAN.md — Public workflow verification through integration, E2E, directed scenario, YAML scenario, and coverage matrices.
+- [x] 170-04-PLAN.md — Public workflow verification through integration, E2E, directed scenario, YAML scenario, and coverage matrices.
 
 **Implementation lanes inside the single phase:**
 
