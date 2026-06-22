@@ -81,7 +81,7 @@ export function summarizeLlmJsonIssues(issues: LlmJsonIssue[]): string {
 
   const visibleIssues = issues.slice(0, 3).map((issue) => {
     const path = issue.path.length === 0 ? '<root>' : issue.path.join('.');
-    return `${path}: ${issue.message}`;
+    return `${path}: ${truncateSummaryPart(issue.message, 48)}`;
   });
   const suffix = issues.length > visibleIssues.length ? `; +${issues.length - visibleIssues.length} more` : '';
   return `JSON schema validation failed: ${visibleIssues.join('; ')}${suffix}`;
@@ -89,5 +89,10 @@ export function summarizeLlmJsonIssues(issues: LlmJsonIssue[]): string {
 
 function summarizeSyntaxFailure(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  return `JSON syntax could not be repaired or parsed: ${message}`;
+  return `JSON syntax could not be repaired or parsed: ${truncateSummaryPart(message, 120)}`;
+}
+
+function truncateSummaryPart(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
 }

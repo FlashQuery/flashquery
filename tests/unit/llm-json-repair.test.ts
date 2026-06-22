@@ -142,3 +142,66 @@ describe('parseLlmJson result contract', () => {
     });
   });
 });
+
+describe('parseLlmJson diagnostics and repair metadata', () => {
+  it('T-U-007 exposes issue paths and a concise deterministic schema summary', () => {
+    const longMessage = 'expected a normalized LLM JSON field with a deliberately long validation message';
+    const schema = z.object({
+      alpha: z.string().refine(() => false, { message: longMessage }),
+      beta: z.string().refine(() => false, { message: longMessage }),
+      gamma: z.string().refine(() => false, { message: longMessage }),
+      delta: z.string().refine(() => false, { message: longMessage }),
+    });
+
+    const result = parseLlmJson(
+      '{"alpha":"x","beta":"x","gamma":"x","delta":"x"}',
+      schema
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      failure: 'schema',
+      issues: [
+        { path: ['alpha'], message: longMessage },
+        { path: ['beta'], message: longMessage },
+        { path: ['gamma'], message: longMessage },
+        { path: ['delta'], message: longMessage },
+      ],
+    });
+    if (result.ok) throw new Error('expected schema failure');
+    expect(result.summary).toContain('alpha');
+    expect(result.summary).toContain('+1 more');
+    expect(result.summary.length).toBeLessThanOrEqual(240);
+    expect(result.summary).not.toContain('"alpha":"x"');
+  });
+
+  it('T-U-008 keeps syntax and schema failures distinguishable through stable discriminators', () => {
+    const syntax = parseLlmJson('}', z.unknown());
+    const schema = parseLlmJson('{"ok":"no"}', z.object({ ok: z.boolean() }));
+
+    expect(syntax.ok).toBe(false);
+    expect(schema.ok).toBe(false);
+    if (syntax.ok || schema.ok) throw new Error('expected failures');
+    expect(syntax.failure).toBe('syntax');
+    expect(schema.failure).toBe('schema');
+  });
+
+  it('T-U-009 exposes repaired metadata on successful utility results', () => {
+    const result = parseLlmJson('{ok: true}', z.object({ ok: z.boolean() }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      repaired: true,
+      data: { ok: true },
+    });
+  });
+
+  it('T-U-010 does not introduce public MCP envelope fields on utility success', () => {
+    const result = parseLlmJson('{"ok":true}', z.object({ ok: z.boolean() }));
+
+    expect(result.ok).toBe(true);
+    expect(Object.keys(result).sort()).toEqual(['data', 'ok', 'raw', 'repaired']);
+    expect(result).not.toHaveProperty('structuredContent');
+    expect(result).not.toHaveProperty('isError');
+  });
+});
