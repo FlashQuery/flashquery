@@ -31,6 +31,9 @@ dist/
 .planning/
 tasks/
 
+# Temporary scratch files (never for public consumption)
+tmp/
+
 # Local Memory
 memory/
 
