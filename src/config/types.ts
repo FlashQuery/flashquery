@@ -101,6 +101,15 @@ export interface FlashQueryConfig {
   embeddingLifecycle?: {
     lockStaleMs: number;
   };
+  graph?: {
+    enabled: boolean;
+    embeddingName?: string;
+    classificationPurpose?: string;
+    classificationModel?: string;
+    relations?: string;
+    prompts?: string;
+    promptOverrides?: Record<string, unknown>;
+  };
   embedding?: {
     provider: string;
     model: string;

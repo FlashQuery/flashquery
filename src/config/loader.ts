@@ -9,6 +9,9 @@ import { HARD_EXCLUDED_NATIVE_TOOLS, TOOL_TIERS } from '../llm/tool-policy.js';
 import { getLegacyToolSuggestion, getToolMetadata } from '../mcp/tool-metadata.js';
 import { resolveHostToolExposure, type ResolvedHostToolExposure } from '../mcp/tool-exposure.js';
 import { logger } from '../logging/logger.js';
+import { validateGraphConfig } from '../graph/config.js';
+import { loadGraphPrompts } from '../graph/prompts.js';
+import { loadGraphVocabulary } from '../graph/vocabulary.js';
 
 export type { FlashQueryConfig } from './types.js';
 
@@ -250,6 +253,19 @@ const EmbeddingSchema = z
   })
   .strip();
 
+const GraphSchema = z
+  .object({
+    enabled: z.boolean().default(false),
+    embedding_name: z.string().min(1).optional(),
+    classification_purpose: z.string().min(1).optional(),
+    classification_model: z.string().min(1).optional(),
+    relations: z.string().min(1).default('.fqc/edge-types.yml'),
+    prompts: z.string().min(1).default('.fqc/graph-prompts.yml'),
+    prompt_overrides: z.record(z.string(), z.unknown()).default({}),
+  })
+  .strip()
+  .prefault({});
+
 const LoggingSchema = z
   .object({
     level: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
@@ -327,6 +343,7 @@ const ConfigSchema = z
     llm: LlmSchema,
     embeddings: EmbeddingsSchema,
     embedding_lifecycle: EmbeddingLifecycleSchema,
+    graph: GraphSchema,
     host_mcp_tools: HostMcpToolsSchema.optional(),
     templates: TemplatesSchema,
     embedding: EmbeddingSchema.optional(),
@@ -1096,6 +1113,19 @@ export function loadConfig(configPath: string): FlashQueryConfig {
   // 9.5. Resolve relative vault path to absolute path (relative to config file directory)
   if (!isAbsolute(config.instance.vault.path)) {
     config.instance.vault.path = resolve(configDir, config.instance.vault.path);
+  }
+
+  validateGraphConfig(config);
+  if (config.graph?.enabled) {
+    loadGraphVocabulary({
+      vaultPath: config.instance.vault.path,
+      relationsPath: config.graph.relations,
+    });
+    loadGraphPrompts({
+      vaultPath: config.instance.vault.path,
+      promptsPath: config.graph.prompts,
+      overrides: config.graph.promptOverrides,
+    });
   }
 
   setConfigRuntimeMetadata(config, {
