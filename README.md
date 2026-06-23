@@ -315,6 +315,13 @@ npm run test:benchmark   # Performance benchmarks (vault discovery, search throu
 npm run test:docker-smoke # Full Docker stack smoke test (requires Docker)
 ```
 
+If the default Docker smoke ports conflict with another local stack, override
+them for the run, for example:
+
+```bash
+POSTGRES_HOST_PORT=55432 SUPABASE_HOST_PORT=18000 FQC_HOST_PORT=13100 npm run test:docker-smoke
+```
+
 The `tests/scenarios/` directory contains a higher-level test suite: directed tests in Python (`directed/`) and YAML-driven integration tests (`integration/`), run by a Python runner script. See [`tests/scenarios/README.md`](./tests/scenarios/README.md).
 
 ### Code Quality

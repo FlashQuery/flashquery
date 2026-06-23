@@ -34,6 +34,7 @@ else
 fi
 
 COMPOSE_ARGS="--env-file $ENV_FILE -f docker/docker-compose.yml"
+FQC_HTTP_URL="${FQC_HTTP_URL:-http://localhost:${FQC_HOST_PORT:-3100}}"
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] All prerequisites verified"
 
@@ -87,7 +88,7 @@ MAX_WAIT=60
 ELAPSED=0
 
 while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
-  if curl -sf --max-time 3 http://localhost:3100/health >/dev/null 2>&1; then
+  if curl -sf --max-time 3 "$FQC_HTTP_URL/health" >/dev/null 2>&1; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] FlashQuery is healthy (${ELAPSED}s)"
     break
   fi
@@ -115,7 +116,7 @@ fi
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Testing MCP connectivity (max 120 seconds for stack stabilization)..."
 
 INIT_PAYLOAD='{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke-test","version":"1.0"}},"id":1}'
-TOOL_PAYLOAD='{"jsonrpc":"2.0","method":"tools/call","params":{"name":"list_memories","arguments":{"tags":["smoke-test"]}},"id":2}'
+TOOL_PAYLOAD='{"jsonrpc":"2.0","method":"tools/call","params":{"name":"search","arguments":{"entity_types":["memories"],"tags":["smoke-test"],"limit":10}},"id":2}'
 
 # Bearer token should match the same env file used by docker compose.
 # Keep xtrace disabled while reading and using the secret so it is not printed.
@@ -144,7 +145,7 @@ TOOL_RESP=""
 
 while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
   # Initialize a new MCP session (required before any tool call on streamable-http transport)
-  INIT_RESP=$(curl -si --max-time 10 -X POST http://localhost:3100/mcp \
+  INIT_RESP=$(curl -si --max-time 10 -X POST "$FQC_HTTP_URL/mcp" \
     -H "Content-Type: application/json" \
     -H "Accept: application/json, text/event-stream" \
     -H "Authorization: Bearer ${MCP_AUTH_SECRET}" \
@@ -155,14 +156,14 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
 
   if [ -n "$SESSION_ID" ]; then
     # Session established — make a tool call that touches the database
-    TOOL_RESP=$(curl -s --max-time 10 -X POST http://localhost:3100/mcp \
+    TOOL_RESP=$(curl -s --max-time 10 -X POST "$FQC_HTTP_URL/mcp" \
       -H "Content-Type: application/json" \
       -H "Accept: application/json, text/event-stream" \
       -H "Authorization: Bearer ${MCP_AUTH_SECRET}" \
       -H "mcp-session-id: $SESSION_ID" \
       -d "$TOOL_PAYLOAD" 2>/dev/null || true)
 
-    if echo "$TOOL_RESP" | grep -q '"result"'; then
+    if echo "$TOOL_RESP" | grep -q '"result"' && ! echo "$TOOL_RESP" | grep -q '"isError":true'; then
       echo "[$(date '+%Y-%m-%d %H:%M:%S')] MCP test passed: session established, tool call succeeded (${ELAPSED}s)"
       MCP_PASSED=1
       break

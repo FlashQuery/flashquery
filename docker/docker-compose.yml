@@ -18,6 +18,8 @@ name: flashquery
 #   - FlashQuery HTTP MCP endpoint: http://localhost:3100/mcp
 #   - Supabase API gateway: http://localhost:8000
 #   - Postgres: localhost:5432
+# Host ports can be overridden with FQC_HOST_PORT, SUPABASE_HOST_PORT,
+# and POSTGRES_HOST_PORT when the defaults conflict with an existing stack.
 #
 # PostgREST, GoTrue, and Studio are internal to the Compose network by default.
 # Kong exposes the Supabase API gateway on :8000, and Postgres is exposed on
@@ -40,7 +42,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./init:/docker-entrypoint-initdb.d
     ports:
-      - "5432:5432"  # exposed for host-side tools (test runner, SQL clients)
+      - "${POSTGRES_HOST_PORT:-5432}:5432"  # exposed for host-side tools (test runner, SQL clients)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d flashquery"]
       interval: 10s
@@ -81,7 +83,7 @@ services:
       GOTRUE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters}
       GOTRUE_JWT_EXP: 3600
       GOTRUE_DISABLE_SIGNUP: "false"
-      API_EXTERNAL_URL: http://localhost:8000
+      API_EXTERNAL_URL: http://localhost:${SUPABASE_HOST_PORT:-8000}
     # ports:
     #   - "9999:9999"  # uncomment for direct host GoTrue access
     depends_on:
@@ -104,7 +106,7 @@ services:
     volumes:
       - ./kong.yml:/var/lib/kong/kong.yml:ro
     ports:
-      - "8000:8000"
+      - "${SUPABASE_HOST_PORT:-8000}:8000"
     depends_on:
       - postgrest
       - gotrue
@@ -121,7 +123,7 @@ services:
       DEFAULT_ORGANIZATION_NAME: FlashQuery
       DEFAULT_PROJECT_NAME: FlashQuery
       SUPABASE_URL: http://kong:8000
-      SUPABASE_PUBLIC_URL: http://localhost:8000
+      SUPABASE_PUBLIC_URL: http://localhost:${SUPABASE_HOST_PORT:-8000}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
     # Next.js 15+ binds to the container hostname, not 127.0.0.1, so the
@@ -171,7 +173,7 @@ services:
       - ${VAULT_PATH:-./vault}:/app/vault
       - ${LOG_PATH:-./logs}:/app/logs
     ports:
-      - "3100:3100"
+      - "${FQC_HOST_PORT:-3100}:3100"
     depends_on:
       postgres:
         condition: service_healthy
