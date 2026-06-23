@@ -358,22 +358,22 @@ if (error) throw new Error(error.message);
 | A2 | Disabled graph is best implemented through a null-provider/early-return pattern. | Architecture Patterns / Pitfalls | Planner may choose inline guards instead; tests still enforce behavior. |
 | A3 | Structural graph writes should run after chunk commit in scheduler rather than inside chunk store transaction. | Common Pitfalls / Code Examples | Transactional consistency might require moving graph writes into the same pg transaction. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Always-create graph tables or enabled-only verification?**
    - What we know: CONTEXT.md permits either if disabled behavior and schema verification stay deterministic. [VERIFIED: CONTEXT.md]
-   - What's unclear: whether startup should verify graph schema when graph is disabled. [VERIFIED: CONTEXT.md]
-   - Recommendation: always include graph DDL in `buildSchemaDDL()`, but only require graph-specific readiness checks for graph-enabled behavior. [ASSUMED]
+   - RESOLVED: Always include graph DDL in `buildSchemaDDL()` and include graph critical tables/columns in schema verification coverage, because Product Requirements Spec §6.2.1 requires graph tables to be created idempotently and plan `171-01` Task 3 already owns graph DDL plus `verifySchema()` extension. Disabled mode remains behaviorally unchanged because graph write/read paths short-circuit via config/runtime gates and tests prove no graph queueing, writes, LLM calls, or existing response-shape drift when `graph:` is absent or `graph.enabled:false`. [VERIFIED: product requirements + 171-01-PLAN.md]
+   - Implementation consequence: schema objects may exist in a disabled instance, but disabled mode must not mutate them or require graph tool use. Graph readiness failures become blocking for graph-enabled behavior and for explicit schema verification/push checks, not a license to change non-graph tool contracts. [VERIFIED: CONTEXT.md + product requirements]
 
 2. **Disabled `query_graph`: registered unsupported envelope or absent tool?**
    - What we know: CONTEXT.md permits either. [VERIFIED: CONTEXT.md]
-   - What's unclear: which behavior is more desirable for clients. [VERIFIED: CONTEXT.md]
-   - Recommendation: register `query_graph` always and return canonical `unsupported` when disabled for discoverability. [ASSUMED]
+   - RESOLVED: Register `query_graph` and return a canonical JSON `unsupported` expected-error envelope when graph is disabled. This is the deterministic behavior planned in `171-03` and validated by disabled/noop coverage, and it best matches GR-001 and GR-024A because clients can discover the read surface without any graph-enabled side effects. [VERIFIED: CONTEXT.md + 171-03-PLAN.md]
+   - Implementation consequence: disabled `query_graph` must not run graph queries, mutate graph tables, enqueue work, call LLMs, or change existing `search`/`get_document` contracts. The unsupported response should use existing `jsonExpectedError`/canonical graph envelope helpers and include bounded remediation text only. [VERIFIED: product requirements + product test plan]
 
 3. **How much of community-oriented `query_graph` returns in Phase 171?**
    - What we know: Phase 171 wires actions; Phase 172 populates community/lint data. [VERIFIED: product requirements]
-   - What's unclear: exact empty/not-applicable payload shape. [ASSUMED]
-   - Recommendation: implement action schemas and empty contract-shaped responses now; richer rows arrive in Phase 172. [ASSUMED]
+   - RESOLVED: Phase 171 `query_graph action:"schema"` returns a community-oriented capability payload as metadata only: structural/classified relation types, symmetry/directionality, `similarity.topology_persisted:false`, `classification.enabled` from config, `communities.supported:false`, and feature flags that make clear community/lint execution and stable community identity are not available in this phase. Data-returning community/lint actions must either return empty contract-shaped arrays with `supported:false`/warning metadata when already part of the planned read schema, or return an expected-error unsupported envelope if the action belongs to Phase 172-only maintenance/lint execution. [VERIFIED: product requirements + product test plan + 171-03-PLAN.md]
+   - Implementation consequence: do not add stable community identity, graph lint execution, community detection algorithms, or persisted community maintenance in Phase 171. Phase 171 may expose node fields such as `community_id`, `community_label`, and `community_summary` because the schema/read payloads include them, but it must not populate or maintain them beyond rows already present in the database. [VERIFIED: CONTEXT.md deferred ideas + product requirements]
 
 ## Environment Availability
 
