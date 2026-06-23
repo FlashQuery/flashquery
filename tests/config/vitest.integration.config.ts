@@ -55,6 +55,7 @@ export default defineConfig({
       'tests/integration/mcp-broker/tofu-list-changed.test.ts',
       'tests/integration/mcp/tools/memory-plugin-scope.test.ts',
       'tests/integration/embedding/*.test.ts',
+      'tests/integration/graph/*.test.ts',
       'tests/integration/doctor/embedding-diagnostics.test.ts',
       'tests/integration/mcp/tools/records-pg-pool.test.ts',
       'tests/integration/services/scanner-embed-drain.test.ts',

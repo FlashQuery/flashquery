@@ -436,6 +436,125 @@ CREATE INDEX IF NOT EXISTS idx_fqc_chunks_document_id ON fqc_chunks(document_id)
 CREATE INDEX IF NOT EXISTS idx_fqc_chunks_instance_id ON fqc_chunks(instance_id);
 CREATE INDEX IF NOT EXISTS idx_fqc_chunks_heading_level ON fqc_chunks(heading_level);
 
+-- Phase 171: Graph Document Intelligence foundation (chunk-keyed graph nodes).
+CREATE TABLE IF NOT EXISTS fqc_graph_nodes (
+  chunk_id UUID PRIMARY KEY REFERENCES fqc_chunks(id) ON DELETE CASCADE,
+  instance_id TEXT NOT NULL,
+  provenance_basis TEXT NOT NULL DEFAULT 'chunk',
+  question_status TEXT,
+  question_resolution TEXT,
+  community_id TEXT,
+  community_label TEXT,
+  community_summary TEXT,
+  key_claims JSONB,
+  chunk_summary TEXT,
+  certainty_level TEXT,
+  staleness_risk TEXT,
+  external_refs JSONB,
+  temporal_markers JSONB,
+  analyzed_content_hash TEXT,
+  analyzed_by_model TEXT,
+  analyzed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS fqc_graph_edges (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  instance_id TEXT NOT NULL,
+  source_chunk_id UUID NOT NULL REFERENCES fqc_graph_nodes(chunk_id) ON DELETE CASCADE,
+  target_chunk_id UUID NOT NULL REFERENCES fqc_graph_nodes(chunk_id) ON DELETE CASCADE,
+  relation TEXT NOT NULL,
+  confidence TEXT NOT NULL,
+  confidence_score DOUBLE PRECISION NOT NULL,
+  reasoning TEXT,
+  model TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'fqc_graph_edges_status_check'
+  ) THEN
+    ALTER TABLE fqc_graph_edges
+      ADD CONSTRAINT fqc_graph_edges_status_check
+      CHECK (status IN ('active', 'stale', 'deleted'));
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'fqc_graph_edges_confidence_check'
+  ) THEN
+    ALTER TABLE fqc_graph_edges
+      ADD CONSTRAINT fqc_graph_edges_confidence_check
+      CHECK (confidence IN ('EXTRACTED', 'INFERRED'));
+  END IF;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fqc_graph_edges_unique_active
+  ON fqc_graph_edges(instance_id, source_chunk_id, target_chunk_id, relation)
+  WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_fqc_graph_nodes_instance_id ON fqc_graph_nodes(instance_id);
+CREATE INDEX IF NOT EXISTS idx_fqc_graph_nodes_community ON fqc_graph_nodes(instance_id, community_id);
+CREATE INDEX IF NOT EXISTS idx_fqc_graph_nodes_staleness ON fqc_graph_nodes(instance_id, staleness_risk);
+CREATE INDEX IF NOT EXISTS idx_fqc_graph_nodes_key_claims_gin ON fqc_graph_nodes USING gin (key_claims);
+CREATE INDEX IF NOT EXISTS idx_fqc_graph_nodes_external_refs_gin ON fqc_graph_nodes USING gin (external_refs);
+CREATE INDEX IF NOT EXISTS idx_fqc_graph_edges_instance_id ON fqc_graph_edges(instance_id);
+CREATE INDEX IF NOT EXISTS idx_fqc_graph_edges_source ON fqc_graph_edges(instance_id, source_chunk_id);
+CREATE INDEX IF NOT EXISTS idx_fqc_graph_edges_target ON fqc_graph_edges(instance_id, target_chunk_id);
+CREATE INDEX IF NOT EXISTS idx_fqc_graph_edges_relation ON fqc_graph_edges(instance_id, relation);
+CREATE INDEX IF NOT EXISTS idx_fqc_graph_edges_status ON fqc_graph_edges(instance_id, status);
+CREATE INDEX IF NOT EXISTS idx_fqc_graph_edges_metadata_gin ON fqc_graph_edges USING gin (metadata);
+
+CREATE TABLE IF NOT EXISTS fqc_pending_edges (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  instance_id TEXT NOT NULL,
+  source_chunk_id UUID NOT NULL REFERENCES fqc_chunks(id) ON DELETE CASCADE,
+  target_chunk_id UUID NOT NULL REFERENCES fqc_chunks(id) ON DELETE CASCADE,
+  relation_hint TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  next_retry_at TIMESTAMPTZ DEFAULT now(),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'fqc_pending_edges_status_check'
+  ) THEN
+    ALTER TABLE fqc_pending_edges
+      ADD CONSTRAINT fqc_pending_edges_status_check
+      CHECK (status IN ('pending', 'processing', 'complete', 'failed', 'dead_letter'));
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_fqc_pending_edges_retry
+  ON fqc_pending_edges(instance_id, status, next_retry_at);
+CREATE INDEX IF NOT EXISTS idx_fqc_pending_edges_source
+  ON fqc_pending_edges(instance_id, source_chunk_id);
+
+CREATE TABLE IF NOT EXISTS fqc_graph_maintenance_state (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  instance_id TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'idle',
+  cursor JSONB NOT NULL DEFAULT '{}'::jsonb,
+  last_error TEXT,
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(instance_id, scope)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fqc_graph_maintenance_state_status
+  ON fqc_graph_maintenance_state(instance_id, status);
+
 -- Phase 32: description column added here, but dropped in Phase 69 (SPEC-19) — omitted to prevent
 -- add/drop cycle that exhausts PostgreSQL's 1600 attnum slots over repeated test runs.
 
