@@ -731,7 +731,7 @@ Use `search` with `include_archived: true` to include archived memories and `wri
 
 **Behavior**
 
-`search` unifies document and memory search. `mode: "filesystem"` uses document title/path/tags and memory content/tags. `mode: "semantic"` uses embeddings and returns `unsupported` if semantic search is unavailable. `mode: "mixed"` combines semantic and filesystem results and falls back with warnings when embeddings are unavailable. Empty query requires filters or `list_all: true`; filtered list-mode also requires explicit `entity_types` so the target domains are unambiguous. Archived entities are excluded unless `include_archived` is true.
+`search` unifies document and memory search. `mode: "filesystem"` uses document title/path/tags and memory content/tags. `mode: "semantic"` uses embeddings and returns `unsupported` if semantic search is unavailable. `mode: "mixed"` combines semantic and filesystem results and falls back with warnings when embeddings are unavailable. When the embedding catalog has multiple active entries, semantic results are fused with reciprocal rank fusion and document hits can include matched chunk metadata. Empty query requires filters or `list_all: true`; filtered list-mode also requires explicit `entity_types` so the target domains are unambiguous. Archived entities are excluded unless `include_archived` is true.
 
 **Inputs**
 
@@ -742,15 +742,17 @@ Use `search` with `include_archived: true` to include archived memories and `wri
 | `tags` | `string[]` | no | none | Tag filter. |
 | `tag_match` | `"any" \| "all"` | no | `"any"` | Tag matching mode. |
 | `limit` | `number` | no | `10` | Global result limit after merge/dedupe/sort. |
+| `limit_chunks_per_result` | positive integer up to 25 | no | `3` | Maximum matched chunks returned per document result. |
 | `entity_types` | `("documents" \| "memories")[]` | no | enabled domains | Search domains. |
 | `list_all` | `boolean` | no | `false` | Allows empty unfiltered list-mode search. |
 | `path_filter` | `string` | no | none | Document path substring filter for filesystem/list searches. |
+| `embedding_names` | `string[]` | no | active catalog entries | Embedding catalog entries to query for semantic/mixed search. Empty arrays are invalid; unknown or deactivated names return expected error envelopes. Ignored with `embedding_names_ignored` in filesystem mode. |
 | `include_archived` | `boolean` | no | `false` | Include archived documents and memories. |
 | `body_contains`, `body_regex`, `regex`, `line_range`, `lines`, `byte_range` | `unknown` | no | none | Unsupported literal body-search parameters; return validation guidance. |
 
 **Output**
 
-Success returns `{ query, entity_types, mode, total, warnings?, results }`. Document results include `entity_type`, `identifier`, `title`, `path`, `fq_id`, `tags`, `modified`, `size`, `match_source`, and optional `score`. Memory results include `entity_type`, `identifier`, `memory_id`, `content_preview`, `tags`, `plugin_scope`, timestamps, `match_source`, and optional `score`.
+Success returns `{ query, entity_types, mode, embeddings_queried?, fusion?, fusion_k?, total, warnings?, results }`. `embeddings_queried` lists successful embedding retrievers when catalog search is active. `fusion` is `"none"` or `"rrf"`; `fusion_k` is present for reciprocal rank fusion. Document results include `entity_type`, `identifier`, `title`, `path`, `fq_id`, `tags`, `modified`, `size`, `match_source`, optional `score`, and optional `matched_chunks`. RRF-fused document results can also include `fused_score`, `rank_sum`, and `per_embedding_ranks`. Each `matched_chunks` item includes `chunk_id`, `heading_path`, `breadcrumb`, `content`, `span_start`, `span_end`, `score`, `per_embedding_ranks`, and `indexed_at`. Memory results include `entity_type`, `identifier`, `memory_id`, `content_preview`, `tags`, `plugin_scope`, timestamps, `match_source`, and optional `score`; memory results do not include `matched_chunks`.
 
 **Examples**
 
@@ -759,6 +761,7 @@ mcp__flashquery__search({
   query: "alpha launch risks",
   entity_types: ["documents"],
   mode: "mixed",
+  limit_chunks_per_result: 2,
   limit: 10
 })
 ```
@@ -768,6 +771,8 @@ mcp__flashquery__search({
   "query": "alpha launch risks",
   "entity_types": ["documents"],
   "mode": "mixed",
+  "embeddings_queried": ["primary"],
+  "fusion": "none",
   "total": 1,
   "results": [
     {
@@ -779,7 +784,21 @@ mcp__flashquery__search({
       "tags": ["project"],
       "modified": "2026-05-17T12:00:00.000Z",
       "size": { "chars": 320 },
-      "match_source": ["filesystem"]
+      "match_source": ["semantic", "filesystem"],
+      "score": 0.87,
+      "matched_chunks": [
+        {
+          "chunk_id": "chunk-001",
+          "heading_path": "Risks",
+          "breadcrumb": "Alpha Plan > Risks",
+          "content": "Launch risk notes...",
+          "span_start": null,
+          "span_end": null,
+          "score": 0.87,
+          "per_embedding_ranks": { "primary": 1 },
+          "indexed_at": { "primary": "2026-05-17T12:00:00.000Z" }
+        }
+      ]
     }
   ]
 }
