@@ -25,6 +25,15 @@
 
 **Requirements:** GR-001, GR-002, GR-003, GR-004, GR-005, GR-006, GR-007, GR-008, GR-009, GR-013A, GR-014A, GR-016A, GR-017, GR-018, GR-019, GR-020A, GR-024A
 
+**Plans:** 5 plans
+
+Plans:
+- [ ] 171-01-PLAN.md — Graph config, sidecars, namespace variables, and schema foundation
+- [ ] 171-02-PLAN.md — Tier 1 structural graph writes and `fq_processing` gates
+- [ ] 171-03-PLAN.md — `query_graph` read surface and graph query helpers
+- [ ] 171-04-PLAN.md — Graph-expanded search and graph-aware `get_document`
+- [ ] 171-05-PLAN.md — Blocking schema verification and final focused validation
+
 **Implementation scope:**
 
 - Add disabled-by-default `graph:` config, cross-validation for embedding/model/purpose references, graph relation/prompt sidecar loading, and namespaced `graph:` template variables.
@@ -96,7 +105,7 @@
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 172. Async Classification, Lifecycle, Lint, Communities, and Hardening | v4.3 | 0/0 | Pending | - |
-| 171. Graph Foundation, Structural Graph, and Read Surfaces | v4.3 | 0/0 | Pending | - |
+| 171. Graph Foundation, Structural Graph, and Read Surfaces | v4.3 | 0/5 | Pending | - |
 | 170. JSON Validation and Repair Infrastructure | v4.2 | 4/4 | Complete | 2026-06-22 |
 | 169. Lifecycle, Search, and Deployment Verification | v4.1 | 3/3 | Complete | 2026-06-15 |
 | 168. Chunking Foundation and Write Pipeline | v4.1 | 4/4 | Complete | 2026-06-14 |
