@@ -181,10 +181,21 @@ slug     = echo $title | sed "s/ /-/g"    # transform a bound VALUE through sed 
 
 ---
 
-## 1.7 Data builtins — `filter` (§14.3.1)
+## 1.7 Data builtins — the ten §14 collection builtins
 
-`filter` is the first of the ten §14 collection builtins. It returns the subset
-of a list of objects whose `$field` satisfies a comparison against `$value`.
+The ten general-purpose collection builtins — `filter`, `sort`, `first`, `last`,
+`keys`, `contains`, `join`, `map`, `any`, `all` — all share one error model and
+two-tier validation. `filter` is documented in full below as the **exemplar**;
+its "Semantics" and "Two validation tiers" blocks are **language-wide invariants
+that apply to all ten** (§14.3.1). Each of the other nine then lists only what is
+unique to it. Per-builtin reason codes follow the `<name>_*` convention
+(`sort_argument_count`, `keys_type_mismatch`, …); `comparison_type_mismatch` is
+**shared**, not name-scoped (it is the same code `$x < "a"` already raises).
+
+### 1.7.0 `filter` (§14.3.2) — the exemplar
+
+`filter` returns the subset of a list of objects whose `$field` satisfies a
+comparison against `$value`.
 
 **Signature:** `filter $list $field $op $value` → list
 
@@ -216,6 +227,109 @@ nested      = filter $rows "metadata.qualifiers.temporal" "==" "current"
 | Ordering operator on a non-numeric field value | Runtime | `tool_call_failed` + `comparison_type_mismatch` |
 
 `filter` is a value/data builtin, so its **runtime** faults use `MacroRuntimeError` → `error.code: tool_call_failed`. Only the statically-visible (preflight) faults use `invalid_input`.
+
+The nine subsections that follow inherit every invariant above (fixed arity → preflight `<name>_argument_count`; named args → preflight `<name>_named_argument`; first-arg type checked at **runtime** → `<name>_type_mismatch`; `$field` resolved via the `$obj.field` mechanism with dotted nested paths, missing leaf → `null`, non-object row → throws; empty input is never an error; non-mutating). Only the **unique** rules and reason codes are restated.
+
+### 1.7.1 `sort` (§14.3.3)
+
+**Signature:** `sort $list $field $direction` → list. Sorts a list of objects by a field. **Stable** and non-mutating.
+
+```
+by_confidence = sort $neighbors.payload.nodes "confidence" "desc"
+oldest_first  = sort $edges "created_at" "asc"
+```
+
+**Unique semantics:**
+- `$direction` must be `"asc"` or `"desc"`. A **string literal** outside those two → preflight `invalid_input` + `sort_direction_invalid`; a **variable** that resolves to an invalid direction → runtime `tool_call_failed` + `sort_direction_invalid`.
+- `sort` uses its own **type-dispatched comparator** — a deliberate, scoped exception to the language's numeric-only `</>` rule, because string fields must sort lexicographically. It inspects the **actual field values at runtime**: all non-null values must be uniformly orderable — all numbers (numeric order) or all strings (lexicographic). A mix of number and string, or any non-scalar/boolean field value → runtime `sort_field_type_mismatch`.
+- **`NULLS LAST`:** null field values (including a missing leaf, §4.1 — e.g. a structural edge with no `confidence`) are **not** an error. They sort to the **end** under both `"asc"` and `"desc"`, preserving relative input order.
+- Arity 3 → preflight `sort_argument_count`. Empty list → `[]`.
+
+### 1.7.2 `first` (§14.3.4)
+
+**Signature:** `first $list` → item (or `null` if empty). Returns the first element without modifying the list. Pairs with `sort` for "top result" patterns.
+
+```
+strongest = first (sort $edges "confidence" "desc")
+```
+
+**Unique semantics:** Arity 1 → preflight `first_argument_count`. Non-list arg → runtime `first_type_mismatch`. **Empty list → `null`** (not an error).
+
+### 1.7.3 `last` (§14.3.5)
+
+**Signature:** `last $list` → item (or `null` if empty). Returns the last element.
+
+```
+oldest_edge = last (sort $edges "created_at" "asc")
+```
+
+**Unique semantics:** Arity 1 → preflight `last_argument_count`. Non-list arg → runtime `last_type_mismatch`. **Empty list → `null`**.
+
+### 1.7.4 `keys` (§14.3.6)
+
+**Signature:** `keys $object` → list of strings. Returns the keys of a record, enabling iteration over dynamic object structures.
+
+```
+type_names = keys $summary.payload.edge_counts.by_type
+for type in $type_names do
+  echo "$type: $summary.payload.edge_counts.by_type.$type edges"
+done
+```
+
+**Unique semantics:** Arity 1 → preflight `keys_argument_count`. **Record-only** — a list, string, number, boolean, or `null` → runtime `keys_type_mismatch`. Keys returned in **insertion order**. Empty object → `[]`.
+
+### 1.7.5 `contains` (§14.3.7)
+
+**Signature:** `contains $list $value` → boolean. True if the list contains the value, using the language's recursive `deepEqual` (the same equality as `unique` and `==`).
+
+```
+important = ["contradicts", "depends_on", "resolves"]
+if contains $important $edge.relation then echo "Important: $edge.relation" fi
+```
+
+**Unique semantics:** Arity 2 → preflight `contains_argument_count`. First arg must be a list → runtime `contains_type_mismatch`. Membership is **recursive `deepEqual`** — objects and lists match structurally, not by reference (not shallow equality). Empty list → `false`.
+
+### 1.7.6 `join` (§14.3.8)
+
+**Signature:** `join $list $separator` → string. Joins a list of **strings** with the separator between each element.
+
+```
+labels  = map $communities.payload.communities "label"
+summary = join $labels ", "
+```
+
+**Unique semantics:** Arity 2 → preflight `join_argument_count`. `$separator` must be a string → preflight `join_separator_type` if a **literal**, runtime if dynamic. First arg must be a list → runtime `join_type_mismatch`. **Every element must be a string** — a non-string element → runtime `join_element_type`. There is **no implicit stringification**: `map` the field out first (the `join (map …)` idiom). Empty list → `""`.
+
+### 1.7.7 `map` (§14.3.9)
+
+**Signature:** `map $list $field` → list. Extracts a single field from each object, returning a flat list of values. A lightweight projection that replaces the `for`/`append` pattern.
+
+```
+chunk_ids = map $neighbors.payload.nodes "chunk_id"
+temporals = map $rows "metadata.qualifiers.temporal"   # dotted nested path
+```
+
+**Unique semantics:** Arity 2 → preflight `map_argument_count`. First arg must be a list → runtime `map_type_mismatch`. **Length-preserving** — a row missing `$field` contributes `null` (§4.1); a non-object row throws (§4.3). `$field` supports dotted nested paths. Empty list → `[]`.
+
+### 1.7.8 `any` (§14.3.10)
+
+**Signature:** `any $list $field $op $value` → boolean. True if **any** element satisfies the condition. Short-circuits on first match.
+
+```
+has_contradictions = any $edges "relation" "==" "contradicts"
+```
+
+**Unique semantics:** Arity 4 → preflight `any_argument_count`. Same field / operator / comparison rules as `filter` (literal bad `$op` → preflight `any_operator_invalid`; ordering op on non-numeric → runtime `comparison_type_mismatch`). Short-circuits on first match. **Empty list → `false`**.
+
+### 1.7.9 `all` (§14.3.11)
+
+**Signature:** `all $list $field $op $value` → boolean. True if **every** element satisfies the condition. Short-circuits on first failure.
+
+```
+all_active = all $edges "stale" "==" false
+```
+
+**Unique semantics:** Arity 4 → preflight `all_argument_count`. Same field / operator / comparison rules as `filter` (literal bad `$op` → preflight `all_operator_invalid`; ordering op on non-numeric → runtime `comparison_type_mismatch`). Short-circuits on first failure. **Empty list → `true` (vacuous truth)**.
 
 ---
 
