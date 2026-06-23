@@ -25,14 +25,20 @@
 
 **Requirements:** GR-001, GR-002, GR-003, GR-004, GR-005, GR-006, GR-007, GR-008, GR-009, GR-013A, GR-014A, GR-016A, GR-017, GR-018, GR-019, GR-020A, GR-024A
 
-**Plans:** 5 plans
+**Plans:** 11 plans
 
 Plans:
-- [ ] 171-01-PLAN.md — Graph config, sidecars, namespace variables, and schema foundation
-- [ ] 171-02-PLAN.md — Tier 1 structural graph writes and `fq_processing` gates
-- [ ] 171-03-PLAN.md — `query_graph` read surface and graph query helpers
-- [ ] 171-04-PLAN.md — Graph-expanded search and graph-aware `get_document`
-- [ ] 171-05-PLAN.md — Blocking schema verification and final focused validation
+- [ ] 171-01-PLAN.md — Graph config, sidecars, and relation vocabulary
+- [ ] 171-02-PLAN.md — Graph namespace template variables
+- [ ] 171-03-PLAN.md — Graph schema DDL and verification, including full `fqc_graph_nodes` inventory
+- [ ] 171-04-PLAN.md — Chunk-keyed structural graph helpers and stale marking
+- [ ] 171-05-PLAN.md — `fq_processing` gates and structural graph processing wiring
+- [ ] 171-06-PLAN.md — Graph query helpers, seeded community read-through, provenance, and status filters
+- [ ] 171-07-PLAN.md — Public `query_graph` MCP registration, metadata, help, and integration coverage
+- [ ] 171-08-PLAN.md — Graph-expanded search
+- [ ] 171-09-PLAN.md — Graph-aware `get_document`
+- [ ] 171-10-PLAN.md — Blocking schema verification and final focused validation
+- [ ] 171-11-PLAN.md — Edge confidence and metadata validation
 
 **Implementation scope:**
 
@@ -55,9 +61,11 @@ Plans:
 
 - `npm test -- --run tests/unit/graph-config.test.ts tests/unit/graph-vocabulary.test.ts tests/unit/graph-prompts.test.ts tests/unit/reference-resolver-namespaces.test.ts tests/unit/graph-relations.test.ts tests/unit/graph-edge-validation.test.ts`
 - `npm test -- --run tests/unit/graph-node-identity.test.ts tests/unit/graph-structural.test.ts tests/unit/graph-link-resolver.test.ts tests/unit/graph-staleness.test.ts tests/unit/graph-processing-level.test.ts`
-- `npm test -- --run tests/unit/graph-query.test.ts tests/unit/graph-search-ranking.test.ts tests/unit/graph-question-lifecycle.test.ts tests/unit/graph-provenance.test.ts`
-- `npm run test:integration -- --run tests/integration/graph/graph-schema.test.ts tests/integration/graph/namespaced-template-vars.test.ts tests/integration/graph/structural-edges.test.ts tests/integration/graph/fq-processing.test.ts`
+- `npm test -- --run tests/unit/graph-query.test.ts tests/unit/graph-query-status-filter.test.ts tests/unit/graph-search-ranking.test.ts tests/unit/graph-question-lifecycle.test.ts tests/unit/graph-provenance.test.ts`
+- `npm run test:integration -- --run tests/integration/graph/graph-schema.test.ts tests/integration/graph/node-identity.test.ts tests/integration/graph/namespaced-template-vars.test.ts tests/integration/graph/structural-edges.test.ts tests/integration/graph/fq-processing.test.ts`
 - `npm run test:integration -- --run tests/integration/graph/query-graph.test.ts tests/integration/graph/get-document-graph.test.ts tests/integration/graph/search-graph-expansion.test.ts tests/integration/graph/provenance-question.test.ts`
+- `python3 tests/scenarios/directed/run_suite.py --managed test_graph_structural_edges.py test_query_graph_public_surface.py`
+- `python3 tests/scenarios/integration/run_integration.py --managed graph_search_expansion`
 
 ### Phase 172: Async Classification, Lifecycle, Lint, Communities, and Hardening
 
