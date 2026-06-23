@@ -1,4 +1,4 @@
-# Phase 171: Graph Foundation, Structural Graph, and Read Surfaces - Research
+# Phase 171: Graph Foundation, Schema, and Vocabulary - Research
 
 **Researched:** 2026-06-23  
 **Domain:** TypeScript MCP server, Supabase/Postgres graph tables, markdown chunk graphing, deterministic graph read surfaces  

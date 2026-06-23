@@ -8,23 +8,24 @@
 - Requirements: `/Users/matt/Documents/Claude/Projects/FlashQuery/flashquery-product/Roadmap/Features/Graph Document Intelligence (Jun 2026)/Graph-Enhanced-Document-Intelligence Requirements.md`
 - Test Plan: `/Users/matt/Documents/Claude/Projects/FlashQuery/flashquery-product/Roadmap/Features/Graph Document Intelligence (Jun 2026)/Graph-Enhanced-Document-Intelligence Test Plan.md`
 
-This GSD milestone compresses the source document's six implementation phases into two GSD phases:
+This GSD milestone compresses the source document's six implementation phases into three GSD phases:
 
-- GSD Phase 171 covers source phases 1-3: Config, Schema, Vocabulary; Tier 1 Structural Graph; Read Surfaces.
-- GSD Phase 172 covers source phases 4-6: Tier 2/Tier 3 Async Processing; Lifecycle, Lint, Communities; End-to-End Hardening.
+- GSD Phase 171 covers source phase 1: Config, Schema, Vocabulary, and graph foundation contracts.
+- GSD Phase 172 covers source phases 2-3: Tier 1 Structural Graph and Read Surfaces.
+- GSD Phase 173 covers source phases 4-6: Tier 2/Tier 3 Async Processing; Lifecycle, Lint, Communities; End-to-End Hardening.
 
 ## v4.3 Requirements
 
 ### Foundation, Schema, and Vocabulary
 
-- [ ] **GR-001**: User can leave `graph:` absent or set `graph.enabled:false` and get unchanged FlashQuery behavior with no graph queueing, graph writes, graph LLM calls, or silent response-shape drift.
-- [ ] **GR-002**: User can enable graph intelligence only with a valid graph config whose embedding and classification references are cross-validated against the active embedding catalog and LLM model/purpose config.
-- [ ] **GR-003**: User can rely on strict graph relation and prompt sidecars, with deterministic packaged defaults or actionable remediation for missing files and validation failures before workers run.
-- [ ] **GR-004**: User can use namespaced template variables such as `{{graph:classified_types}}` without regressing existing `{{ref:...}}` reference resolution, escaping, aliases, or unresolved-token behavior.
-- [ ] **GR-005**: User gets idempotent graph schema DDL for graph nodes, graph edges, pending edge jobs, and graph maintenance state with instance isolation, chunk foreign keys, required indexes, and JSONB support.
+- [x] **GR-001**: User can leave `graph:` absent or set `graph.enabled:false` and get unchanged FlashQuery behavior with no graph queueing, graph writes, graph LLM calls, or silent response-shape drift.
+- [x] **GR-002**: User can enable graph intelligence only with a valid graph config whose embedding and classification references are cross-validated against the active embedding catalog and LLM model/purpose config.
+- [x] **GR-003**: User can rely on strict graph relation and prompt sidecars, with deterministic packaged defaults or actionable remediation for missing files and validation failures before workers run.
+- [x] **GR-004**: User can use namespaced template variables such as `{{graph:classified_types}}` without regressing existing `{{ref:...}}` reference resolution, escaping, aliases, or unresolved-token behavior.
+- [x] **GR-005**: User gets idempotent graph schema DDL for graph nodes, graph edges, pending edge jobs, and graph maintenance state with instance isolation, chunk foreign keys, required indexes, and JSONB support.
 - [ ] **GR-006**: User can trust that graph nodes use existing `fqc_chunks.id` identity and do not create an alternate document-section identity system.
-- [ ] **GR-007**: User gets the v1 relation vocabulary with structural `contains` and `references` edges, ten classified relation types, explicit directionality/symmetry, and no persisted semantic-similarity topology.
-- [ ] **GR-008**: User can inspect graph edges with tier-appropriate confidence, confidence score, reasoning for inferred edges, validated metadata qualifiers, and relation-specific metadata validation.
+- [x] **GR-007**: User gets the v1 relation vocabulary with structural `contains` and `references` edges, ten classified relation types, explicit directionality/symmetry, and no persisted semantic-similarity topology.
+- [x] **GR-008**: User can inspect graph edges with tier-appropriate confidence, confidence score, reasoning for inferred edges, validated metadata qualifiers, and relation-specific metadata validation.
 
 ### Structural Graph and Read Surfaces
 
@@ -81,35 +82,35 @@ Deferred beyond this milestone:
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GR-001 | Phase 171 | Pending |
-| GR-002 | Phase 171 | Pending |
-| GR-003 | Phase 171 | Pending |
-| GR-004 | Phase 171 | Pending |
-| GR-005 | Phase 171 | Pending |
-| GR-006 | Phase 171 | Pending |
-| GR-007 | Phase 171 | Pending |
-| GR-008 | Phase 171 | Pending |
-| GR-009 | Phase 171 | Pending |
-| GR-013A | Phase 171 | Pending |
-| GR-014A | Phase 171 | Pending |
-| GR-016A | Phase 171 | Pending |
-| GR-017 | Phase 171 | Pending |
-| GR-018 | Phase 171 | Pending |
-| GR-019 | Phase 171 | Pending |
-| GR-020A | Phase 171 | Pending |
-| GR-024A | Phase 171 | Pending |
-| GR-010 | Phase 172 | Pending |
-| GR-011 | Phase 172 | Pending |
-| GR-012 | Phase 172 | Pending |
-| GR-013B | Phase 172 | Pending |
-| GR-014B | Phase 172 | Pending |
-| GR-015 | Phase 172 | Pending |
-| GR-016B | Phase 172 | Pending |
-| GR-020B | Phase 172 | Pending |
-| GR-021 | Phase 172 | Pending |
-| GR-022 | Phase 172 | Pending |
-| GR-023 | Phase 172 | Pending |
-| GR-024B | Phase 172 | Pending |
+| GR-001 | Phase 171 | Complete |
+| GR-002 | Phase 171 | Complete |
+| GR-003 | Phase 171 | Complete |
+| GR-004 | Phase 171 | Complete |
+| GR-005 | Phase 171 | Complete |
+| GR-006 | Phase 172 | Pending |
+| GR-007 | Phase 171 | Complete |
+| GR-008 | Phase 171 | Complete |
+| GR-009 | Phase 172 | Pending |
+| GR-013A | Phase 172 | Pending |
+| GR-014A | Phase 172 | Pending |
+| GR-016A | Phase 172 | Pending |
+| GR-017 | Phase 172 | Pending |
+| GR-018 | Phase 172 | Pending |
+| GR-019 | Phase 172 | Pending |
+| GR-020A | Phase 172 | Pending |
+| GR-024A | Phase 172 | Pending |
+| GR-010 | Phase 173 | Pending |
+| GR-011 | Phase 173 | Pending |
+| GR-012 | Phase 173 | Pending |
+| GR-013B | Phase 173 | Pending |
+| GR-014B | Phase 173 | Pending |
+| GR-015 | Phase 173 | Pending |
+| GR-016B | Phase 173 | Pending |
+| GR-020B | Phase 173 | Pending |
+| GR-021 | Phase 173 | Pending |
+| GR-022 | Phase 173 | Pending |
+| GR-023 | Phase 173 | Pending |
+| GR-024B | Phase 173 | Pending |
 
 **Coverage:**
 - v4.3 requirements: 29 total

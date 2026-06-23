@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.3
 milestone_name: Graph Document Intelligence
-status: planning
-last_updated: "2026-06-23T15:11:40.616Z"
-last_activity: 2026-06-23
+status: complete
+last_updated: "2026-06-23T21:43:23.986Z"
+last_activity: 2026-06-23 -- Phase 171 complete: graph config, vocabulary, prompt contracts, graph DDL, namespace rendering, and edge validation shipped.
 progress:
-  total_phases: 2
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 3
+  completed_phases: 1
+  total_plans: 11
+  completed_plans: 4
+  percent: 33
 ---
 
 # FlashQuery Core — State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-23)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns - across tools, across sessions, with zero vendor lock-in.
-**Current focus:** v4.3 Graph Document Intelligence
+**Current focus:** Phase 172 — Structural Graph and Read Surfaces
 
 ## Current Position
 
-Phase: 171 - Graph Foundation, Structural Graph, and Read Surfaces
-Plan: —
-Status: Roadmap ready
-Last activity: 2026-06-23 — Milestone v4.3 roadmap created with Phases 171-172
+Phase: 171 (Graph Foundation, Schema, and Vocabulary) — COMPLETE
+Plan: 4 of 4
+Status: Phase 171 complete
+Last activity: 2026-06-23 -- Phase 171 complete: graph config, vocabulary, prompt contracts, graph DDL, namespace rendering, and edge validation shipped.
 
 ## Performance Metrics
 
@@ -40,6 +40,10 @@ Last activity: 2026-06-23 — Milestone v4.3 roadmap created with Phases 171-172
 
 ## Accumulated Context
 
+### Roadmap Evolution
+
+- Phase 171 edited: v4.3 restructured from 2 phases into 3: 171 foundation/schema/vocabulary, 172 structural graph/read surfaces, 173 async/lifecycle/lint/community hardening
+
 ### Decisions
 
 Full decision log lives in `.planning/PROJECT.md` (Key Decisions) and the milestone archives. v4.1 highlights: chunks are the document embedding unit; `heading_path` stored as scalar `TEXT`; `span_start`/`span_end` are always-null v1 placeholders; no production document-vector→chunk migration (DB-wipe-then-redeploy); GSD milestone versions are decoupled from npm release tags.
@@ -51,7 +55,7 @@ Full decision log lives in `.planning/PROJECT.md` (Key Decisions) and the milest
 
 ### Todos
 
-None. Start Phase 171 with `/gsd-plan-phase 171`.
+None. Phase 171 and Phase 172 planning artifacts exist under the three-phase milestone split.
 
 ### Blockers
 
@@ -59,8 +63,8 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-06-22T21:04:00Z
-**Next action:** plan Phase 171 with `/gsd-plan-phase 171`.
+**Last session:** 2026-06-23T21:43:23.969Z
+**Next action:** verify Phase 171 or execute Phase 172 with `/gsd-execute-phase 172`.
 **Context needed:** `.planning/PROJECT.md`, `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, and the graph source requirements/test plan in `flashquery-product/Roadmap/Features/Graph Document Intelligence (Jun 2026)/`.
 
 ## Deferred Items
@@ -85,4 +89,4 @@ None. The milestone audit passed with no implementation tech debt.
 
 ## Operator Next Steps
 
-- Start Phase 171 with /gsd-plan-phase 171
+- Verify Phase 171, then execute Phase 172 with /gsd-execute-phase 172

@@ -2,7 +2,7 @@
 
 ## Milestones
 
-- [ ] **v4.3 Graph Document Intelligence** - Phases 171-172 (active)
+- [ ] **v4.3 Graph Document Intelligence** - Phases 171-173 (active)
 - [x] **v4.2 JSON Validation** - Phase 170 (shipped 2026-06-22)
 - [x] **v4.1 Embedding Chunks Migration** - Phases 168-169 (shipped 2026-06-15)
 
@@ -12,64 +12,99 @@
 
 **Source split:**
 
-- Phase 171 implements documented phases 1-3 from the source requirements: Config/Schema/Vocabulary, Tier 1 Structural Graph, and Read Surfaces.
-- Phase 172 implements documented phases 4-6 from the source requirements: Tier 2/Tier 3 Async Processing, Lifecycle/Lint/Communities, and End-to-End Hardening.
+- Phase 171 implements documented phase 1 from the source requirements: Config, Schema, Vocabulary, and graph foundation contracts.
+- Phase 172 implements documented phases 2-3 from the source requirements: Tier 1 Structural Graph and Read Surfaces.
+- Phase 173 implements documented phases 4-6 from the source requirements: Tier 2/Tier 3 Async Processing, Lifecycle/Lint/Communities, and End-to-End Hardening.
 
 ## Phases
 
-### Phase 171: Graph Foundation, Structural Graph, and Read Surfaces
+### Phase 171: Graph Foundation, Schema, and Vocabulary
 
-**Goal:** Establish the optional graph substrate and expose deterministic graph reads without requiring Tier 3 LLM classification.
+**Goal:** Establish the optional graph substrate, config validation, relation/prompt sidecars, namespaced template variables, graph schema, and edge metadata contracts.
 
-**Source phases covered:** 1-3
+**Source phases covered:** 1
 
-**Requirements:** GR-001, GR-002, GR-003, GR-004, GR-005, GR-006, GR-007, GR-008, GR-009, GR-013A, GR-014A, GR-016A, GR-017, GR-018, GR-019, GR-020A, GR-024A
+**Requirements:** GR-001, GR-002, GR-003, GR-004, GR-005, GR-007, GR-008
 
-**Plans:** 11 plans
+**Plans:** 4/4 plans complete
 
 Plans:
-- [ ] 171-01-PLAN.md — Graph config, sidecars, and relation vocabulary
-- [ ] 171-02-PLAN.md — Graph namespace template variables
-- [ ] 171-03-PLAN.md — Graph schema DDL and verification, including full `fqc_graph_nodes` inventory
-- [ ] 171-04-PLAN.md — Chunk-keyed structural graph helpers and stale marking
-- [ ] 171-05-PLAN.md — `fq_processing` gates and structural graph processing wiring
-- [ ] 171-06-PLAN.md — Graph query helpers, seeded community read-through, provenance, and status filters
-- [ ] 171-07-PLAN.md — Public `query_graph` MCP registration, metadata, help, and integration coverage
-- [ ] 171-08-PLAN.md — Graph-expanded search
-- [ ] 171-09-PLAN.md — Graph-aware `get_document`
-- [ ] 171-10-PLAN.md — Blocking schema verification and final focused validation
-- [ ] 171-11-PLAN.md — Edge confidence and metadata validation
+- [x] 171-01-PLAN.md — Graph config, sidecars, and relation vocabulary
+- [x] 171-02-PLAN.md — Graph namespace template variables
+- [x] 171-03-PLAN.md — Graph schema DDL and verification, including full `fqc_graph_nodes` inventory
+- [x] 171-04-PLAN.md — Edge confidence and metadata validation
 
 **Implementation scope:**
 
 - Add disabled-by-default `graph:` config, cross-validation for embedding/model/purpose references, graph relation/prompt sidecar loading, and namespaced `graph:` template variables.
 - Add graph schema DDL and verification for `fqc_graph_nodes`, `fqc_graph_edges`, `fqc_pending_edges`, and graph maintenance state.
-- Add relation vocabulary semantics, edge metadata validation, confidence/reasoning model, and chunk-based graph node identity.
-- Build deterministic structural `contains` and `references` edges from chunk hierarchy and markdown links, with unresolved-link diagnostics.
-- Add `fq_processing` parsing and initial full/embedded/none behavior for structural graph writes.
-- Register `query_graph`, graph-expanded `search`, and graph-aware `get_document` read surfaces with disabled/unsupported behavior and canonical response envelopes.
+- Add relation vocabulary semantics, edge metadata validation, confidence/reasoning model, and the schema foundation required by later chunk-keyed graph node identity.
+- Keep graph disabled by default with no graph queueing, graph writes, graph LLM calls, or response-shape drift when `graph:` is absent or disabled.
 
 **Success criteria:**
 
 1. Starting without `graph:` or with `graph.enabled:false` leaves current write/search/get-document behavior unchanged and does not mutate graph tables or enqueue graph work.
-2. Graph-enabled startup validates config, sidecars, vocabulary, schema, and graph tool metadata before serving.
-3. Markdown writes/scans create chunk-keyed graph nodes plus deterministic `contains` and `references` edges without LLM calls.
-4. `query_graph` primitive/read actions, graph-expanded `search`, and graph-aware `get_document` return structured responses, expected errors, graph-disabled remediation, and bounded traversal behavior.
-5. Unit and integration coverage from Test Plan sections 4.1-4.3 passes for config, vocabulary, schema, structural edges, query_graph, search expansion, get_document graph output, and provenance/question read shaping.
+2. Graph-enabled startup validates config, sidecars, vocabulary, schema, and graph foundation contracts before graph-dependent work can run.
+3. Graph schema includes all Phase 171 foundation tables and the full `fqc_graph_nodes` metadata inventory needed by later structural/read phases.
+4. Relation vocabulary and edge metadata validators enforce directionality, confidence, reasoning, qualifiers, and relation-specific metadata before graph writes.
+5. Unit and integration coverage from Test Plan section 4.1 passes for config, vocabulary, schema, namespace variables, relation semantics, and edge metadata validation.
 
 **Verification commands:**
 
 - `npm test -- --run tests/unit/graph-config.test.ts tests/unit/graph-vocabulary.test.ts tests/unit/graph-prompts.test.ts tests/unit/reference-resolver-namespaces.test.ts tests/unit/graph-relations.test.ts tests/unit/graph-edge-validation.test.ts`
+- `npm run test:integration -- --run tests/integration/graph/graph-schema.test.ts tests/integration/graph/namespaced-template-vars.test.ts`
+
+### Phase 172: Structural Graph and Read Surfaces
+
+**Goal:** Build deterministic Tier 1 structural graph writes and expose bounded graph read surfaces without requiring Tier 3 LLM classification.
+
+**Depends on:** Phase 171
+
+**Source phases covered:** 2-3
+
+**Requirements:** GR-006, GR-009, GR-013A, GR-014A, GR-016A, GR-017, GR-018, GR-019, GR-020A, GR-024A
+
+**Plans:** 7 plans
+
+Plans:
+- [ ] 172-01-PLAN.md — Chunk-keyed structural graph helpers and stale marking
+- [ ] 172-02-PLAN.md — `fq_processing` gates and structural graph processing wiring
+- [ ] 172-03-PLAN.md — Graph query helpers, seeded community read-through, provenance, and status filters
+- [ ] 172-04-PLAN.md — Public `query_graph` MCP registration, metadata, help, and integration coverage
+- [ ] 172-05-PLAN.md — Graph-expanded search
+- [ ] 172-06-PLAN.md — Graph-aware `get_document`
+- [ ] 172-07-PLAN.md — Final structural/read-surface focused validation
+
+**Implementation scope:**
+
+- Use existing `fqc_chunks.id` as graph node identity without creating a parallel section ID system.
+- Build deterministic structural `contains` and `references` edges from chunk hierarchy and markdown links, with unresolved-link diagnostics.
+- Add `fq_processing` parsing and initial full/embedded/none behavior for structural graph writes.
+- Register `query_graph`, graph-expanded `search`, and graph-aware `get_document` read surfaces with disabled/unsupported behavior and canonical response envelopes.
+- Support read-through of seeded nullable community metadata while deferring community detection/lint maintenance to Phase 173.
+
+**Success criteria:**
+
+1. Markdown writes/scans create chunk-keyed graph nodes plus deterministic `contains` and `references` edges without LLM calls.
+2. `fq_processing` full/embedded/none gates structural graph work correctly while preserving disabled graph behavior.
+3. `query_graph` primitive/read actions, graph-expanded `search`, and graph-aware `get_document` return structured responses, expected errors, graph-disabled remediation, and bounded traversal behavior.
+4. Provenance/question reads prioritize extracted structural edges and expose seeded graph metadata without Phase 173 classification/lint execution.
+5. Unit, integration, directed, and YAML coverage from Test Plan sections 4.2-4.3 passes for structural edges, query_graph, search expansion, get_document graph output, provenance/question read shaping, and public structural/search scenarios.
+
+**Verification commands:**
+
 - `npm test -- --run tests/unit/graph-node-identity.test.ts tests/unit/graph-structural.test.ts tests/unit/graph-link-resolver.test.ts tests/unit/graph-staleness.test.ts tests/unit/graph-processing-level.test.ts`
 - `npm test -- --run tests/unit/graph-query.test.ts tests/unit/graph-query-status-filter.test.ts tests/unit/graph-search-ranking.test.ts tests/unit/graph-question-lifecycle.test.ts tests/unit/graph-provenance.test.ts`
-- `npm run test:integration -- --run tests/integration/graph/graph-schema.test.ts tests/integration/graph/node-identity.test.ts tests/integration/graph/namespaced-template-vars.test.ts tests/integration/graph/structural-edges.test.ts tests/integration/graph/fq-processing.test.ts`
+- `npm run test:integration -- --run tests/integration/graph/node-identity.test.ts tests/integration/graph/structural-edges.test.ts tests/integration/graph/fq-processing.test.ts`
 - `npm run test:integration -- --run tests/integration/graph/query-graph.test.ts tests/integration/graph/get-document-graph.test.ts tests/integration/graph/search-graph-expansion.test.ts tests/integration/graph/provenance-question.test.ts`
 - `python3 tests/scenarios/directed/run_suite.py --managed test_graph_structural_edges.py test_query_graph_public_surface.py`
 - `python3 tests/scenarios/integration/run_integration.py --managed graph_search_expansion`
 
-### Phase 172: Async Classification, Lifecycle, Lint, Communities, and Hardening
+### Phase 173: Async Classification, Lifecycle, Lint, Communities, and Hardening
 
 **Goal:** Complete graph intelligence with bounded async classification, lifecycle-aware maintenance, community/lint diagnostics, cost visibility, and public workflow hardening.
+
+**Depends on:** Phase 172
 
 **Source phases covered:** 4-6
 
@@ -112,8 +147,9 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 172. Async Classification, Lifecycle, Lint, Communities, and Hardening | v4.3 | 0/0 | Pending | - |
-| 171. Graph Foundation, Structural Graph, and Read Surfaces | v4.3 | 0/5 | Pending | - |
+| 173. Async Classification, Lifecycle, Lint, Communities, and Hardening | v4.3 | 0/0 | Pending | - |
+| 172. Structural Graph and Read Surfaces | v4.3 | 0/7 | Planned | - |
+| 171. Graph Foundation, Schema, and Vocabulary | v4.3 | 4/4 | Complete   | 2026-06-23 |
 | 170. JSON Validation and Repair Infrastructure | v4.2 | 4/4 | Complete | 2026-06-22 |
 | 169. Lifecycle, Search, and Deployment Verification | v4.1 | 3/3 | Complete | 2026-06-15 |
 | 168. Chunking Foundation and Write Pipeline | v4.1 | 4/4 | Complete | 2026-06-14 |
@@ -127,30 +163,30 @@ Plans:
 | GR-003 | 171 |
 | GR-004 | 171 |
 | GR-005 | 171 |
-| GR-006 | 171 |
+| GR-006 | 172 |
 | GR-007 | 171 |
 | GR-008 | 171 |
-| GR-009 | 171 |
-| GR-013A | 171 |
-| GR-014A | 171 |
-| GR-016A | 171 |
-| GR-017 | 171 |
-| GR-018 | 171 |
-| GR-019 | 171 |
-| GR-020A | 171 |
-| GR-024A | 171 |
-| GR-010 | 172 |
-| GR-011 | 172 |
-| GR-012 | 172 |
-| GR-013B | 172 |
-| GR-014B | 172 |
-| GR-015 | 172 |
-| GR-016B | 172 |
-| GR-020B | 172 |
-| GR-021 | 172 |
-| GR-022 | 172 |
-| GR-023 | 172 |
-| GR-024B | 172 |
+| GR-009 | 172 |
+| GR-013A | 172 |
+| GR-014A | 172 |
+| GR-016A | 172 |
+| GR-017 | 172 |
+| GR-018 | 172 |
+| GR-019 | 172 |
+| GR-020A | 172 |
+| GR-024A | 172 |
+| GR-010 | 173 |
+| GR-011 | 173 |
+| GR-012 | 173 |
+| GR-013B | 173 |
+| GR-014B | 173 |
+| GR-015 | 173 |
+| GR-016B | 173 |
+| GR-020B | 173 |
+| GR-021 | 173 |
+| GR-022 | 173 |
+| GR-023 | 173 |
+| GR-024B | 173 |
 
 ## Archived Milestone Details
 
