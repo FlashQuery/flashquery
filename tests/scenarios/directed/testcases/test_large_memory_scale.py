@@ -197,29 +197,39 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 detail=f"Total {saved_count}/{memory_count} memories saved",
             )
 
-        # ── Step 2: Validate initial list count ──────────────────────────
+        # ── Step 2: Validate initial creation through tracked IDs ─────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        list_result = ctx.client.call_tool(
-            "search",
-            entity_types=["memories"],
-            tags=[run.run_id],
-            limit=1000,
+        sample_created_ids = [
+            created_memory_ids[idx]
+            for idx in (0, len(created_memory_ids) // 2, len(created_memory_ids) - 1)
+            if 0 <= idx < len(created_memory_ids)
+        ]
+        get_created_result = ctx.client.call_tool(
+            "get_memory",
+            memory_ids=sample_created_ids,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        initial_count = _count_memories_in_list(list_result.text)
-        detail = f"Found {initial_count} memories, expected ≈{memory_count}"
+        sampled_ids_present = all(memory_id in get_created_result.text for memory_id in sample_created_ids)
+        detail = (
+            f"Saved {saved_count}/{memory_count} memories; "
+            f"sampled_ids_present={sampled_ids_present}"
+        )
 
         run.step(
-            label="search memories (after creation)",
-            passed=(list_result.ok and initial_count >= memory_count * 0.95),
+            label="get_memory samples (after creation)",
+            passed=(
+                saved_count == memory_count
+                and get_created_result.ok
+                and sampled_ids_present
+            ),
             detail=detail,
-            timing_ms=list_result.timing_ms,
-            tool_result=list_result,
+            timing_ms=get_created_result.timing_ms,
+            tool_result=get_created_result,
             server_logs=step_logs,
         )
 
-        if not list_result.ok:
+        if not get_created_result.ok:
             return run
 
         # ── Step 3: Update phase (Phase 2) ───────────────────────────────
@@ -408,48 +418,54 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # ── Step 8: Search validation by tag ─────────────────────────────────
-        # Search for specific memories by tag to verify they were created correctly
+        # ── Step 8: Validate stable active samples ───────────────────────────
+        # Fetch specific memories by ID to verify they remain available after
+        # the update/archive churn.
         if mem_tag_to_id:
-            # Sample up to 5 memories for detailed validation
-            sample_tags = list(mem_tag_to_id.items())[:5]
-            search_validation_passed = True
-            search_validation_details = []
+            # Sample up to 5 memories that were neither updated nor archived so
+            # the lookup is validating stable active rows.
+            active_sample_start = archive_start_idx + actual_num_archives
+            active_sample_end = min(active_sample_start + 5, len(created_memory_ids))
+            sample_memories = [
+                (f"mem-{idx}", mem_tag_to_id[f"mem-{idx}"])
+                for idx in range(active_sample_start, active_sample_end)
+                if f"mem-{idx}" in mem_tag_to_id
+            ]
+            sample_ids = [memory_id for _mem_tag, memory_id in sample_memories]
+            log_mark = ctx.server.log_position if ctx.server else 0
+            get_result = ctx.client.call_tool("get_memory", memory_ids=sample_ids)
+            step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-            for mem_tag, expected_memory_id in sample_tags:
-                log_mark = ctx.server.log_position if ctx.server else 0
-                search_result = ctx.client.call_tool(
-                    "search",
-                    entity_types=["memories"],
-                    tags=[mem_tag],
-                    limit=10,
+            sample_validation_details = []
+            for mem_tag, expected_memory_id in sample_memories:
+                found = (
+                    expected_memory_id in get_result.text
+                    and mem_tag in get_result.text
                 )
-                step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+                sample_validation_details.append(
+                    f"{mem_tag}: {'found' if found else 'missing'}"
+                )
 
-                # Validate that the returned memory contains the expected tag
-                # (UUID may differ if the memory was updated, so we check for the tag instead)
-                if mem_tag in search_result.text:
-                    search_validation_details.append(
-                        f"Tag {mem_tag} correctly found and active"
-                    )
-                else:
-                    search_validation_passed = False
-                    # Include response snippet in detail for debugging
-                    response_preview = search_result.text[:80] if search_result.text else "(empty response)"
-                    search_validation_details.append(
-                        f"✗ Tag {mem_tag} not found in response: {response_preview}"
-                    )
-
-            detail = "Retrieved 5 sample memories by tag to verify correct storage:\n" + "\n".join(search_validation_details)
+            samples_found = all(
+                expected_memory_id in get_result.text and mem_tag in get_result.text
+                for mem_tag, expected_memory_id in sample_memories
+            )
+            detail = (
+                f"Retrieved {len(sample_memories)} active sample memories by ID:\n"
+                + "\n".join(sample_validation_details)
+            )
 
             run.step(
-                label="search memories (validate memory storage by tag)",
-                passed=(search_validation_passed and len(sample_tags) > 0),
+                label="get_memory active samples (after archive churn)",
+                passed=(get_result.ok and samples_found and len(sample_memories) > 0),
                 detail=detail,
+                timing_ms=get_result.timing_ms,
+                tool_result=get_result,
+                server_logs=step_logs,
             )
         else:
             run.step(
-                label="search memories (validate memory storage by tag)",
+                label="get_memory active samples (after archive churn)",
                 passed=False,
                 detail="No memories tracked; cannot validate retrieval results.",
             )

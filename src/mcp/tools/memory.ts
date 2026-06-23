@@ -33,6 +33,11 @@ function formatError(err: unknown): string {
 }
 
 type MemoryToolParams = Record<string, unknown>;
+type SupabaseClient = ReturnType<typeof supabaseManager.getClient>;
+
+const MEMORY_ROW_SELECT =
+  'id, content, tags, plugin_scope, status, created_at, updated_at, version, previous_version_id, is_latest, archived_at';
+const MEMORY_FETCH_PAGE_SIZE = 1000;
 
 const generatedMemoryFields = new Set([
   'id',
@@ -54,6 +59,27 @@ function expectedInvalidInput(message: string, details?: Record<string, unknown>
     ...(identifier !== undefined ? { identifier } : {}),
     ...(details ? { details } : {}),
   });
+}
+
+async function fetchAllMemoryRowsForInstance(
+  supabase: SupabaseClient,
+  instanceId: string
+): Promise<Array<MemoryRow & { status?: string }>> {
+  const rows: Array<MemoryRow & { status?: string }> = [];
+  for (let from = 0; ; from += MEMORY_FETCH_PAGE_SIZE) {
+    const to = from + MEMORY_FETCH_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from('fqc_memory')
+      .select(MEMORY_ROW_SELECT)
+      .eq('instance_id', instanceId)
+      .range(from, to);
+    if (error) throw new Error(error.message);
+
+    const page = (data ?? []) as Array<MemoryRow & { status?: string }>;
+    rows.push(...page);
+    if (page.length < MEMORY_FETCH_PAGE_SIZE) break;
+  }
+  return rows;
 }
 
 function parseMemoryInclude(value: unknown): MemoryInclude[] {
@@ -478,13 +504,7 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
         }
         const archivedAtByRoot = new Map<string, string>();
         const results: unknown[] = [];
-        const { data: chainRows, error: fetchError } = await supabase
-          .from('fqc_memory')
-          .select('id, content, tags, plugin_scope, status, created_at, updated_at, version, previous_version_id, is_latest, archived_at')
-          .eq('instance_id', config.instance.id);
-        if (fetchError) throw new Error(fetchError.message);
-
-        const allRows = (chainRows ?? []) as Array<MemoryRow & { status?: string }>;
+        const allRows = await fetchAllMemoryRowsForInstance(supabase, config.instance.id);
         const byId = new Map(allRows.map((row) => [row.id, row]));
 
         for (const id of ids) {

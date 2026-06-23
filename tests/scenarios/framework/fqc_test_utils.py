@@ -71,6 +71,8 @@ except ImportError:
 
 from fqc_vault import VaultHelper
 
+MEMORY_CLEANUP_BATCH_SIZE = 100
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -756,6 +758,66 @@ class TestCleanup:
         """Register a memory UUID for archival on cleanup."""
         self._memory_ids.append(memory_id)
 
+    def _archive_memory_batch(self, memory_ids: list[str]) -> None:
+        """Archive tracked memories using archive_memory's batch API."""
+        try:
+            result = self.client.call_tool("archive_memory", memory_ids=memory_ids)
+            if not result.ok:
+                # "Cannot coerce..." is FQC's response when the memory is already archived — not an error
+                error = result.error or ""
+                if "Cannot coerce" in error or "not found" in error.lower():
+                    pass
+                else:
+                    self._errors.append(
+                        f"Memory archive failed for batch ({len(memory_ids)} ids): {error}"
+                    )
+        except Exception as e:
+            self._errors.append(
+                f"Memory archive exception for batch ({len(memory_ids)} ids): {e}"
+            )
+
+    def _unarchived_memory_ids(self, memory_ids: list[str]) -> list[str]:
+        """Return tracked memory IDs that still appear unarchived."""
+        unarchived: list[str] = []
+        for i in range(0, len(memory_ids), MEMORY_CLEANUP_BATCH_SIZE):
+            batch = memory_ids[i : i + MEMORY_CLEANUP_BATCH_SIZE]
+            try:
+                result = self.client.call_tool("get_memory", memory_ids=batch)
+            except Exception as e:
+                self._errors.append(
+                    f"Memory cleanup verification exception for batch ({len(batch)} ids): {e}"
+                )
+                unarchived.extend(batch)
+                continue
+
+            if not result.ok:
+                self._errors.append(
+                    f"Memory cleanup verification failed for batch ({len(batch)} ids): {result.error}"
+                )
+                unarchived.extend(batch)
+                continue
+
+            try:
+                payload = json.loads(result.text)
+            except Exception as e:
+                self._errors.append(
+                    f"Memory cleanup verification returned non-JSON for batch ({len(batch)} ids): {e}"
+                )
+                unarchived.extend(batch)
+                continue
+
+            rows = payload if isinstance(payload, list) else [payload]
+            by_id = {
+                str(row.get("memory_id")): row
+                for row in rows
+                if isinstance(row, dict) and row.get("memory_id")
+            }
+            for memory_id in batch:
+                row = by_id.get(memory_id)
+                if row is not None and not row.get("archived_at"):
+                    unarchived.append(memory_id)
+        return unarchived
+
     def track_plugin_registration(self, plugin_id: str, plugin_instance: str) -> None:
         """Register a plugin registration for unregister+destroy on cleanup."""
         self._plugin_registrations.append((plugin_id, plugin_instance))
@@ -798,17 +860,15 @@ class TestCleanup:
                 )
 
         # 2. Archive memories (database side)
-        for memory_id in reversed(self._memory_ids):
-            try:
-                result = self.client.call_tool("archive_memory", memory_id=memory_id)
-                if not result.ok:
-                    # "Cannot coerce..." is FQC's response when the memory is already archived — not an error
-                    if "Cannot coerce" in (result.error or "") or "not found" in (result.error or "").lower():
-                        pass
-                    else:
-                        self._errors.append(f"Memory archive failed for '{memory_id}': {result.error}")
-            except Exception as e:
-                self._errors.append(f"Memory archive exception for '{memory_id}': {e}")
+        if self._memory_ids:
+            unique_memory_ids = list(dict.fromkeys(reversed(self._memory_ids)))
+            for i in range(0, len(unique_memory_ids), MEMORY_CLEANUP_BATCH_SIZE):
+                self._archive_memory_batch(unique_memory_ids[i : i + MEMORY_CLEANUP_BATCH_SIZE])
+            remaining = self._unarchived_memory_ids(unique_memory_ids)
+            if remaining:
+                self._errors.append(
+                    f"Memory cleanup left {len(remaining)} tracked memory id(s) unarchived"
+                )
 
         # 3. Archive MCP documents (database side)
         if self._mcp_identifiers:
