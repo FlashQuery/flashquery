@@ -36,6 +36,15 @@ import type {
   TemplateParamsInput,
   TemplateParamUsage,
 } from './reference-metadata.js';
+import { renderClassifiedGraphTypes } from '../graph/vocabulary.js';
+
+export type TemplateNamespaceProvider = (variable: string) => string | undefined;
+export type TemplateNamespaceProviders = Record<string, TemplateNamespaceProvider>;
+
+const GRAPH_NAMESPACE_PROVIDERS: TemplateNamespaceProviders = {
+  graph: (variable) =>
+    variable === 'classified_types' ? renderClassifiedGraphTypes() : undefined,
+};
 
 function documentResolutionDeps(
   config: FlashQueryConfig,
@@ -1197,6 +1206,26 @@ export function hydrateMessages<T extends { role: string; content?: string | nul
       content = content.slice(0, rep.start) + rep.content + content.slice(rep.end);
     }
     return { ...msg, content };
+  });
+}
+
+export function renderNamespacedTemplateVariables(
+  content: string,
+  providers: TemplateNamespaceProviders = GRAPH_NAMESPACE_PROVIDERS
+): string {
+  return content.replace(/\{\{([a-z][a-z0-9_-]*):([a-zA-Z0-9_.-]+)\}\}/g, (token, namespace, variable) => {
+    if (namespace === 'ref') return token;
+    return providers[namespace]?.(variable) ?? token;
+  });
+}
+
+export function hydrateNamespacedTemplateMessages<T extends { role: string; content?: string | null }>(
+  messages: T[],
+  providers?: TemplateNamespaceProviders
+): T[] {
+  return messages.map((message) => {
+    if (typeof message.content !== 'string') return { ...message };
+    return { ...message, content: renderNamespacedTemplateVariables(message.content, providers) };
   });
 }
 
