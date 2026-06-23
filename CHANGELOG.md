@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-06-23
+
+> This release hardens every JSON boundary in FlashQuery. Malformed-but-recoverable JSON from LLMs, brokered tools, and host templates is now repaired before parsing, while genuinely-unreadable structured payloads fail with visible errors instead of silently passing through. It also extends the macro language with a set of data-shaping builtins.
+
+### Added
+- Add shared JSON repair and schema-validation for LLM and tool output via a new `parseLlmJson()` parser (backed by the `jsonrepair` dependency), applied across the macro evaluator, host-template tools, macro task results, provider tool-call arguments, and brokered tool coercion.
+- Add macro §14 data builtins: `filter`, `sort`, `first`, `last`, `keys`, `contains`, `join`, `map`, `any`, and `all`.
+- Add `structuredContent` to generated host-template MCP tool responses on success.
+
+### Changed
+- Change macro tool-result, brokered tool-text, and provider tool-call-argument parsing to repair JSON before falling back, so recoverable malformed payloads now succeed.
+- Change host-template tools and macro task results to surface irreparable structured payloads as visible `invalid_json_payload` errors instead of silently passing them through as text or marking the task complete.
+
+### Fixed
+- Fix memory archive/cleanup to page through all memory rows in batches, so instances with more than ~1000 memories are cleaned up against the complete chain instead of a truncated first page.
+- Fix macro tool coercion to preserve ordinary prose output (no spurious JSON repair or warnings on plain text).
+- Clarify host-template JSON envelope error messaging.
+
 ## [5.0.0] - 2026-06-22
 
 > This release rebuilds FlashQuery's embedding system around named catalog entries, document chunks, and explicit lifecycle operations. It gives operators safer migration and repair tools while making semantic document search more precise and inspectable.
@@ -504,7 +522,8 @@ This release introduces native filesystem navigation to the vault. The new `crea
 
 ---
 
-[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v5.0.0...HEAD
+[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v5.1.0...HEAD
+[5.1.0]: https://github.com/FlashQuery/flashquery/compare/v5.0.0...v5.1.0
 [5.0.0]: https://github.com/FlashQuery/flashquery/compare/v4.1.0...v5.0.0
 [4.1.0]: https://github.com/FlashQuery/flashquery/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/FlashQuery/flashquery/compare/v3.2.0...v4.0.0
