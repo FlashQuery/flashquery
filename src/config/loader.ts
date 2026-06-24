@@ -1117,11 +1117,11 @@ export function loadConfig(configPath: string): FlashQueryConfig {
 
   validateGraphConfig(config);
   if (config.graph?.enabled) {
-    loadGraphVocabulary({
+    config.graph.resolvedRelations = loadGraphVocabulary({
       vaultPath: config.instance.vault.path,
       relationsPath: config.graph.relations,
     });
-    loadGraphPrompts({
+    config.graph.resolvedPrompts = loadGraphPrompts({
       vaultPath: config.instance.vault.path,
       promptsPath: config.graph.prompts,
       overrides: config.graph.promptOverrides,

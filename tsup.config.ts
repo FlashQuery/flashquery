@@ -66,5 +66,6 @@ export default defineConfig({
   ],
   noExternal: [],
   esbuildPlugins: [externalPluginImports],
-  onSuccess: 'mkdir -p dist/mcp/tool-help && cp src/mcp/tool-help/*.tool.md dist/mcp/tool-help/',
+  onSuccess:
+    'mkdir -p dist/mcp/tool-help dist/graph/defaults && cp src/mcp/tool-help/*.tool.md dist/mcp/tool-help/ && cp src/graph/defaults/*.yml dist/graph/defaults/',
 });

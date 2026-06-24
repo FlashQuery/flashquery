@@ -440,7 +440,7 @@ CREATE INDEX IF NOT EXISTS idx_fqc_chunks_heading_level ON fqc_chunks(heading_le
 CREATE TABLE IF NOT EXISTS fqc_graph_nodes (
   chunk_id UUID PRIMARY KEY REFERENCES fqc_chunks(id) ON DELETE CASCADE,
   instance_id TEXT NOT NULL,
-  provenance_basis TEXT NOT NULL DEFAULT 'chunk',
+  provenance_basis TEXT,
   question_status TEXT,
   question_resolution TEXT,
   community_id TEXT,
@@ -458,6 +458,22 @@ CREATE TABLE IF NOT EXISTS fqc_graph_nodes (
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+DO $$
+BEGIN
+  -- Repair pre-gap Phase 171 schemas that made this Tier 3 field non-null with a sentinel default.
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'fqc_graph_nodes'
+      AND column_name = 'provenance_basis'
+      AND is_nullable = 'NO'
+  ) THEN
+    ALTER TABLE fqc_graph_nodes ALTER COLUMN provenance_basis DROP DEFAULT;
+    ALTER TABLE fqc_graph_nodes ALTER COLUMN provenance_basis DROP NOT NULL;
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS fqc_graph_edges (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -513,19 +529,28 @@ CREATE INDEX IF NOT EXISTS idx_fqc_graph_edges_metadata_gin ON fqc_graph_edges U
 CREATE TABLE IF NOT EXISTS fqc_pending_edges (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   instance_id TEXT NOT NULL,
+  -- Pending jobs are keyed to chunks so candidates can be queued before node analysis populates graph metadata.
   source_chunk_id UUID NOT NULL REFERENCES fqc_chunks(id) ON DELETE CASCADE,
   target_chunk_id UUID NOT NULL REFERENCES fqc_chunks(id) ON DELETE CASCADE,
   relation_hint TEXT,
   status TEXT NOT NULL DEFAULT 'pending',
   attempt_count INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 3,
+  result JSONB,
   last_error TEXT,
   next_retry_at TIMESTAMPTZ DEFAULT now(),
   created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(instance_id, source_chunk_id, target_chunk_id)
 );
 
 DO $$
 BEGIN
+  -- Repair pre-gap Phase 171 schemas while keeping the initial CREATE TABLE contract complete.
+  ALTER TABLE fqc_pending_edges
+    ADD COLUMN IF NOT EXISTS max_attempts INTEGER NOT NULL DEFAULT 3,
+    ADD COLUMN IF NOT EXISTS result JSONB;
+
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'fqc_pending_edges_status_check'
@@ -533,6 +558,14 @@ BEGIN
     ALTER TABLE fqc_pending_edges
       ADD CONSTRAINT fqc_pending_edges_status_check
       CHECK (status IN ('pending', 'processing', 'complete', 'failed', 'dead_letter'));
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'fqc_pending_edges_instance_source_target_key'
+  ) THEN
+    ALTER TABLE fqc_pending_edges
+      ADD CONSTRAINT fqc_pending_edges_instance_source_target_key
+      UNIQUE(instance_id, source_chunk_id, target_chunk_id);
   END IF;
 END $$;
 

@@ -73,6 +73,55 @@ export async function columnExists(client: pg.Client, tableName: string, columnN
   return (result.rows[0] as Record<string, unknown>).exists === true;
 }
 
+export async function uniqueConstraintExists(
+  client: pg.Client,
+  tableName: string,
+  columns: string[]
+): Promise<boolean> {
+  const result = await client.query(
+    `
+    SELECT EXISTS (
+      SELECT 1
+      FROM pg_constraint con
+      JOIN pg_class rel
+        ON rel.oid = con.conrelid
+      JOIN pg_namespace nsp
+        ON nsp.oid = rel.relnamespace
+      WHERE nsp.nspname = 'public'
+        AND rel.relname = $1
+        AND con.contype = 'u'
+        AND (
+          SELECT array_agg(att.attname::text ORDER BY ord.ordinality)
+          FROM unnest(con.conkey) WITH ORDINALITY AS ord(attnum, ordinality)
+          JOIN pg_attribute att
+            ON att.attrelid = con.conrelid
+           AND att.attnum = ord.attnum
+        ) = $2::text[]
+    )
+    `,
+    [tableName, columns]
+  );
+  return (result.rows[0] as Record<string, unknown>).exists === true;
+}
+
+export async function columnIsNullable(
+  client: pg.Client,
+  tableName: string,
+  columnName: string
+): Promise<boolean> {
+  const result = await client.query(
+    `
+    SELECT is_nullable
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = $1
+      AND column_name = $2
+    `,
+    [tableName, columnName]
+  );
+  return (result.rows[0] as Record<string, unknown> | undefined)?.is_nullable === 'YES';
+}
+
 export async function verifyEmbeddingDimensions(
   client: pg.Client,
   expectedDimensions: number
@@ -303,6 +352,15 @@ export async function verifySchema(
     { table: 'fqc_graph_edges', column: 'model' },
     { table: 'fqc_graph_edges', column: 'status' },
     { table: 'fqc_graph_edges', column: 'metadata' },
+    { table: 'fqc_pending_edges', column: 'source_chunk_id' },
+    { table: 'fqc_pending_edges', column: 'target_chunk_id' },
+    { table: 'fqc_pending_edges', column: 'relation_hint' },
+    { table: 'fqc_pending_edges', column: 'status' },
+    { table: 'fqc_pending_edges', column: 'attempt_count' },
+    { table: 'fqc_pending_edges', column: 'max_attempts' },
+    { table: 'fqc_pending_edges', column: 'result' },
+    { table: 'fqc_pending_edges', column: 'last_error' },
+    { table: 'fqc_pending_edges', column: 'next_retry_at' },
   ];
   const missingColumns: string[] = [];
 
@@ -315,6 +373,25 @@ export async function verifySchema(
 
   if (missingColumns.length > 0) {
     throw new Error(`Missing required columns after DDL: [${missingColumns.join(', ')}]`);
+  }
+
+  const graphSchemaErrors: string[] = [];
+  if (!(await columnIsNullable(client, 'fqc_graph_nodes', 'provenance_basis'))) {
+    graphSchemaErrors.push('fqc_graph_nodes.provenance_basis must be nullable');
+  }
+  if (
+    !(await uniqueConstraintExists(client, 'fqc_pending_edges', [
+      'instance_id',
+      'source_chunk_id',
+      'target_chunk_id',
+    ]))
+  ) {
+    graphSchemaErrors.push(
+      'fqc_pending_edges must have a unique dedupe constraint on (instance_id, source_chunk_id, target_chunk_id)'
+    );
+  }
+  if (graphSchemaErrors.length > 0) {
+    throw new Error(`Graph schema verification failed: ${graphSchemaErrors.join('; ')}`);
   }
 
   if (isVerifySchemaOptions(expectedEmbeddingDimensionsOrOptions)) {

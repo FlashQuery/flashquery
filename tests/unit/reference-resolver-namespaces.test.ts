@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createGraphNamespaceProviders,
   hydrateNamespacedTemplateMessages,
   parseReferences,
   renderNamespacedTemplateVariables,
@@ -37,5 +38,29 @@ describe('namespaced template variables', () => {
     ]);
 
     expect(messages[0].content).toContain('depends_on');
+  });
+
+  it('renders graph namespace variables from the loaded vocabulary instead of hardcoded defaults', () => {
+    const content = renderNamespacedTemplateVariables(
+      'Types:\n{{graph:classified_types}}',
+      createGraphNamespaceProviders({
+        graph: {
+          enabled: true,
+          embeddingName: 'test',
+          resolvedRelations: [
+            {
+              name: 'custom_supports',
+              category: 'classified',
+              directionality: 'directed',
+              detectionMethod: 'classified',
+              description: 'Custom loaded relation.',
+            },
+          ],
+        },
+      } as never)
+    );
+
+    expect(content).toContain('custom_supports');
+    expect(content).not.toContain('depends_on');
   });
 });

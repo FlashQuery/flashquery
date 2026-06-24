@@ -41,6 +41,15 @@ import { renderClassifiedGraphTypes } from '../graph/vocabulary.js';
 export type TemplateNamespaceProvider = (variable: string) => string | undefined;
 export type TemplateNamespaceProviders = Record<string, TemplateNamespaceProvider>;
 
+export function createGraphNamespaceProviders(config?: Pick<FlashQueryConfig, 'graph'>): TemplateNamespaceProviders {
+  return {
+    graph: (variable) =>
+      variable === 'classified_types'
+        ? renderClassifiedGraphTypes(config?.graph?.resolvedRelations)
+        : undefined,
+  };
+}
+
 const GRAPH_NAMESPACE_PROVIDERS: TemplateNamespaceProviders = {
   graph: (variable) =>
     variable === 'classified_types' ? renderClassifiedGraphTypes() : undefined,
@@ -1213,7 +1222,11 @@ export function renderNamespacedTemplateVariables(
   content: string,
   providers: TemplateNamespaceProviders = GRAPH_NAMESPACE_PROVIDERS
 ): string {
-  return content.replace(/\{\{([a-z][a-z0-9_-]*):([a-zA-Z0-9_.-]+)\}\}/g, (token, namespace, variable) => {
+  return content.replace(/\{\{([a-z][a-z0-9_-]*):([a-zA-Z0-9_.-]+)\}\}/g, (
+    token: string,
+    namespace: string,
+    variable: string
+  ) => {
     if (namespace === 'ref') return token;
     return providers[namespace]?.(variable) ?? token;
   });

@@ -1,14 +1,18 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import {
   DEFAULT_GRAPH_RELATIONS,
+  DEFAULT_GRAPH_RELATIONS_PATH,
   loadGraphVocabulary,
   validateGraphRelations,
 } from '../../src/graph/vocabulary.js';
 
 const tempDirs: string[] = [];
+const __filename = fileURLToPath(import.meta.url);
+const repoRoot = resolve(dirname(__filename), '../..');
 
 function tempVault(): string {
   const dir = mkdtempSync(join(tmpdir(), 'fqc-graph-vocabulary-'));
@@ -56,6 +60,13 @@ describe('graph vocabulary', () => {
     expect(loadGraphVocabulary({ vaultPath, relationsPath: '.fqc/missing.yml' })).toEqual(
       DEFAULT_GRAPH_RELATIONS
     );
+  });
+
+  it('T-U-052 packaged default relations sidecar exists and is the default source of truth', () => {
+    const sidecarPath = resolve(repoRoot, DEFAULT_GRAPH_RELATIONS_PATH);
+
+    expect(existsSync(sidecarPath)).toBe(true);
+    expect(loadGraphVocabulary({ relationsPath: sidecarPath })).toEqual(DEFAULT_GRAPH_RELATIONS);
   });
 
   it('T-U-053 invalid directionality or detection method fails before workers run', () => {

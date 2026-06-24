@@ -48,6 +48,8 @@ import {
   parseReferences,
   resolveReferences,
   hydrateMessages,
+  hydrateNamespacedTemplateMessages,
+  createGraphNamespaceProviders,
   buildInjectedReferences,
   computePromptChars,
   type FailedRef,
@@ -570,6 +572,10 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig, op
           promptChars: computePromptChars(hydratedMessages),
         };
       }
+      hydratedMessages = hydrateNamespacedTemplateMessages(
+        hydratedMessages,
+        createGraphNamespaceProviders(config)
+      );
 
       let toolRegistry: ToolRegistryAssembly | undefined;
       let purposeProviderParameters = params.parameters;

@@ -1,0 +1,68 @@
+relations:
+  - name: contains
+    category: structural
+    directionality: directed
+    detection_method: structural
+    description: A parent document section contains a child section.
+  - name: references
+    category: structural
+    directionality: directed
+    detection_method: structural
+    description: A source chunk links to or cites a target chunk.
+    metadata_schema:
+      unresolved_target:
+        type: string
+        optional: true
+      unresolved_anchor:
+        type: string
+        optional: true
+  - name: supports
+    category: classified
+    directionality: directed
+    detection_method: classified
+    description: The source chunk provides evidence for the target chunk.
+  - name: contradicts
+    category: classified
+    directionality: symmetric
+    detection_method: classified
+    description: Two chunks make incompatible claims.
+  - name: supersedes
+    category: classified
+    directionality: directed
+    detection_method: classified
+    description: The source chunk replaces or updates the target chunk.
+  - name: duplicates
+    category: classified
+    directionality: symmetric
+    detection_method: classified
+    description: Two chunks express substantially the same claim.
+  - name: depends_on
+    category: classified
+    directionality: directed
+    detection_method: classified
+    description: The source chunk requires the target chunk to be true or complete.
+  - name: elaborates
+    category: classified
+    directionality: directed
+    detection_method: classified
+    description: The source chunk adds detail to the target chunk.
+  - name: summarizes
+    category: classified
+    directionality: directed
+    detection_method: classified
+    description: The source chunk summarizes the target chunk.
+  - name: rationale_for
+    category: classified
+    directionality: directed
+    detection_method: classified
+    description: The source chunk explains the reason for the target chunk.
+  - name: extends
+    category: classified
+    directionality: directed
+    detection_method: classified
+    description: The source chunk extends the target chunk with a related claim.
+  - name: resolves
+    category: classified
+    directionality: directed
+    detection_method: classified
+    description: The source chunk resolves a question or concern in the target chunk.

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import * as fs from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import * as yaml from 'js-yaml';
 import { z } from 'zod';
@@ -27,7 +27,9 @@ const PromptFileSchema = z
   })
   .strict();
 
-export const DEFAULT_GRAPH_PROMPTS: GraphPromptDefinition[] = [
+export const DEFAULT_GRAPH_PROMPTS_PATH = 'src/graph/defaults/graph-prompts.yml';
+
+const FALLBACK_GRAPH_PROMPTS: GraphPromptDefinition[] = [
   {
     id: 'classify_edge',
     version: '1',
@@ -87,6 +89,21 @@ export function validateGraphPrompts(
   return prompts;
 }
 
+function parseGraphPromptsYaml(raw: unknown, overrides?: Record<string, unknown>): GraphPromptDefinition[] {
+  const result = PromptFileSchema.safeParse(raw);
+  if (!result.success) {
+    throw new Error(
+      result.error.issues
+        .map((issue) => `Graph prompts error: ${issue.path.join('.')} ${issue.message}`)
+        .join('\n')
+    );
+  }
+
+  return validateGraphPrompts(result.data.prompts.map(promptFromYaml), overrides);
+}
+
+export const DEFAULT_GRAPH_PROMPTS: GraphPromptDefinition[] = validateGraphPrompts(FALLBACK_GRAPH_PROMPTS);
+
 export function loadGraphPrompts(options?: {
   vaultPath?: string;
   promptsPath?: string;
@@ -101,13 +118,13 @@ export function loadGraphPrompts(options?: {
     ? promptsPath
     : join(options?.vaultPath ?? process.cwd(), promptsPath);
 
-  if (!existsSync(resolvedPath)) {
+  if (!fs.existsSync(resolvedPath)) {
     return validateGraphPrompts(DEFAULT_GRAPH_PROMPTS, options?.overrides);
   }
 
   let raw: unknown;
   try {
-    raw = yaml.load(readFileSync(resolvedPath, 'utf-8'));
+    raw = yaml.load(fs.readFileSync(resolvedPath, 'utf-8'));
   } catch (err: unknown) {
     if (err instanceof yaml.YAMLException) {
       const line = err.mark ? err.mark.line + 1 : '?';
@@ -118,14 +135,5 @@ export function loadGraphPrompts(options?: {
     throw err;
   }
 
-  const result = PromptFileSchema.safeParse(raw);
-  if (!result.success) {
-    throw new Error(
-      result.error.issues
-        .map((issue) => `Graph prompts error: ${issue.path.join('.')} ${issue.message}`)
-        .join('\n')
-    );
-  }
-
-  return validateGraphPrompts(result.data.prompts.map(promptFromYaml), options?.overrides);
+  return parseGraphPromptsYaml(raw, options?.overrides);
 }

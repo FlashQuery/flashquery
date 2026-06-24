@@ -1,0 +1,17 @@
+prompts:
+  - id: classify_edge
+    version: "1"
+    template: |-
+      Classify the relationship between two document chunks using these graph types:
+      {{graph:classified_types}}
+
+      Source:
+      {{source_chunk}}
+
+      Target:
+      {{target_chunk}}
+    required_variables:
+      - graph:classified_types
+      - source_chunk
+      - target_chunk
+    overridable: true

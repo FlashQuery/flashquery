@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import * as fs from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import * as yaml from 'js-yaml';
 import { z } from 'zod';
@@ -35,7 +35,9 @@ const VocabularySchema = z
   })
   .strict();
 
-export const DEFAULT_GRAPH_RELATIONS: GraphRelationDefinition[] = [
+export const DEFAULT_GRAPH_RELATIONS_PATH = 'src/graph/defaults/edge-types.yml';
+
+const FALLBACK_GRAPH_RELATIONS: GraphRelationDefinition[] = [
   {
     name: 'contains',
     category: 'structural',
@@ -166,6 +168,22 @@ export function validateGraphRelations(relations: GraphRelationDefinition[]): Gr
   return relations;
 }
 
+function parseVocabularyYaml(raw: unknown): GraphRelationDefinition[] {
+  const result = VocabularySchema.safeParse(raw);
+  if (!result.success) {
+    throw new Error(
+      result.error.issues
+        .map((issue) => `Graph vocabulary error: ${issue.path.join('.')} ${issue.message}`)
+        .join('\n')
+    );
+  }
+
+  return validateGraphRelations(result.data.relations.map(relationFromYaml));
+}
+
+export const DEFAULT_GRAPH_RELATIONS: GraphRelationDefinition[] =
+  validateGraphRelations(FALLBACK_GRAPH_RELATIONS);
+
 export function loadGraphVocabulary(options?: {
   vaultPath?: string;
   relationsPath?: string;
@@ -179,13 +197,13 @@ export function loadGraphVocabulary(options?: {
     ? relationsPath
     : join(options?.vaultPath ?? process.cwd(), relationsPath);
 
-  if (!existsSync(resolvedPath)) {
+  if (!fs.existsSync(resolvedPath)) {
     return validateGraphRelations(DEFAULT_GRAPH_RELATIONS);
   }
 
   let raw: unknown;
   try {
-    raw = yaml.load(readFileSync(resolvedPath, 'utf-8'));
+    raw = yaml.load(fs.readFileSync(resolvedPath, 'utf-8'));
   } catch (err: unknown) {
     if (err instanceof yaml.YAMLException) {
       const line = err.mark ? err.mark.line + 1 : '?';
@@ -196,16 +214,7 @@ export function loadGraphVocabulary(options?: {
     throw err;
   }
 
-  const result = VocabularySchema.safeParse(raw);
-  if (!result.success) {
-    throw new Error(
-      result.error.issues
-        .map((issue) => `Graph vocabulary error: ${issue.path.join('.')} ${issue.message}`)
-        .join('\n')
-    );
-  }
-
-  return validateGraphRelations(result.data.relations.map(relationFromYaml));
+  return parseVocabularyYaml(raw);
 }
 
 export function renderClassifiedGraphTypes(relations = DEFAULT_GRAPH_RELATIONS): string {

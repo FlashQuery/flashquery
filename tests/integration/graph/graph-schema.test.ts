@@ -172,9 +172,23 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph schema DDL', () => {
     const ddl = buildSchemaDDL(1536);
     const nodeCreate = ddl.match(/CREATE TABLE IF NOT EXISTS fqc_graph_nodes \([\s\S]*?\n\);/)?.[0] ?? '';
 
+    expect(nodeCreate).toContain('provenance_basis TEXT,');
+    expect(nodeCreate).not.toMatch(/provenance_basis TEXT NOT NULL/i);
     expect(nodeCreate).toContain('community_summary TEXT');
     expect(nodeCreate).toContain('key_claims JSONB');
     expect(nodeCreate).toContain('temporal_markers JSONB');
     expect(nodeCreate).not.toMatch(/ALTER TABLE IF EXISTS fqc_graph_nodes/i);
+  });
+
+  it('T-I-044 initial fqc_pending_edges DDL declares durable queue contract columns and dedupe key', () => {
+    const ddl = buildSchemaDDL(1536);
+    const pendingCreate =
+      ddl.match(/CREATE TABLE IF NOT EXISTS fqc_pending_edges \([\s\S]*?\n\);/)?.[0] ?? '';
+
+    expect(pendingCreate).toContain('max_attempts INTEGER NOT NULL DEFAULT 3');
+    expect(pendingCreate).toContain('result JSONB');
+    expect(ddl).toMatch(
+      /UNIQUE\s*\(\s*instance_id\s*,\s*source_chunk_id\s*,\s*target_chunk_id\s*\)/i
+    );
   });
 });

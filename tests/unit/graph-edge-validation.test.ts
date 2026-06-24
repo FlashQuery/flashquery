@@ -63,4 +63,19 @@ describe('graph edge validation', () => {
 
     expect(edge.metadata.lint_flags).toContain('low_confidence');
   });
+
+  it('T-U-077 rejects freeform llm_assessment values outside the discrete rubric', () => {
+    expect(() =>
+      validateGraphEdgeDraft(
+        {
+          relation: 'supports',
+          confidence: 'INFERRED',
+          confidenceScore: 0.7,
+          reasoning: 'The source directly supports the target.',
+          metadata: { llm_assessment: 'pretty good' as never },
+        },
+        DEFAULT_GRAPH_RELATIONS
+      )
+    ).toThrow(/llm_assessment/i);
+  });
 });

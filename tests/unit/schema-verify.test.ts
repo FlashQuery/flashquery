@@ -108,20 +108,28 @@ describe('verifySchema', () => {
     mockClient = { query: mockQuery } as unknown as pg.Client;
   });
 
+  function mockAllRequiredSchemaExists(sql: string) {
+    if (sql.includes('is_nullable')) {
+      return Promise.resolve({ rows: [{ is_nullable: 'YES' }] });
+    }
+    if (sql.includes('pg_constraint')) {
+      return Promise.resolve({ rows: [{ exists: true }] });
+    }
+    if (sql.includes('information_schema.columns')) {
+      return Promise.resolve({ rows: [{ exists: true }] });
+    }
+    return Promise.resolve({ rows: [{ '?column?': true }] });
+  }
+
   it('verifies all required tables and columns exist without the retired legacy write-lock table', async () => {
     // All tables exist
-    mockQuery.mockImplementation((sql: string) => {
-      if (sql.includes('information_schema.columns')) {
-        return Promise.resolve({ rows: [{ exists: true }] });
-      }
-      return Promise.resolve({ rows: [{ '?column?': true }] });
-    });
+    mockQuery.mockImplementation(mockAllRequiredSchemaExists);
 
     // Should not throw
     await expect(verifySchema(mockClient)).resolves.toBeUndefined();
 
-    // Verify that tableExists was called 16 times, plus 43 required-column checks.
-    expect(mockQuery).toHaveBeenCalledTimes(59);
+    // Verify that tableExists was called 16 times, plus required-column and graph-contract checks.
+    expect(mockQuery).toHaveBeenCalledTimes(70);
   });
 
   it('throws error listing missing tables when one table is missing', async () => {
@@ -186,12 +194,7 @@ describe('verifySchema', () => {
   });
 
   it('checks tables in the correct order', async () => {
-    mockQuery.mockImplementation((sql: string) => {
-      if (sql.includes('information_schema.columns')) {
-        return Promise.resolve({ rows: [{ exists: true }] });
-      }
-      return Promise.resolve({ rows: [{ '?column?': true }] });
-    });
+    mockQuery.mockImplementation(mockAllRequiredSchemaExists);
 
     await verifySchema(mockClient);
 
@@ -231,10 +234,7 @@ describe('verifySchema', () => {
           ],
         });
       }
-      if (sql.includes('information_schema.columns')) {
-        return Promise.resolve({ rows: [{ exists: true }] });
-      }
-      return Promise.resolve({ rows: [{ '?column?': true }] });
+      return mockAllRequiredSchemaExists(sql);
     });
 
     await expect(verifySchema(mockClient, 768)).rejects.toThrow(
@@ -293,6 +293,19 @@ describe('verifyEmbeddingDimensions', () => {
     mockClient = { query: mockQuery } as unknown as pg.Client;
   });
 
+  function mockAllRequiredSchemaExists(sql: string) {
+    if (sql.includes('is_nullable')) {
+      return Promise.resolve({ rows: [{ is_nullable: 'YES' }] });
+    }
+    if (sql.includes('pg_constraint')) {
+      return Promise.resolve({ rows: [{ exists: true }] });
+    }
+    if (sql.includes('information_schema.columns')) {
+      return Promise.resolve({ rows: [{ exists: true }] });
+    }
+    return Promise.resolve({ rows: [{ '?column?': true }] });
+  }
+
   it('passes when document and memory embedding columns match configured dimensions', async () => {
     mockQuery.mockResolvedValue({
       rows: [
@@ -327,10 +340,7 @@ describe('verifyEmbeddingDimensions', () => {
           ],
         });
       }
-      if (sql.includes('information_schema.columns')) {
-        return Promise.resolve({ rows: [{ exists: true }] });
-      }
-      return Promise.resolve({ rows: [{ '?column?': true }] });
+      return mockAllRequiredSchemaExists(sql);
     });
 
     await expect(verifySchema(mockClient, 768)).rejects.toThrow(

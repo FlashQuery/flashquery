@@ -1,3 +1,6 @@
+import type { GraphPromptDefinition } from '../graph/prompts.js';
+import type { GraphRelationDefinition } from '../graph/vocabulary.js';
+
 export interface FlashQueryConfig {
   instance: {
     name: string;
@@ -109,6 +112,8 @@ export interface FlashQueryConfig {
     relations?: string;
     prompts?: string;
     promptOverrides?: Record<string, unknown>;
+    resolvedRelations?: GraphRelationDefinition[];
+    resolvedPrompts?: GraphPromptDefinition[];
   };
   embedding?: {
     provider: string;

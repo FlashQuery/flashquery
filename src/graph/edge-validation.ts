@@ -1,6 +1,7 @@
 import type { GraphRelationDefinition } from './vocabulary.js';
 
 export type GraphEdgeConfidence = 'EXTRACTED' | 'INFERRED';
+const LLM_ASSESSMENT_RUBRIC = new Set(['strong', 'moderate', 'weak', 'uncertain']);
 
 export interface GraphEdgeMetadata {
   qualifiers?: {
@@ -59,6 +60,18 @@ export function validateGraphEdgeDraft(
         errors.push(`metadata.qualifiers.${key} must be string[] or null`);
       }
     }
+  }
+
+  const llmAssessment = edge.metadata?.llm_assessment;
+  if (llmAssessment !== undefined && !LLM_ASSESSMENT_RUBRIC.has(String(llmAssessment))) {
+    errors.push(
+      "metadata.llm_assessment must be one of 'strong', 'moderate', 'weak', or 'uncertain'"
+    );
+  }
+
+  const lowConfidenceFlag = edge.metadata?.low_confidence_flag;
+  if (lowConfidenceFlag !== undefined && typeof lowConfidenceFlag !== 'boolean') {
+    errors.push('metadata.low_confidence_flag must be boolean when present');
   }
 
   const metadataSchema = relation?.metadataSchema;
