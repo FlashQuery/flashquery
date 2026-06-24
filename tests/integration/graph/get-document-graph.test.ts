@@ -305,7 +305,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('get_document graph output integration
     });
 
     const graphOnly = parseToolJson<{
-      connections: { overall: Array<{ basis: string; relation?: string; target: { path: string } }> };
+      connections: { overall: Array<{ basis: string; relation?: string; community_label?: string | null; target: { path: string } }> };
     }>(await docs.getDocument({
       identifiers: 'Source.md',
       include: ['connections'],
@@ -315,6 +315,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('get_document graph output integration
     expect(graphOnly.connections.overall[0]).toMatchObject({
       basis: 'graph',
       relation: 'supports',
+      community_label: 'Claims',
     });
 
     const withEmbeddingOnly = parseToolJson<{

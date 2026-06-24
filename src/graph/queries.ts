@@ -649,13 +649,27 @@ function weakPathsAction(
   input: GraphQueryInput,
   relations: GraphRelationDefinition[],
   limit: number
-): { threshold: number; edges: GraphEdgePayload[] } {
+): {
+  threshold: number;
+  paths: Array<{
+    nodes: GraphNodePayload[];
+    edges: GraphEdgePayload[];
+    weakest_confidence_score: number;
+  }>;
+  edges: GraphEdgePayload[];
+} {
   const threshold = input.confidence_threshold ?? 0.7;
+  const edges = relationAndStatusFilteredEdges(rows.edges, input, relations)
+    .filter((edge) => edge.confidence_score < threshold)
+    .slice(0, limit);
   return {
     threshold,
-    edges: relationAndStatusFilteredEdges(rows.edges, input, relations)
-      .filter((edge) => edge.confidence_score < threshold)
-      .slice(0, limit),
+    paths: edges.map((edge) => ({
+      nodes: [edge.source, edge.target],
+      edges: [edge],
+      weakest_confidence_score: edge.confidence_score,
+    })),
+    edges,
   };
 }
 
@@ -724,6 +738,11 @@ function listCommunitiesAction(
     community_label: string | null;
     community_summary: string | null;
     member_count: number;
+    strength_score: number;
+    edge_density: number;
+    avg_internal_confidence: number;
+    provenance_coverage: number;
+    sparse: boolean;
     representative_members: GraphNodePayload[];
   }>;
 } {
@@ -738,17 +757,57 @@ function listCommunitiesAction(
   const minMembers = input.min_members ?? 1;
   return {
     communities: [...grouped.entries()]
-      .map(([communityId, members]) => ({
-        community_id: communityId,
-        community_label: members.find((member) => member.community_label)?.community_label ?? null,
-        community_summary: members.find((member) => member.community_summary)?.community_summary ?? null,
-        member_count: members.length,
-        representative_members: members.slice(0, Math.min(3, members.length)),
-      }))
+      .map(([communityId, members]) => communityReadSummary(rows.edges, communityId, members))
       .filter((community) => community.member_count >= minMembers)
       .sort((left, right) => right.member_count - left.member_count || left.community_id.localeCompare(right.community_id))
       .slice(0, limit),
   };
+}
+
+function communityReadSummary(
+  edges: GraphEdgePayload[],
+  communityId: string,
+  members: GraphNodePayload[]
+): {
+  community_id: string;
+  community_label: string | null;
+  community_summary: string | null;
+  member_count: number;
+  strength_score: number;
+  edge_density: number;
+  avg_internal_confidence: number;
+  provenance_coverage: number;
+  sparse: boolean;
+  representative_members: GraphNodePayload[];
+} {
+  const memberIds = new Set(members.map((member) => member.chunk_id));
+  const internalEdges = edges.filter(
+    (edge) => memberIds.has(edge.source.chunk_id) && memberIds.has(edge.target.chunk_id) && !edge.stale
+  );
+  const possibleEdges = members.length * (members.length - 1);
+  const edgeDensity = possibleEdges === 0 ? 0 : internalEdges.length / possibleEdges;
+  const avgConfidence = internalEdges.length === 0
+    ? 0
+    : internalEdges.reduce((sum, edge) => sum + edge.confidence_score, 0) / internalEdges.length;
+  const provenanceEdges = internalEdges.filter((edge) => edge.relation === 'supports' || edge.relation === 'references');
+  const provenanceCoverage = internalEdges.length === 0 ? 0 : provenanceEdges.length / internalEdges.length;
+  const strengthScore = edgeDensity * avgConfidence * Math.max(provenanceCoverage, 0.25);
+  return {
+    community_id: communityId,
+    community_label: members.find((member) => member.community_label)?.community_label ?? null,
+    community_summary: members.find((member) => member.community_summary)?.community_summary ?? null,
+    member_count: members.length,
+    strength_score: roundedMetric(strengthScore),
+    edge_density: roundedMetric(edgeDensity),
+    avg_internal_confidence: roundedMetric(avgConfidence),
+    provenance_coverage: roundedMetric(provenanceCoverage),
+    sparse: edgeDensity < 0.34,
+    representative_members: members.slice(0, Math.min(3, members.length)),
+  };
+}
+
+function roundedMetric(value: number): number {
+  return Number(value.toFixed(4));
 }
 
 function relationAndStatusFilteredEdges(

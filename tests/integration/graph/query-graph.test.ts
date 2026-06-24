@@ -333,11 +333,35 @@ describe.skipIf(!HAS_SUPABASE).sequential('query_graph public MCP integration', 
       seeded.root,
     ]);
 
-    const weakPaths = parseToolJson<{ data: { threshold: number; edges: Array<{ confidence_score: number }> } }>(
+    const weakPaths = parseToolJson<{
+      data: {
+        threshold: number;
+        paths: Array<{
+          nodes: Array<{ chunk_id: string }>;
+          edges: Array<{ relation: string; confidence_score: number; stale: boolean }>;
+          weakest_confidence_score: number;
+        }>;
+      };
+    }>(
       await graph.queryGraph({ action: 'weak_paths', confidence_threshold: 0.5 })
     );
     expect(weakPaths.data.threshold).toBe(0.5);
-    expect(weakPaths.data.edges).toEqual([expect.objectContaining({ confidence_score: 0.41 })]);
+    expect(weakPaths.data.paths).toEqual([
+      expect.objectContaining({
+        nodes: [
+          expect.objectContaining({ chunk_id: seeded.claim }),
+          expect.objectContaining({ chunk_id: seeded.weak }),
+        ],
+        edges: [
+          expect.objectContaining({
+            relation: 'depends_on',
+            confidence_score: 0.41,
+            stale: false,
+          }),
+        ],
+        weakest_confidence_score: 0.41,
+      }),
+    ]);
 
     const ungrounded = parseToolJson<{ data: { edges: Array<{ target: { chunk_id: string } }> } }>(
       await graph.queryGraph({ action: 'ungrounded_edges', relations: ['supports'] })
@@ -377,12 +401,22 @@ describe.skipIf(!HAS_SUPABASE).sequential('query_graph public MCP integration', 
     expect(members.data.members[0]).toMatchObject({ community_label: 'Cluster A' });
 
     const communities = parseToolJson<{
-      data: { communities: Array<{ community_id: string; member_count: number; representative_members: unknown[] }> };
+      data: {
+        communities: Array<{
+          community_id: string;
+          member_count: number;
+          strength_score: number;
+          edge_density: number;
+          representative_members: unknown[];
+        }>;
+      };
     }>(await graph.queryGraph({ action: 'list_communities', min_members: 2 }));
     expect(communities.data.communities).toEqual([
       expect.objectContaining({
         community_id: 'comm-a',
         member_count: 2,
+        strength_score: expect.any(Number),
+        edge_density: expect.any(Number),
         representative_members: expect.any(Array),
       }),
     ]);

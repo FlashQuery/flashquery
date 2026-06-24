@@ -76,6 +76,7 @@ type GraphSearchWarning =
 
 export interface GraphSearchOptions {
   enabled: boolean;
+  expand: boolean;
   relations?: string[];
   maxDepth: number;
   includeStale: boolean;
@@ -487,6 +488,12 @@ function resolveGraphSearchOptions(params: {
     params.path_to !== undefined;
   return {
     enabled: hasGraphOption,
+    expand: params.graph_expand === true ||
+      params.graph_relations !== undefined ||
+      params.graph_max_depth !== undefined ||
+      params.graph_include_stale !== undefined ||
+      params.graph_include_inactive !== undefined ||
+      params.path_to !== undefined,
     relations: params.graph_relations,
     maxDepth: clampGraphSearchDepth(params.graph_max_depth),
     includeStale: params.graph_include_stale === true,
@@ -712,6 +719,41 @@ function buildGraphSearchResult(
   } as SearchResultItem;
 }
 
+function communityContext(node: GraphSearchNode): {
+  community_id: string;
+  community_label: string | null;
+  community_summary: string | null;
+} | null {
+  if (!node.community_id) return null;
+  return {
+    community_id: node.community_id,
+    community_label: node.community_label,
+    community_summary: node.community_summary,
+  };
+}
+
+function annotateSearchResultsWithCommunity(
+  results: SearchResultItem[],
+  nodes: Map<string, GraphSearchNode>
+): SearchResultItem[] {
+  return results.map((result) => {
+    const community = (result.matched_chunks ?? [])
+      .map((chunk) => nodes.get(chunk.chunk_id))
+      .filter((node): node is GraphSearchNode => node !== undefined)
+      .map(communityContext)
+      .find((candidate) => candidate !== null);
+    if (!community) return result;
+    const existingContext = (result as unknown as { graph_context?: Record<string, unknown> }).graph_context ?? {};
+    return {
+      ...result,
+      graph_context: {
+        ...existingContext,
+        community,
+      },
+    } as SearchResultItem;
+  });
+}
+
 async function expandSearchWithGraph(input: {
   config: FlashQueryConfig;
   baseResults: SearchResultItem[];
@@ -722,6 +764,7 @@ async function expandSearchWithGraph(input: {
   if (input.config.graph?.enabled !== true) {
     return { results: [], warnings: ['graph_disabled'] };
   }
+  if (!input.options.expand) return { results: [], warnings: [] };
 
   const seeds = seedChunksFromSemanticResults(input.baseResults);
   if (seeds.length === 0) {
@@ -783,6 +826,23 @@ async function expandSearchWithGraph(input: {
     : [];
 
   return { results, warnings };
+}
+
+async function applySearchCommunityContext(input: {
+  config: FlashQueryConfig;
+  results: SearchResultItem[];
+  options: GraphSearchOptions;
+}): Promise<SearchResultItem[]> {
+  if (!input.options.enabled || !input.options.includeCommunity || input.config.graph?.enabled !== true) {
+    return input.results;
+  }
+  const seeds = seedChunksFromSemanticResults(input.results);
+  if (seeds.length === 0) return input.results;
+  const rows = await loadGraphSearchRows(input.config);
+  return annotateSearchResultsWithCommunity(
+    input.results,
+    new Map(rows.nodes.map((node) => [node.chunk_id, node]))
+  );
 }
 
 function mergeMatchedChunkProperty(
@@ -2201,6 +2261,15 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
               archived_at: memory.archived_at,
             })));
           }
+        }
+
+        if (graphOptions.includeCommunity) {
+          const communityResults = await applySearchCommunityContext({
+            config,
+            results: allResults,
+            options: graphOptions,
+          });
+          allResults.splice(0, allResults.length, ...communityResults);
         }
 
         const graphExpansion = await expandSearchWithGraph({
