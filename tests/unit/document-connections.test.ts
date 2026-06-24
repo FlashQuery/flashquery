@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildDocumentConnections } from '../../src/mcp/utils/document-connections.js';
+import { buildDocumentConnections, buildGraphPrimaryConnections } from '../../src/mcp/utils/document-connections.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 
 function makeConfig(input: { embeddings?: FlashQueryConfig['embeddings'] } = {}): FlashQueryConfig {
@@ -132,5 +132,179 @@ describe('document connection builder', () => {
       'Beta.md',
       'Alpha.md',
     ]);
+  });
+
+  it('builds graph-primary connections with relation overlays and hides inactive targets by default', () => {
+    const result = buildGraphPrimaryConnections({
+      sourceChunkIds: ['source-a'],
+      sourceChunkMetadata: new Map([
+        ['source-a', { heading_path: 'Source', breadcrumb: 'Source' }],
+      ]),
+      edges: [
+        {
+          id: 'edge-active',
+          source_chunk_id: 'source-a',
+          target_chunk_id: 'target-active',
+          relation: 'supports',
+          confidence_score: 0.92,
+          reasoning: 'explicitly supports the claim',
+          status: 'active',
+        },
+        {
+          id: 'edge-archived',
+          source_chunk_id: 'source-a',
+          target_chunk_id: 'target-archived',
+          relation: 'references',
+          confidence_score: 1,
+          reasoning: null,
+          status: 'active',
+        },
+      ],
+      targets: new Map([
+        ['target-active', {
+          chunk_id: 'target-active',
+          document_id: 'doc-active',
+          path: 'Active.md',
+          title: 'Active',
+          heading_path: 'Active Heading',
+          content: 'active body',
+          document_status: 'active',
+          question_status: 'open',
+          community_label: 'Claims',
+        }],
+        ['target-archived', {
+          chunk_id: 'target-archived',
+          document_id: 'doc-archived',
+          path: 'Archived.md',
+          title: 'Archived',
+          document_status: 'archived',
+          question_status: null,
+          community_label: 'Archive',
+        }],
+      ]),
+      options: { graph_limit_per_chunk: 5 },
+    });
+
+    expect(result.overall.map((connection) => connection.target.path)).toEqual(['Active.md']);
+    expect(result.overall[0]).toMatchObject({
+      basis: 'graph',
+      direction: 'out',
+      relation: 'supports',
+      confidence_score: 0.92,
+      reasoning: 'explicitly supports the claim',
+      stale: false,
+      question_status: 'open',
+      community_label: 'Claims',
+      target: {
+        document_status: 'active',
+      },
+    });
+    expect(result.source_chunks[0]?.connections).toHaveLength(1);
+  });
+
+  it('appends embedding-only neighbors only when include_embedding_only is enabled', () => {
+    const graphResult = buildGraphPrimaryConnections({
+      sourceChunkIds: ['source-a'],
+      sourceChunkMetadata: new Map(),
+      edges: [
+        {
+          id: 'edge-active',
+          source_chunk_id: 'source-a',
+          target_chunk_id: 'target-active',
+          relation: 'supports',
+          confidence_score: 0.92,
+          reasoning: null,
+          status: 'active',
+        },
+      ],
+      targets: new Map([
+        ['target-active', {
+          chunk_id: 'target-active',
+          document_id: 'doc-active',
+          path: 'Active.md',
+          title: 'Active',
+          document_status: 'active',
+          question_status: null,
+          community_label: null,
+        }],
+      ]),
+      embeddingOnly: {
+        overall: [
+          {
+            id: 'Embedding.md#target-embedding',
+            score: 0.8,
+            target: {
+              chunk_id: 'target-embedding',
+              document_id: 'doc-embedding',
+              path: 'Embedding.md',
+              title: 'Embedding',
+            },
+          },
+        ],
+        source_chunks: [
+          {
+            chunk_id: 'source-a',
+            connections: [
+              {
+                id: 'Embedding.md#target-embedding',
+                score: 0.8,
+                target: {
+                  chunk_id: 'target-embedding',
+                  document_id: 'doc-embedding',
+                  path: 'Embedding.md',
+                  title: 'Embedding',
+                },
+              },
+            ],
+          },
+        ],
+      },
+      options: { graph_limit_per_chunk: 5, include_embedding_only: true },
+    });
+
+    expect(graphResult.overall.map((connection) => [connection.basis, connection.target.path])).toEqual([
+      ['graph', 'Active.md'],
+      ['embedding', 'Embedding.md'],
+    ]);
+    expect(graphResult.source_chunks[0]?.connections.map((connection) => [connection.basis, connection.target.path])).toEqual([
+      ['graph', 'Active.md'],
+      ['embedding', 'Embedding.md'],
+    ]);
+  });
+
+  it('preserves legacy limit_per_chunk when graph-aware options are absent', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        { document_id: 'doc-alpha', chunk_id: 'alpha', path: 'Alpha.md', title: 'Alpha', similarity: 0.81 },
+      ],
+      error: null,
+    });
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'fqc_embeddings') {
+          return resolvedQuery([{ name: 'primary', dimensions: 1536, endpoints: [], status: 'active' }]);
+        }
+        if (table === 'fqc_chunks') {
+          return resolvedQuery([
+            { id: 'source-a', heading_path: 'A', breadcrumb: 'A', embedding_primary: '[1,0]' },
+          ]);
+        }
+        throw new Error(`Unexpected table ${table}`);
+      }),
+      rpc,
+    };
+
+    const result = await buildDocumentConnections({
+      supabase: supabase as never,
+      config: makeConfig(),
+      sourceDocumentId: 'source-doc',
+      options: { limit_per_chunk: 1 },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(rpc).toHaveBeenCalledWith('match_chunks_primary', expect.objectContaining({
+      match_count: 51,
+    }));
+    expect(result.result?.source_chunks[0]?.connections).toHaveLength(1);
   });
 });

@@ -9,6 +9,7 @@ import {
   traverseFollowRef,
   classifyResolutionMethod,
 } from '../../src/mcp/utils/document-output.js';
+import { buildGraphDocumentSummary } from '../../src/graph/document-summary.js';
 import { FM } from '../../src/constants/frontmatter-fields.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -144,6 +145,82 @@ describe('get_document connections include contract', () => {
     });
     expect(withConnections).not.toHaveProperty('overall');
     expect(withConnections).not.toHaveProperty('source_chunks');
+  });
+});
+
+describe('get_document graph_summary include contract', () => {
+  it('builds graph summary counts and flags from graph rows without LLM inputs', () => {
+    const summary = buildGraphDocumentSummary({
+      nodes: [
+        {
+          chunk_id: 'chunk-a',
+          community_label: 'Claims',
+          question_status: 'open',
+        },
+        {
+          chunk_id: 'chunk-b',
+          community_label: 'Claims',
+          question_status: 'resolved',
+        },
+      ],
+      edges: [
+        { id: 'edge-a', relation: 'references', status: 'active' },
+        { id: 'edge-b', relation: 'supports', status: 'stale' },
+        { id: 'edge-c', relation: 'contradicts', status: 'active' },
+      ],
+    });
+
+    expect(summary).toEqual({
+      edge_count: 3,
+      edge_counts_by_relation: {
+        contradicts: 1,
+        references: 1,
+        supports: 1,
+      },
+      stale_edge_count: 1,
+      community_labels: ['Claims'],
+      has_contradictions: true,
+      has_open_questions: true,
+      open_question_count: 1,
+    });
+  });
+
+  it('nests graph_summary only when graph_summary is included', () => {
+    const metadata = buildMetadataEnvelope(
+      'Notes/Graph.md',
+      {
+        relativePath: 'Notes/Graph.md',
+        capturedFrontmatter: {
+          fqcId: '11111111-1111-4111-8111-111111111111',
+          contentHash: 'd'.repeat(64),
+        },
+      },
+      { fq_title: 'Graph', fq_updated: '2026-06-24T00:00:00.000Z' },
+      '## A\n\nBody'
+    );
+    const graphSummary = {
+      edge_count: 1,
+      edge_counts_by_relation: { references: 1 },
+      stale_edge_count: 0,
+      community_labels: ['Planning'],
+      has_contradictions: false,
+      has_open_questions: false,
+      open_question_count: 0,
+    };
+
+    const withoutGraphSummary = buildConsolidatedResponse(metadata, ['body'], {
+      body: '## A\n\nBody',
+      graphSummary,
+    });
+    const withGraphSummary = buildConsolidatedResponse(metadata, ['graph_summary'], {
+      graphSummary,
+    });
+
+    expect(withoutGraphSummary).not.toHaveProperty('graph_summary');
+    expect(withGraphSummary).toMatchObject({
+      identifier: 'Notes/Graph.md',
+      graph_summary: graphSummary,
+    });
   });
 });
 
@@ -435,6 +512,26 @@ describe('validateParameterCombinations (Error 9)', () => {
       // occurrence defaults to 1 — valid for multi-section
     });
     expect(result).toBeNull();
+  });
+
+  it('returns invalid_input guidance when legacy connection limit_per_chunk is combined with graph-aware options', () => {
+    const result = validateParameterCombinations({
+      include: ['connections'],
+      connections: {
+        limit_per_chunk: 2,
+        graph_limit_per_chunk: 2,
+      },
+    });
+
+    expect(result).toMatchObject({
+      error: 'invalid_input',
+      message: expect.stringContaining('graph_limit_per_chunk'),
+      details: {
+        conflict: 'graph_aware_limit_per_chunk',
+        legacy_field: 'limit_per_chunk',
+        replacements: ['graph_limit_per_chunk', 'embedding_limit_per_chunk'],
+      },
+    });
   });
 });
 
