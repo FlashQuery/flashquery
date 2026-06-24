@@ -97,7 +97,7 @@ export function registerGraphTools(server: McpServer, config: FlashQueryConfig):
                 enabled: true,
                 similarity_mode: graphConfig.similarityMode ?? 'threshold',
                 similarity_threshold: graphConfig.similarityThreshold ?? 0.78,
-                similarity_percentile: graphConfig.similarityPercentile ?? 0.95,
+                similarity_percentile: graphConfig.similarityPercentile ?? 95,
                 classification_enabled:
                   graphConfig.classificationPurpose !== undefined ||
                   graphConfig.classificationModel !== undefined,

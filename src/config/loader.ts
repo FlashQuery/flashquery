@@ -261,7 +261,7 @@ const GraphSchema = z
     classification_model: z.string().min(1).optional(),
     similarity_mode: z.enum(['threshold', 'percentile']).default('threshold'),
     similarity_threshold: z.number().min(0).max(1).default(0.78),
-    similarity_percentile: z.number().min(0).max(1).default(0.95),
+    similarity_percentile: z.number().min(0).max(100).default(95),
     max_classification_jobs_per_save: z.number().int().positive().default(10),
     max_edge_attempts: z.number().int().positive().default(3),
     relations: z.string().min(1).default('.fqc/edge-types.yml'),

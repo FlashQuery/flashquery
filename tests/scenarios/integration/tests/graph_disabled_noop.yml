@@ -51,6 +51,12 @@ steps:
       expect_json_equals:
         path: "error"
         value: unsupported
+
+  - label: "Disabled graph query surface reports graph_disabled detail"
+    assert:
+      op: query_graph
+      args:
+        action: schema
       expect_json_equals:
         path: "details.code"
         value: graph_disabled

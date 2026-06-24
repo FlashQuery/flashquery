@@ -566,7 +566,7 @@ function schemaAction(
       enabled: context.graph?.enabled ?? true,
       similarity_mode: context.graph?.similarity_mode ?? 'threshold',
       similarity_threshold: context.graph?.similarity_threshold ?? 0.78,
-      similarity_percentile: context.graph?.similarity_percentile ?? 0.95,
+      similarity_percentile: context.graph?.similarity_percentile ?? 95,
       classification_enabled: context.graph?.classification_enabled ?? false,
       communities: context.graph?.communities ?? 'seeded_read_only',
     },

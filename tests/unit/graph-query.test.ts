@@ -213,7 +213,7 @@ describe('graph query helpers', () => {
           enabled: true,
           similarity_mode: 'percentile',
           similarity_threshold: 0.72,
-          similarity_percentile: 0.91,
+          similarity_percentile: 91,
           classification_enabled: true,
           communities: 'seeded_read_only',
         },
@@ -245,7 +245,7 @@ describe('graph query helpers', () => {
       enabled: true,
       similarity_mode: 'percentile',
       similarity_threshold: 0.72,
-      similarity_percentile: 0.91,
+      similarity_percentile: 91,
       classification_enabled: true,
       communities: 'seeded_read_only',
     });

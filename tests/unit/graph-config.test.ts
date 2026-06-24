@@ -141,7 +141,7 @@ graph:
   embedding_name: primary
   similarity_mode: percentile
   similarity_threshold: 0.72
-  similarity_percentile: 0.91
+  similarity_percentile: 91
   max_classification_jobs_per_save: 7
   max_edge_attempts: 5
 `));
@@ -150,7 +150,7 @@ graph:
       enabled: true,
       similarityMode: 'percentile',
       similarityThreshold: 0.72,
-      similarityPercentile: 0.91,
+      similarityPercentile: 91,
       maxClassificationJobsPerSave: 7,
       maxEdgeAttempts: 5,
     });
