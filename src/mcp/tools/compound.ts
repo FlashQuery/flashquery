@@ -74,7 +74,7 @@ type GraphSearchWarning =
   | 'graph_expansion_requires_semantic_seed'
   | 'graph_path_not_found';
 
-interface GraphSearchOptions {
+export interface GraphSearchOptions {
   enabled: boolean;
   relations?: string[];
   maxDepth: number;
@@ -100,7 +100,7 @@ interface GraphSearchNode {
   community_summary: string | null;
 }
 
-interface GraphSearchEdge {
+export interface GraphSearchEdge {
   id: string;
   source_chunk_id: string;
   target_chunk_id: string;
@@ -588,7 +588,7 @@ function isGraphEdgeAllowed(edge: GraphSearchEdge, options: GraphSearchOptions):
   return true;
 }
 
-function adjacentGraphEdges(edges: GraphSearchEdge[], chunkId: string, options: GraphSearchOptions): GraphSearchEdge[] {
+export function adjacentGraphEdges(edges: GraphSearchEdge[], chunkId: string, options: GraphSearchOptions): GraphSearchEdge[] {
   const symmetric = new Set(
     DEFAULT_GRAPH_RELATIONS
       .filter((relation) => relation.directionality === 'symmetric')
@@ -596,8 +596,8 @@ function adjacentGraphEdges(edges: GraphSearchEdge[], chunkId: string, options: 
   );
   return edges.filter((edge) => {
     if (!isGraphEdgeAllowed(edge, options)) return false;
-    if (edge.source_chunk_id === chunkId || edge.target_chunk_id === chunkId) return true;
-    return symmetric.has(edge.relation) && (edge.source_chunk_id === chunkId || edge.target_chunk_id === chunkId);
+    if (edge.source_chunk_id === chunkId) return true;
+    return symmetric.has(edge.relation) && edge.target_chunk_id === chunkId;
   });
 }
 

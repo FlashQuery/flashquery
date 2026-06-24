@@ -148,4 +148,33 @@ describe('graph markdown link resolver', () => {
       ])
     );
   });
+
+  it('preserves path qualifiers when duplicate target basenames exist', () => {
+    const sourceChunks = chunks(sourceDocumentId, 'Source', '# Source\n\nSee [[folder-b/target#Chosen Heading]].');
+    const wrongTargetChunks = chunks(
+      '55555555-5555-4555-8555-555555555555',
+      'Target',
+      '# Target\n\nwrong body\n\n## Chosen Heading\n\nwrong heading'
+    );
+    const rightTargetChunks = chunks(
+      targetDocumentId,
+      'Target',
+      '# Target\n\nright body\n\n## Chosen Heading\n\nright heading'
+    );
+
+    const result = resolveChunkReferences({
+      sourceChunk: sourceChunks[0]!,
+      documents: [
+        { documentId: '55555555-5555-4555-8555-555555555555', path: '/folder-a/target.md', title: 'Target', chunks: wrongTargetChunks },
+        { documentId: targetDocumentId, path: '/folder-b/target.md', title: 'Target', chunks: rightTargetChunks },
+      ],
+    });
+
+    expect(result.edges).toEqual([
+      expect.objectContaining({
+        target_chunk_id: rightTargetChunks.find((chunk) => chunk.heading_path === 'Target > Chosen Heading')!.id,
+      }),
+    ]);
+    expect(result.diagnostics).toEqual([]);
+  });
 });

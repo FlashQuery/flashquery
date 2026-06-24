@@ -184,14 +184,17 @@ function parseLinkTarget(rawTarget: string): LinkCandidate | null {
   }
   const [target, anchor] = withoutAlias.split('#', 2);
   return {
-    target: normalizeTargetName(target),
+    target: normalizeTargetReference(target),
     ...(anchor ? { anchor: safeDecodeURIComponent(anchor.trim()) } : {}),
   };
 }
 
-function normalizeTargetName(target: string): string {
-  const trimmed = safeDecodeURIComponent(target.trim()).replace(/\\/g, '/');
-  const base = basename(trimmed);
+function normalizeTargetReference(target: string): string {
+  return safeDecodeURIComponent(target.trim()).replace(/\\/g, '/').replace(/^\//, '').replace(/\.[^./]+$/, '');
+}
+
+function normalizeTargetBasename(target: string): string {
+  const base = basename(target);
   const extension = extname(base);
   return extension ? base.slice(0, -extension.length) : base;
 }
@@ -211,7 +214,7 @@ function resolveTargetDocument(
   const normalizedTarget = normalizeLookupValue(target);
   return (
     documents.find((document) => {
-      const normalizedPath = normalizeLookupValue(normalizeTargetName(document.path));
+      const normalizedPath = normalizeLookupValue(normalizeTargetBasename(document.path));
       const normalizedFullPath = normalizeLookupValue(document.path.replace(/^\//, '').replace(/\.[^.]+$/, ''));
       const normalizedTitle = normalizeLookupValue(document.title);
       return (

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { rankGraphSearchCandidates, type GraphSearchExpansionCandidate } from '../../src/mcp/tools/compound.js';
+import {
+  adjacentGraphEdges,
+  rankGraphSearchCandidates,
+  type GraphSearchEdge,
+  type GraphSearchExpansionCandidate,
+  type GraphSearchOptions,
+} from '../../src/mcp/tools/compound.js';
 
 function candidate(input: Partial<GraphSearchExpansionCandidate> & Pick<GraphSearchExpansionCandidate, 'chunk_id' | 'path'>): GraphSearchExpansionCandidate {
   return {
@@ -44,5 +50,37 @@ describe('graph-expanded search ranking', () => {
       'stale-support',
       'reference',
     ]);
+  });
+
+  it('does not traverse directed graph relations backward from a target seed', () => {
+    const options: GraphSearchOptions = {
+      enabled: true,
+      maxDepth: 1,
+      includeStale: false,
+      includeInactive: false,
+      includeCommunity: false,
+    };
+    const edges: GraphSearchEdge[] = [
+      {
+        id: 'contains-edge',
+        source_chunk_id: 'parent',
+        target_chunk_id: 'child',
+        relation: 'contains',
+        confidence_score: 1,
+        stale: false,
+      },
+      {
+        id: 'contradicts-edge',
+        source_chunk_id: 'left',
+        target_chunk_id: 'right',
+        relation: 'contradicts',
+        confidence_score: 1,
+        stale: false,
+      },
+    ];
+
+    expect(adjacentGraphEdges(edges, 'child', options).map((edge) => edge.id)).toEqual([]);
+    expect(adjacentGraphEdges(edges, 'left', options).map((edge) => edge.id)).toEqual(['contradicts-edge']);
+    expect(adjacentGraphEdges(edges, 'right', options).map((edge) => edge.id)).toEqual(['contradicts-edge']);
   });
 });
