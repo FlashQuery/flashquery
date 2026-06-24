@@ -50,6 +50,7 @@ export interface ScheduleDocumentEmbeddingInput {
   id: string;
   label: string;
   embedText: string;
+  frontmatter?: Record<string, unknown>;
   provider: DocumentOutputEmbeddingProvider;
   supabase: SupabaseClient;
   config?: FlashQueryConfig;
@@ -535,6 +536,7 @@ export async function resolveAndBuildDocument(
         id: fqcId,
         label: relativePath,
         embedText: `${docTitle}\n\n${content}`,
+        frontmatter: data,
         provider: ep,
         supabase: sm.getClient(),
         config: cfg,
@@ -712,6 +714,22 @@ export async function resolveAndBuildDocument(
       });
       if (connectionsResult.error) throw new DocumentRequestError(connectionsResult.error);
       followedRef.connections = connectionsResult.result;
+    }
+    if (effectiveInclude.includes('graph_summary')) {
+      if (!targetResolved.fqcId) {
+        throw new DocumentRequestError({
+          error: 'not_found',
+          message: `follow_ref target '${targetIdentifier}' is not indexed in FlashQuery yet`,
+          identifier,
+          reference: followRef,
+          resolved_value: targetIdentifier,
+        });
+      }
+      followedRef.graph_summary = await buildGraphDocumentSummaryForDocument({
+        supabase: sm.getClient(),
+        config: cfg,
+        documentId: targetResolved.fqcId,
+      });
     }
 
     // ── Return source envelope + followed_ref nested; NO top-level body ───────

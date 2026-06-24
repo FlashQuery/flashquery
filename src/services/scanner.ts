@@ -497,6 +497,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
     path: string;
     title: string;
     content: string;
+    frontmatter?: Record<string, unknown>;
     logPrefix: string;
   }) => {
     embedPromises.push(
@@ -508,6 +509,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
         documentPath: input.path,
         title: input.title,
         body: input.content,
+        frontmatter: input.frontmatter,
       })
         .then((result) => {
           if (result.warnings.some((warning) => warning.startsWith(EMBEDDING_DEFERRED_WARNING))) {
@@ -732,6 +734,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             path: relativePath,
             title,
             content,
+            frontmatter,
             logPrefix: '[SCAN-EMBED] background embed failed',
           });
         } else {
@@ -827,6 +830,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
                 path: relativePath,
                 title,
                 content,
+                frontmatter,
                 logPrefix: '[SCAN-EMBED] background embed failed',
               });
               continue; // CRITICAL: skip the normal CONTENT CHANGED update (Pitfall 4)
@@ -879,6 +883,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             path: relativePath,
             title,
             content,
+            frontmatter,
             logPrefix: '[SCAN-EMBED] re-embed failed',
           });
         } else {
@@ -940,6 +945,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
               path: relativePath,
               title,
               content,
+              frontmatter,
               logPrefix: '[SCAN-EMBED] background embed failed',
             });
             continue;
@@ -976,6 +982,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
               path: relativePath,
               title,
               content,
+              frontmatter,
               logPrefix: '[SCAN-EMBED] re-embed failed',
             });
             continue;
@@ -1008,6 +1015,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             path: relativePath,
             title,
             content,
+            frontmatter,
             logPrefix: '[SCAN-EMBED] background embed failed',
           });
         }
@@ -1166,9 +1174,12 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
         docsWithNoChunks++;
 
         let body = '';
+        let frontmatter: Record<string, unknown> | undefined;
         try {
           const raw = await readFile(`${vaultRoot}/${docPath}`, 'utf-8');
-          body = matter(raw).content;
+          const parsed = matter(raw);
+          body = parsed.content;
+          frontmatter = parsed.data;
         } catch {
           logger.debug(`[EMBED-DRAIN] could not read "${docPath}" for chunk diff`);
           continue;
@@ -1183,6 +1194,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             documentPath: docPath,
             title: docTitle,
             body,
+            frontmatter,
           })
             .then((result) => {
               if (result.warnings.some((warning) => warning.startsWith(EMBEDDING_DEFERRED_WARNING))) {

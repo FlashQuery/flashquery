@@ -21,6 +21,7 @@ export async function scheduleDocumentEmbedding({
   id,
   label,
   embedText,
+  frontmatter,
   supabase,
   config,
 }: ScheduleDocumentEmbeddingInput): Promise<void> {
@@ -34,6 +35,7 @@ export async function scheduleDocumentEmbedding({
     documentPath: label,
     title: title || label,
     body: bodyParts.join('\n\n'),
+    frontmatter,
   });
 }
 

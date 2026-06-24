@@ -64,16 +64,16 @@ Plans:
 
 **Requirements:** GR-006, GR-009, GR-013A, GR-014A, GR-016A, GR-017, GR-018, GR-019, GR-020A, GR-024A
 
-**Plans:** 7 plans
+**Plans:** 7/7 plans complete
 
 Plans:
-- [ ] 172-01-PLAN.md — Chunk-keyed structural graph helpers and stale marking
-- [ ] 172-02-PLAN.md — `fq_processing` gates and structural graph processing wiring
-- [ ] 172-03-PLAN.md — Graph query helpers, seeded community read-through, provenance, and status filters
-- [ ] 172-04-PLAN.md — Public `query_graph` MCP registration, metadata, help, and integration coverage
-- [ ] 172-05-PLAN.md — Graph-expanded search
-- [ ] 172-06-PLAN.md — Graph-aware `get_document`
-- [ ] 172-07-PLAN.md — Final structural/read-surface focused validation
+- [x] 172-01-PLAN.md — Chunk-keyed structural graph helpers and stale marking
+- [x] 172-02-PLAN.md — `fq_processing` gates and structural graph processing wiring
+- [x] 172-03-PLAN.md — Graph query helpers, seeded community read-through, provenance, and status filters
+- [x] 172-04-PLAN.md — Public `query_graph` MCP registration, metadata, help, and integration coverage
+- [x] 172-05-PLAN.md — Graph-expanded search
+- [x] 172-06-PLAN.md — Graph-aware `get_document`
+- [x] 172-07-PLAN.md — Final structural/read-surface focused validation
 
 **Implementation scope:**
 
@@ -148,7 +148,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 173. Async Classification, Lifecycle, Lint, Communities, and Hardening | v4.3 | 0/0 | Pending | - |
-| 172. Structural Graph and Read Surfaces | v4.3 | 0/7 | Planned | - |
+| 172. Structural Graph and Read Surfaces | v4.3 | 7/7 | Complete   | 2026-06-24 |
 | 171. Graph Foundation, Schema, and Vocabulary | v4.3 | 4/4 | Complete   | 2026-06-23 |
 | 170. JSON Validation and Repair Infrastructure | v4.2 | 4/4 | Complete | 2026-06-22 |
 | 169. Lifecycle, Search, and Deployment Verification | v4.1 | 3/3 | Complete | 2026-06-15 |

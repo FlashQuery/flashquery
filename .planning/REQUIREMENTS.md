@@ -23,21 +23,21 @@ This GSD milestone compresses the source document's six implementation phases in
 - [x] **GR-003**: User can rely on strict graph relation and prompt sidecars, with deterministic packaged defaults or actionable remediation for missing files and validation failures before workers run.
 - [x] **GR-004**: User can use namespaced template variables such as `{{graph:classified_types}}` without regressing existing `{{ref:...}}` reference resolution, escaping, aliases, or unresolved-token behavior.
 - [x] **GR-005**: User gets idempotent graph schema DDL for graph nodes, graph edges, pending edge jobs, and graph maintenance state with instance isolation, chunk foreign keys, required indexes, and JSONB support.
-- [ ] **GR-006**: User can trust that graph nodes use existing `fqc_chunks.id` identity and do not create an alternate document-section identity system.
+- [x] **GR-006**: User can trust that graph nodes use existing `fqc_chunks.id` identity and do not create an alternate document-section identity system.
 - [x] **GR-007**: User gets the v1 relation vocabulary with structural `contains` and `references` edges, ten classified relation types, explicit directionality/symmetry, and no persisted semantic-similarity topology.
 - [x] **GR-008**: User can inspect graph edges with tier-appropriate confidence, confidence score, reasoning for inferred edges, validated metadata qualifiers, and relation-specific metadata validation.
 
 ### Structural Graph and Read Surfaces
 
-- [ ] **GR-009**: User gets deterministic Tier 1 graph edges from heading hierarchy and markdown cross-references, including unresolved-target diagnostics and no false links from fenced code blocks.
-- [ ] **GR-013A**: User gets synchronous changed-chunk stale marking and Tier 1 structural edge updates after chunk diffing, while ordinary document writes never wait for graph LLM work.
-- [ ] **GR-014A**: User can control document processing with `fq_processing: full|embedded|none`, where absent means `full`, embedded mode skips graph state, none mode skips chunks/embeddings/graph while preserving vault listing.
-- [ ] **GR-016A**: User gets graph read surfaces whose default active/inactive filtering matches the surface: search and get-document hide inactive targets by default while query/provenance can include and label inactive nodes.
-- [ ] **GR-017**: User can call a read-only `query_graph` MCP tool for node, edge, neighbor, path, subgraph, schema, stats, provenance, impact, weak-path, ungrounded-edge, contradiction, and community-oriented graph reads with bounded traversal and expected-error envelopes.
-- [ ] **GR-018**: User can request graph-expanded unified `search` while preserving existing filesystem, semantic, and mixed search behavior for callers that do not opt into graph options.
-- [ ] **GR-019**: User can request graph-aware `get_document` output, including `graph_summary`, graph-primary connections, optional embedding-only neighbors, inactive-target opt-in, and clear validation for graph-aware connection limits.
-- [ ] **GR-020A**: User can query provenance chains and question lifecycle metadata surfaced from graph node/edge state, with extracted edges prioritized before inferred edges.
-- [ ] **GR-024A**: User gets canonical JSON MCP success, warning, unsupported, and expected-error envelopes for the new graph tool and graph-aware extensions, including graph-disabled discoverability.
+- [x] **GR-009**: User gets deterministic Tier 1 graph edges from heading hierarchy and markdown cross-references, including unresolved-target diagnostics and no false links from fenced code blocks.
+- [x] **GR-013A**: User gets synchronous changed-chunk stale marking and Tier 1 structural edge updates after chunk diffing, while ordinary document writes never wait for graph LLM work.
+- [x] **GR-014A**: User can control document processing with `fq_processing: full|embedded|none`, where absent means `full`, embedded mode skips graph state, none mode skips chunks/embeddings/graph while preserving vault listing.
+- [x] **GR-016A**: User gets graph read surfaces whose default active/inactive filtering matches the surface: search and get-document hide inactive targets by default while query/provenance can include and label inactive nodes.
+- [x] **GR-017**: User can call a read-only `query_graph` MCP tool for node, edge, neighbor, path, subgraph, schema, stats, provenance, impact, weak-path, ungrounded-edge, contradiction, and community-oriented graph reads with bounded traversal and expected-error envelopes.
+- [x] **GR-018**: User can request graph-expanded unified `search` while preserving existing filesystem, semantic, and mixed search behavior for callers that do not opt into graph options.
+- [x] **GR-019**: User can request graph-aware `get_document` output, including `graph_summary`, graph-primary connections, optional embedding-only neighbors, inactive-target opt-in, and clear validation for graph-aware connection limits.
+- [x] **GR-020A**: User can query provenance chains and question lifecycle metadata surfaced from graph node/edge state, with extracted edges prioritized before inferred edges.
+- [x] **GR-024A**: User gets canonical JSON MCP success, warning, unsupported, and expected-error envelopes for the new graph tool and graph-aware extensions, including graph-disabled discoverability.
 
 ### Async Classification, Lifecycle, Lint, and Hardening
 
@@ -87,18 +87,18 @@ Deferred beyond this milestone:
 | GR-003 | Phase 171 | Complete |
 | GR-004 | Phase 171 | Complete |
 | GR-005 | Phase 171 | Complete |
-| GR-006 | Phase 172 | Pending |
+| GR-006 | Phase 172 | Complete |
 | GR-007 | Phase 171 | Complete |
 | GR-008 | Phase 171 | Complete |
-| GR-009 | Phase 172 | Pending |
-| GR-013A | Phase 172 | Pending |
-| GR-014A | Phase 172 | Pending |
-| GR-016A | Phase 172 | Pending |
-| GR-017 | Phase 172 | Pending |
-| GR-018 | Phase 172 | Pending |
-| GR-019 | Phase 172 | Pending |
-| GR-020A | Phase 172 | Pending |
-| GR-024A | Phase 172 | Pending |
+| GR-009 | Phase 172 | Complete |
+| GR-013A | Phase 172 | Complete |
+| GR-014A | Phase 172 | Complete |
+| GR-016A | Phase 172 | Complete |
+| GR-017 | Phase 172 | Complete |
+| GR-018 | Phase 172 | Complete |
+| GR-019 | Phase 172 | Complete |
+| GR-020A | Phase 172 | Complete |
+| GR-024A | Phase 172 | Complete |
 | GR-010 | Phase 173 | Pending |
 | GR-011 | Phase 173 | Pending |
 | GR-012 | Phase 173 | Pending |

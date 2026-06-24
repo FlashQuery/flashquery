@@ -1,13 +1,18 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import pg from 'pg';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 
 import { loadConfig, type FlashQueryConfig } from '../../../src/config/loader.js';
 import { FM } from '../../../src/constants/frontmatter-fields.js';
 import { scheduleChangedDocumentChunks } from '../../../src/embedding/chunks/scheduler.js';
 import { initLogger } from '../../../src/logging/logger.js';
+import { registerDocumentTools } from '../../../src/mcp/tools/documents.js';
 import { initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
+import { initVault } from '../../../src/storage/vault.js';
 import { setupTestSupabase } from '../../helpers/supabase.js';
 import { HAS_SUPABASE } from '../../helpers/test-env.js';
 
@@ -56,6 +61,20 @@ async function insertDocument(client: pg.Client, path: string): Promise<string> 
   return inserted.rows[0]!.id;
 }
 
+function createMockServer() {
+  const handlers: Record<string, (params: Record<string, unknown>) => Promise<unknown>> = {};
+  const server = {
+    registerTool: (name: string, _cfg: unknown, handler: (params: Record<string, unknown>) => Promise<unknown>) => {
+      handlers[name] = handler;
+    },
+  } as unknown as McpServer;
+  return { server, getHandler: (name: string) => handlers[name] };
+}
+
+function textOf(result: unknown): string {
+  return (result as { content: Array<{ text: string }> }).content[0].text;
+}
+
 async function counts(client: pg.Client, documentId: string): Promise<{
   chunks: number;
   nodes: number;
@@ -91,11 +110,15 @@ async function counts(client: pg.Client, documentId: string): Promise<{
 describe.skipIf(!HAS_SUPABASE).sequential('fq_processing graph gates', () => {
   let client: pg.Client;
   let config: FlashQueryConfig;
+  let vaultPath: string;
 
   beforeAll(async () => {
+    vaultPath = await mkdtemp(join(tmpdir(), 'fqc-graph-fq-processing-'));
     config = configForTest(true);
+    config.instance.vault.path = vaultPath;
     initLogger(config);
     await initSupabase(config);
+    await initVault(config);
     client = await setupTestSupabase();
   }, 90000);
 
@@ -106,6 +129,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('fq_processing graph gates', () => {
   afterAll(async () => {
     await client?.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.end().catch(() => undefined);
+    await rm(vaultPath, { recursive: true, force: true }).catch(() => undefined);
     await supabaseManager?.close();
   });
 
@@ -171,5 +195,40 @@ describe.skipIf(!HAS_SUPABASE).sequential('fq_processing graph gates', () => {
     expect(disabled.chunks).toBeGreaterThan(1);
     expect(disabled.nodes).toBe(0);
     expect(disabled.edges).toBe(0);
+  });
+
+  it('public write_document create/update passes fq_processing to chunk scheduling', async () => {
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    const createNoneResult = await getHandler('write_document')({
+      mode: 'create',
+      path: 'fq-processing-none-create.md',
+      title: 'Processing None Create',
+      content: 'This document should not produce chunks when fq_processing is none.',
+      frontmatter: { [FM.PROCESSING]: 'none' },
+    }) as { isError?: boolean };
+    expect(createNoneResult.isError).toBeFalsy();
+    const createNone = JSON.parse(textOf(createNoneResult)) as { fq_id: string };
+    expect(await counts(client, createNone.fq_id)).toEqual({ chunks: 0, nodes: 0, edges: 0 });
+
+    const createDefaultResult = await getHandler('write_document')({
+      mode: 'create',
+      path: 'fq-processing-update.md',
+      title: 'Processing Update',
+      content: 'This document starts with normal chunk processing enabled.',
+    }) as { isError?: boolean };
+    expect(createDefaultResult.isError).toBeFalsy();
+    const createDefault = JSON.parse(textOf(createDefaultResult)) as { fq_id: string };
+    expect((await counts(client, createDefault.fq_id)).chunks).toBeGreaterThan(0);
+
+    const updateNoneResult = await getHandler('write_document')({
+      mode: 'update',
+      identifier: createDefault.fq_id,
+      content: 'This update disables all chunk processing.',
+      frontmatter: { [FM.PROCESSING]: 'none' },
+    }) as { isError?: boolean };
+    expect(updateNoneResult.isError).toBeFalsy();
+    expect(await counts(client, createDefault.fq_id)).toEqual({ chunks: 0, nodes: 0, edges: 0 });
   });
 });

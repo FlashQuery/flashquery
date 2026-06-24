@@ -217,6 +217,7 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
               documentPath: copyRelativePath,
               title: copyTitle,
               body: lockedParsed.content,
+              frontmatter: sanitizedFm,
               logger,
             });
 

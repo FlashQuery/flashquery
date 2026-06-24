@@ -44,6 +44,7 @@ async function insertDocument(input: {
   title: string;
   status?: 'active' | 'archived';
   vector?: number[];
+  frontmatter?: Record<string, unknown>;
 }): Promise<{ documentId: string; chunkId: string }> {
   const documentId = randomUUID();
   const chunkId = randomUUID();
@@ -53,6 +54,7 @@ async function insertDocument(input: {
     [FM.TITLE]: input.title,
     [FM.STATUS]: input.status ?? 'active',
     [FM.TAGS]: ['get-document-graph-it'],
+    ...(input.frontmatter ?? {}),
   });
   await mkdir(dirname(join(input.harness.vaultPath, input.path)), { recursive: true });
   await writeFile(join(input.harness.vaultPath, input.path), raw, 'utf-8');
@@ -214,6 +216,61 @@ describe.skipIf(!HAS_SUPABASE).sequential('get_document graph output integration
       has_contradictions: true,
       has_open_questions: true,
       open_question_count: 1,
+    });
+  }, 120_000);
+
+  it('returns graph_summary for follow_ref targets when requested', async () => {
+    harness = await createEmbeddingSearchHarness({
+      instanceId: 'get-document-follow-ref-graph-summary-it',
+      entries: [{ name: ENTRY_PRIMARY }],
+    });
+    const docs = captureDocumentServer(harness);
+    const target = await insertDocument({ harness, path: 'Target.md', title: 'Target' });
+    const source = await insertDocument({
+      harness,
+      path: 'Source.md',
+      title: 'Source',
+      frontmatter: { related_doc: 'Target.md' },
+    });
+    await addGraphNodeMetadata(harness, {
+      chunkId: target.chunkId,
+      questionStatus: 'open',
+      communityId: 'comm-target',
+      communityLabel: 'Referenced Claims',
+    });
+    await addGraphEdge(harness, {
+      sourceChunkId: target.chunkId,
+      targetChunkId: source.chunkId,
+      relation: 'contradicts',
+      confidenceScore: 0.91,
+      reasoning: 'target-level stored contradiction',
+    });
+
+    const result = await docs.getDocument({
+      identifiers: 'Source.md',
+      follow_ref: 'related_doc',
+      include: ['graph_summary'],
+    });
+    const payload = parseToolJson<{
+      graph_summary?: unknown;
+      followed_ref: {
+        resolved_to: string;
+        graph_summary: {
+          edge_count: number;
+          has_contradictions: boolean;
+          has_open_questions: boolean;
+          community_labels: string[];
+        };
+      };
+    }>(result);
+
+    expect(payload.graph_summary).toBeUndefined();
+    expect(payload.followed_ref.resolved_to).toBe('Target.md');
+    expect(payload.followed_ref.graph_summary).toMatchObject({
+      edge_count: 1,
+      has_contradictions: true,
+      has_open_questions: true,
+      community_labels: ['Referenced Claims'],
     });
   }, 120_000);
 

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.3
 milestone_name: Graph Document Intelligence
 status: complete
-last_updated: "2026-06-23T21:43:23.986Z"
-last_activity: 2026-06-23 -- Phase 171 complete: graph config, vocabulary, prompt contracts, graph DDL, namespace rendering, and edge validation shipped.
+last_updated: "2026-06-24T04:44:09.292Z"
+last_activity: 2026-06-24 -- Phase 172 complete: structural graph helpers, processing gates, query_graph, graph-expanded search, graph-aware get_document, and final validation shipped.
 progress:
   total_phases: 3
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 11
-  completed_plans: 4
-  percent: 33
+  completed_plans: 11
+  percent: 67
 ---
 
 # FlashQuery Core — State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-23)
 
 ## Current Position
 
-Phase: 171 (Graph Foundation, Schema, and Vocabulary) — COMPLETE
-Plan: 4 of 4
-Status: Phase 171 complete
-Last activity: 2026-06-23 -- Phase 171 complete: graph config, vocabulary, prompt contracts, graph DDL, namespace rendering, and edge validation shipped.
+Phase: 172 (Structural Graph and Read Surfaces) — COMPLETE
+Plan: 7 of 7
+Status: Phase 172 complete
+Last activity: 2026-06-24 -- Phase 172 complete: structural graph helpers, processing gates, query_graph, graph-expanded search, graph-aware get_document, and final validation shipped.
 
 ## Performance Metrics
 
@@ -63,8 +63,8 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-06-23T21:43:23.969Z
-**Next action:** verify Phase 171 or execute Phase 172 with `/gsd-execute-phase 172`.
+**Last session:** 2026-06-24T04:44:09.271Z
+**Next action:** run Phase 172 review/verification close-out, then plan or execute Phase 173.
 **Context needed:** `.planning/PROJECT.md`, `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, and the graph source requirements/test plan in `flashquery-product/Roadmap/Features/Graph Document Intelligence (Jun 2026)/`.
 
 ## Deferred Items

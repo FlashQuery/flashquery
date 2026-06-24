@@ -243,6 +243,7 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
                 documentPath: relativePath,
                 title: effectiveTitle,
                 body,
+                frontmatter: fm,
                 logger,
               });
 
@@ -429,6 +430,7 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
                     documentPath: resolved.relativePath,
                     title: effectiveTitle,
                     body: effectiveBody,
+                    frontmatter: sanitizedFm,
                     logger,
                   });
 
