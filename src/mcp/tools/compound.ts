@@ -55,6 +55,7 @@ import { FM } from '../../constants/frontmatter-fields.js';
 import {
   mergeSearchResults,
   resolveSearchIntent,
+  type SearchMatchSource,
   type SearchMatchedChunk,
   type SearchResultItem,
 } from '../utils/search-results.js';
@@ -65,6 +66,93 @@ import {
 } from '../utils/document-version.js';
 import { buildFrontmatterTargetedRegion } from '../utils/document-write.js';
 import { batchIdentifierItemSchema, batchIdentifiersSchema, normalizeBatchIdentifiers } from '../utils/batch-input.js';
+import { queryPgPool } from '../../utils/pg-client.js';
+import { DEFAULT_GRAPH_RELATIONS } from '../../graph/vocabulary.js';
+
+type GraphSearchWarning =
+  | 'graph_disabled'
+  | 'graph_expansion_requires_semantic_seed'
+  | 'graph_path_not_found';
+
+interface GraphSearchOptions {
+  enabled: boolean;
+  relations?: string[];
+  maxDepth: number;
+  includeStale: boolean;
+  includeInactive: boolean;
+  includeCommunity: boolean;
+  pathTo?: string;
+}
+
+interface GraphSearchNode {
+  chunk_id: string;
+  document_id: string;
+  path: string;
+  title: string;
+  tags: string[];
+  document_status: string;
+  updated_at: string | null;
+  heading_path: string;
+  breadcrumb: string;
+  content: string;
+  community_id: string | null;
+  community_label: string | null;
+  community_summary: string | null;
+}
+
+interface GraphSearchEdge {
+  id: string;
+  source_chunk_id: string;
+  target_chunk_id: string;
+  relation: string;
+  confidence_score: number;
+  stale: boolean;
+}
+
+export interface GraphSearchExpansionCandidate {
+  chunk_id: string;
+  document_id: string;
+  path: string;
+  title: string;
+  tags: string[];
+  document_status: string;
+  heading_path: string;
+  breadcrumb: string;
+  content: string;
+  relation: string;
+  stale: boolean;
+  confidence_score: number;
+  seed_score: number;
+  seed_chunk_id: string;
+  edge_id: string;
+  depth: number;
+  community_id: string | null;
+  community_label: string | null;
+  community_summary: string | null;
+}
+
+interface GraphSearchExpansionResult {
+  results: SearchResultItem[];
+  warnings: GraphSearchWarning[];
+}
+
+const MAX_GRAPH_SEARCH_DEPTH = 5;
+const GRAPH_MATCH_SOURCE = 'graph' as SearchMatchSource;
+
+const GRAPH_RELATION_SIGNIFICANCE: Record<string, number> = {
+  contradicts: 100,
+  supports: 95,
+  supersedes: 92,
+  resolves: 90,
+  depends_on: 85,
+  rationale_for: 82,
+  extends: 78,
+  elaborates: 75,
+  summarizes: 70,
+  duplicates: 68,
+  references: 45,
+  contains: 25,
+};
 
 type SearchEmbeddingCatalogEntry = ActiveEmbeddingEntry | {
   name: string;
@@ -373,6 +461,327 @@ export function mergeRrfWithSupplementalResults(
       return semanticIdentifier(left).localeCompare(semanticIdentifier(right));
     })
     .slice(0, limit);
+}
+
+function clampGraphSearchDepth(value: number | undefined): number {
+  if (value === undefined) return 1;
+  return Math.min(Math.max(Math.trunc(value), 1), MAX_GRAPH_SEARCH_DEPTH);
+}
+
+function resolveGraphSearchOptions(params: {
+  graph_expand?: boolean;
+  graph_relations?: string[];
+  graph_max_depth?: number;
+  graph_include_stale?: boolean;
+  graph_include_inactive?: boolean;
+  include_community?: boolean;
+  path_to?: string;
+}): GraphSearchOptions {
+  const hasGraphOption =
+    params.graph_expand === true ||
+    params.graph_relations !== undefined ||
+    params.graph_max_depth !== undefined ||
+    params.graph_include_stale !== undefined ||
+    params.graph_include_inactive !== undefined ||
+    params.include_community !== undefined ||
+    params.path_to !== undefined;
+  return {
+    enabled: hasGraphOption,
+    relations: params.graph_relations,
+    maxDepth: clampGraphSearchDepth(params.graph_max_depth),
+    includeStale: params.graph_include_stale === true,
+    includeInactive: params.graph_include_inactive === true,
+    includeCommunity: params.include_community === true,
+    pathTo: params.path_to,
+  };
+}
+
+function graphRelationSignificance(relation: string): number {
+  return GRAPH_RELATION_SIGNIFICANCE[relation] ?? 50;
+}
+
+export function rankGraphSearchCandidates<T extends GraphSearchExpansionCandidate>(candidates: T[]): T[] {
+  return [...candidates].sort((left, right) => {
+    const relationDelta = graphRelationSignificance(right.relation) - graphRelationSignificance(left.relation);
+    if (relationDelta !== 0) return relationDelta;
+    if (left.stale !== right.stale) return left.stale ? 1 : -1;
+    const confidenceDelta = right.confidence_score - left.confidence_score;
+    if (confidenceDelta !== 0) return confidenceDelta;
+    const seedDelta = right.seed_score - left.seed_score;
+    if (seedDelta !== 0) return seedDelta;
+    return left.path.localeCompare(right.path) || left.chunk_id.localeCompare(right.chunk_id);
+  });
+}
+
+async function loadGraphSearchRows(config: FlashQueryConfig): Promise<{
+  nodes: GraphSearchNode[];
+  edges: GraphSearchEdge[];
+}> {
+  const [nodeResult, edgeResult] = await Promise.all([
+    queryPgPool<GraphSearchNode>(
+      config.supabase.databaseUrl,
+      `
+      SELECT
+        n.chunk_id::text,
+        c.document_id::text,
+        d.path,
+        d.title,
+        d.tags,
+        d.status AS document_status,
+        d.updated_at::text,
+        c.heading_path,
+        c.breadcrumb,
+        c.content,
+        n.community_id,
+        n.community_label,
+        n.community_summary
+      FROM fqc_graph_nodes n
+      JOIN fqc_chunks c
+        ON c.id = n.chunk_id
+       AND c.instance_id = n.instance_id
+      JOIN fqc_documents d
+        ON d.id = c.document_id
+       AND d.instance_id = n.instance_id
+      WHERE n.instance_id = $1
+      ORDER BY d.path, c.chunk_index, n.chunk_id
+      `,
+      [config.instance.id]
+    ),
+    queryPgPool<GraphSearchEdge>(
+      config.supabase.databaseUrl,
+      `
+      SELECT
+        id::text,
+        source_chunk_id::text,
+        target_chunk_id::text,
+        relation,
+        confidence_score::float8 AS confidence_score,
+        status = 'stale' AS stale
+      FROM fqc_graph_edges
+      WHERE instance_id = $1
+      ORDER BY created_at, id
+      `,
+      [config.instance.id]
+    ),
+  ]);
+
+  return { nodes: nodeResult.rows, edges: edgeResult.rows };
+}
+
+function seedChunksFromSemanticResults(results: SearchResultItem[]): Array<{
+  chunkId: string;
+  seedScore: number;
+}> {
+  const seeds = new Map<string, number>();
+  for (const result of results) {
+    if (!result.match_source?.includes('semantic')) continue;
+    for (const chunk of result.matched_chunks ?? []) {
+      seeds.set(chunk.chunk_id, Math.max(seeds.get(chunk.chunk_id) ?? 0, chunk.score));
+    }
+  }
+  return [...seeds.entries()].map(([chunkId, seedScore]) => ({ chunkId, seedScore }));
+}
+
+function isGraphEdgeAllowed(edge: GraphSearchEdge, options: GraphSearchOptions): boolean {
+  if (options.relations && !options.relations.includes(edge.relation)) return false;
+  if (!options.includeStale && edge.stale) return false;
+  return true;
+}
+
+function adjacentGraphEdges(edges: GraphSearchEdge[], chunkId: string, options: GraphSearchOptions): GraphSearchEdge[] {
+  const symmetric = new Set(
+    DEFAULT_GRAPH_RELATIONS
+      .filter((relation) => relation.directionality === 'symmetric')
+      .map((relation) => relation.name)
+  );
+  return edges.filter((edge) => {
+    if (!isGraphEdgeAllowed(edge, options)) return false;
+    if (edge.source_chunk_id === chunkId || edge.target_chunk_id === chunkId) return true;
+    return symmetric.has(edge.relation) && (edge.source_chunk_id === chunkId || edge.target_chunk_id === chunkId);
+  });
+}
+
+function graphCandidateForEdge(input: {
+  edge: GraphSearchEdge;
+  node: GraphSearchNode;
+  seedChunkId: string;
+  seedScore: number;
+  depth: number;
+}): GraphSearchExpansionCandidate {
+  return {
+    chunk_id: input.node.chunk_id,
+    document_id: input.node.document_id,
+    path: input.node.path,
+    title: input.node.title,
+    tags: input.node.tags ?? [],
+    document_status: input.node.document_status,
+    heading_path: input.node.heading_path,
+    breadcrumb: input.node.breadcrumb,
+    content: input.node.content,
+    relation: input.edge.relation,
+    stale: input.edge.stale,
+    confidence_score: input.edge.confidence_score,
+    seed_score: input.seedScore,
+    seed_chunk_id: input.seedChunkId,
+    edge_id: input.edge.id,
+    depth: input.depth,
+    community_id: input.node.community_id,
+    community_label: input.node.community_label,
+    community_summary: input.node.community_summary,
+  };
+}
+
+function shortestGraphPath(input: {
+  edges: GraphSearchEdge[];
+  from: string;
+  to: string;
+  maxDepth: number;
+  options: GraphSearchOptions;
+}): { found: boolean; nodes: string[]; edges: string[]; max_depth: number } {
+  const queue: Array<{ chunkId: string; nodes: string[]; edges: string[] }> = [
+    { chunkId: input.from, nodes: [input.from], edges: [] },
+  ];
+  const visited = new Set<string>();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || visited.has(current.chunkId) || current.edges.length >= input.maxDepth) continue;
+    visited.add(current.chunkId);
+    for (const edge of adjacentGraphEdges(input.edges, current.chunkId, input.options)) {
+      const nextId = edge.source_chunk_id === current.chunkId ? edge.target_chunk_id : edge.source_chunk_id;
+      const next = {
+        chunkId: nextId,
+        nodes: [...current.nodes, nextId],
+        edges: [...current.edges, edge.id],
+      };
+      if (nextId === input.to) {
+        return { found: true, nodes: next.nodes, edges: next.edges, max_depth: input.maxDepth };
+      }
+      queue.push(next);
+    }
+  }
+
+  return { found: false, nodes: [], edges: [], max_depth: input.maxDepth };
+}
+
+function buildGraphSearchResult(
+  candidate: GraphSearchExpansionCandidate,
+  options: GraphSearchOptions,
+  pathTo: { found: boolean; nodes: string[]; edges: string[]; max_depth: number } | null
+): SearchResultItem {
+  return {
+    entity_type: 'document',
+    identifier: candidate.path,
+    title: candidate.title,
+    path: candidate.path,
+    fq_id: candidate.document_id,
+    tags: candidate.tags,
+    score: candidate.seed_score,
+    match_source: [GRAPH_MATCH_SOURCE],
+    matched_chunks: [
+      {
+        chunk_id: candidate.chunk_id,
+        heading_path: candidate.heading_path,
+        breadcrumb: candidate.breadcrumb,
+        content: candidate.content,
+        span_start: null,
+        span_end: null,
+        score: candidate.confidence_score,
+        per_embedding_ranks: {},
+        indexed_at: {},
+      },
+    ],
+    graph_context: {
+      seed_chunk_id: candidate.seed_chunk_id,
+      edge_id: candidate.edge_id,
+      relation: candidate.relation,
+      stale: candidate.stale,
+      confidence_score: candidate.confidence_score,
+      depth: candidate.depth,
+      ...(options.includeCommunity && candidate.community_id
+        ? {
+            community: {
+              community_id: candidate.community_id,
+              community_label: candidate.community_label,
+              community_summary: candidate.community_summary,
+            },
+          }
+        : {}),
+      ...(pathTo ? { path_to: pathTo } : {}),
+    },
+  } as SearchResultItem;
+}
+
+async function expandSearchWithGraph(input: {
+  config: FlashQueryConfig;
+  baseResults: SearchResultItem[];
+  options: GraphSearchOptions;
+  limit: number;
+}): Promise<GraphSearchExpansionResult> {
+  if (!input.options.enabled) return { results: [], warnings: [] };
+  if (input.config.graph?.enabled !== true) {
+    return { results: [], warnings: ['graph_disabled'] };
+  }
+
+  const seeds = seedChunksFromSemanticResults(input.baseResults);
+  if (seeds.length === 0) {
+    return { results: [], warnings: ['graph_expansion_requires_semantic_seed'] };
+  }
+
+  const rows = await loadGraphSearchRows(input.config);
+  const nodes = new Map(rows.nodes.map((node) => [node.chunk_id, node]));
+  const byChunk = new Map<string, GraphSearchExpansionCandidate>();
+
+  for (const seed of seeds) {
+    const queue: Array<{ chunkId: string; depth: number }> = [{ chunkId: seed.chunkId, depth: 0 }];
+    const visited = new Set<string>();
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current || visited.has(current.chunkId) || current.depth >= input.options.maxDepth) continue;
+      visited.add(current.chunkId);
+      for (const edge of adjacentGraphEdges(rows.edges, current.chunkId, input.options)) {
+        const nextId = edge.source_chunk_id === current.chunkId ? edge.target_chunk_id : edge.source_chunk_id;
+        const node = nodes.get(nextId);
+        if (!node) continue;
+        if (!input.options.includeInactive && node.document_status !== 'active') continue;
+        if (nextId !== seed.chunkId) {
+          const candidate = graphCandidateForEdge({
+            edge,
+            node,
+            seedChunkId: seed.chunkId,
+            seedScore: seed.seedScore,
+            depth: current.depth + 1,
+          });
+          const existing = byChunk.get(nextId);
+          const top = rankGraphSearchCandidates(existing ? [existing, candidate] : [candidate])[0]!;
+          byChunk.set(nextId, top);
+        }
+        queue.push({ chunkId: nextId, depth: current.depth + 1 });
+      }
+    }
+  }
+
+  const ranked = rankGraphSearchCandidates([...byChunk.values()]).slice(0, input.limit);
+  const results = ranked.map((candidate) => {
+    const pathTo = input.options.pathTo
+      ? shortestGraphPath({
+          edges: rows.edges,
+          from: candidate.seed_chunk_id,
+          to: input.options.pathTo,
+          maxDepth: input.options.maxDepth,
+          options: input.options,
+        })
+      : null;
+    return buildGraphSearchResult(candidate, input.options, pathTo);
+  });
+  const warnings: GraphSearchWarning[] = input.options.pathTo && results.every((result) => {
+    const graphContext = (result as unknown as { graph_context?: { path_to?: { found: boolean } } }).graph_context;
+    return graphContext?.path_to?.found !== true;
+  })
+    ? ['graph_path_not_found']
+    : [];
+
+  return { results, warnings };
 }
 
 function mergeMatchedChunkProperty(
@@ -1541,6 +1950,13 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         path_filter: z.string().optional().describe('Document path substring filter for filesystem/list searches.'),
         embedding_names: z.array(z.string()).optional().describe('Optional embedding catalog entry names for semantic/mixed search. Omit for catalog default.'),
         include_archived: z.boolean().optional().describe('Include archived documents and memories. Default: false.'),
+        graph_expand: z.boolean().optional().describe('Opt in to graph-expanded search from semantic seed chunks. Default: false.'),
+        graph_relations: z.array(z.string()).optional().describe('Optional graph relation filter for graph expansion.'),
+        graph_max_depth: z.number().int().positive().max(MAX_GRAPH_SEARCH_DEPTH).optional().describe('Maximum graph traversal depth for expansion. Default: 1; max: 5.'),
+        graph_include_stale: z.boolean().optional().describe('Include stale graph edges during graph expansion. Default: false.'),
+        graph_include_inactive: z.boolean().optional().describe('Include archived or missing graph targets during graph expansion. Default: false.'),
+        include_community: z.boolean().optional().describe('Include seeded community metadata on graph-expanded results when present. Default: false.'),
+        path_to: z.string().optional().describe('Optional target chunk ID for bounded shortest-path metadata from semantic seed chunks.'),
         body_contains: z.unknown().optional().describe('Unsupported deferred literal body-search parameter; use macro/string operations instead.'),
         body_regex: z.unknown().optional().describe('Unsupported deferred literal body-search parameter; use macro/string operations instead.'),
         regex: z.unknown().optional().describe('Unsupported deferred literal body-search parameter; use macro/string operations instead.'),
@@ -1551,6 +1967,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
     },
     async (params) => {
       const { tags, tag_match, path_filter, include_archived, embedding_names } = params;
+      const graphOptions = resolveGraphSearchOptions(params);
       const limitChunksPerResult = params.limit_chunks_per_result ?? 3;
       if (getIsShuttingDown()) {
         return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
@@ -1784,6 +2201,15 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             })));
           }
         }
+
+        const graphExpansion = await expandSearchWithGraph({
+          config,
+          baseResults: allResults,
+          options: graphOptions,
+          limit: intent.limit,
+        });
+        allResults.push(...graphExpansion.results);
+        warnings.push(...graphExpansion.warnings);
 
         const mergedResults = catalogFusion === 'rrf'
           ? mergeRrfWithSupplementalResults(allResults, intent.limit)

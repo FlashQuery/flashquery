@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import type { EmbeddingSearchHarness } from '../embedding/search-test-helpers.js';
 import {
@@ -54,6 +54,13 @@ async function addGraphEdge(harness: EmbeddingSearchHarness, input: {
 
 describe.skipIf(!HAS_SUPABASE).sequential('search graph expansion integration', () => {
   let harness: EmbeddingSearchHarness | undefined;
+
+  beforeEach(() => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ embedding: [1, 0, 0] }] }),
+    } as Response);
+  });
 
   afterEach(async () => {
     vi.restoreAllMocks();

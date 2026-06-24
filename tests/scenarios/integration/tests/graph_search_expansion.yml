@@ -13,17 +13,6 @@ extra_config:
     embedding_name: primary
 
 steps:
-  - label: "Write graph search seed document"
-    action: vault.write
-    name: graph_seed
-    path: "graph-search/seed.md"
-    title: "Graph Search Seed ${run.id}"
-    content: |
-      ## Seed Claim
-
-      The graph search seed links to [[Graph Search Connected ${run.id}]] for supporting context.
-    tags: ["graph-search-${run.id}"]
-
   - label: "Write graph search connected document"
     action: vault.write
     name: graph_connected
@@ -33,6 +22,17 @@ steps:
       ## Connected Claim
 
       Connected graph context should be returned through graph-expanded search.
+    tags: ["graph-search-${run.id}"]
+
+  - label: "Write graph search seed document"
+    action: vault.write
+    name: graph_seed
+    path: "graph-search/seed.md"
+    title: "Graph Search Seed ${run.id}"
+    content: |
+      ## Seed Claim
+
+      The graph search seed links to [[Graph Search Connected ${run.id}]] for supporting context.
     tags: ["graph-search-${run.id}"]
 
   - label: "Synchronize graph structural state"
@@ -49,5 +49,5 @@ steps:
         graph_expand: true
         graph_max_depth: 2
         graph_relations: [references, supports]
-      expect_contains: "\"match_source\":[\"graph\"]"
+      expect_contains: "\"graph_context\""
       expect_path: "_integration/graph-search/connected.md"
