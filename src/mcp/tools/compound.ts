@@ -1982,6 +1982,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
               documentPath: relativePath,
               title: docTitle,
               body: modifiedBody,
+              frontmatter,
               logger,
             })
           : { warnings: [] };
@@ -2193,6 +2194,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             documentPath: resolved.relativePath,
             title: docTitle,
             body: newContent,
+            frontmatter: document.data,
             logger,
           });
           embeddingWarnings = embedResult.warnings;

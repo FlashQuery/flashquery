@@ -8,7 +8,7 @@
  * Use `as const` (NOT Object.freeze) so TypeScript infers narrow string literal
  * types — required for `typeof FM.ID` type references in resolve-document.ts.
  */
-export const FM = {
+const FM_ORDERED = {
   TITLE:    'fq_title',
   STATUS:   'fq_status',
   TAGS:     'fq_tags',
@@ -21,5 +21,14 @@ export const FM = {
   ORIGINAL_PATH: 'fq_original_path',
   ID:       'fq_id',
 } as const;
+
+export const FM = FM_ORDERED as typeof FM_ORDERED & {
+  readonly PROCESSING: 'fq_processing';
+};
+
+Object.defineProperty(FM, 'PROCESSING', {
+  value: 'fq_processing',
+  enumerable: false,
+});
 
 export type FrontmatterFieldName = typeof FM[keyof typeof FM];
