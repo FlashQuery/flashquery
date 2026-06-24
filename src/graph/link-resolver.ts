@@ -4,7 +4,6 @@ import { gfmFromMarkdown } from 'mdast-util-gfm';
 import { gfm } from 'micromark-extension-gfm';
 
 import type { ParsedChunk } from '../embedding/chunks/types.js';
-import type { StructuralGraphEdgeDraft } from './structural.js';
 
 interface PositionedNode {
   type: string;
@@ -27,8 +26,17 @@ export interface LinkResolutionDiagnostic {
   lint_warning: true;
 }
 
+export interface LinkResolvedGraphEdgeDraft {
+  source_chunk_id: string;
+  target_chunk_id: string;
+  relation: 'references';
+  confidence: 'EXTRACTED';
+  confidence_score: 1;
+  metadata: Record<string, unknown>;
+}
+
 export interface ResolvedChunkReferences {
-  edges: StructuralGraphEdgeDraft[];
+  edges: LinkResolvedGraphEdgeDraft[];
   diagnostics: LinkResolutionDiagnostic[];
 }
 
@@ -42,7 +50,7 @@ export function resolveChunkReferences(options: {
   documents: LinkResolverDocument[];
 }): ResolvedChunkReferences {
   const candidates = extractLinkCandidates(options.sourceChunk.content);
-  const edges: StructuralGraphEdgeDraft[] = [];
+  const edges: LinkResolvedGraphEdgeDraft[] = [];
   const diagnostics: LinkResolutionDiagnostic[] = [];
 
   for (const candidate of candidates) {
