@@ -1,0 +1,53 @@
+name: graph_search_expansion
+description: >
+  T-Y-002 / IG-02: write linked markdown docs, scan with graph enabled,
+  search a semantic seed, and verify graph-expanded search returns the
+  connected document with graph attribution.
+coverage: [IG-02]
+deps: [embeddings]
+server_modes: [managed]
+
+extra_config:
+  graph:
+    enabled: true
+    embedding_name: primary
+
+steps:
+  - label: "Write graph search seed document"
+    action: vault.write
+    name: graph_seed
+    path: "graph-search/seed.md"
+    title: "Graph Search Seed ${run.id}"
+    content: |
+      ## Seed Claim
+
+      The graph search seed links to [[Graph Search Connected ${run.id}]] for supporting context.
+    tags: ["graph-search-${run.id}"]
+
+  - label: "Write graph search connected document"
+    action: vault.write
+    name: graph_connected
+    path: "graph-search/connected.md"
+    title: "Graph Search Connected ${run.id}"
+    content: |
+      ## Connected Claim
+
+      Connected graph context should be returned through graph-expanded search.
+    tags: ["graph-search-${run.id}"]
+
+  - label: "Synchronize graph structural state"
+    action: scan_vault
+
+  - label: "Graph-expanded search returns the connected document with graph attribution"
+    assert:
+      op: search
+      args:
+        query: "Graph Search Seed ${run.id}"
+        entity_types: [documents]
+        mode: semantic
+        limit: 10
+        graph_expand: true
+        graph_max_depth: 2
+        graph_relations: [references, supports]
+      expect_contains: "\"match_source\":[\"graph\"]"
+      expect_path: "_integration/graph-search/connected.md"
