@@ -7,9 +7,15 @@ deps: [embeddings]
 server_modes: [managed]
 
 extra_config:
+  embeddings:
+    - name: graph_lint_communities_primary
+      dimensions: 768
+      endpoints:
+        - provider_name: local-ollama
+          model: nomic-embed-text
   graph:
     enabled: true
-    embedding_name: primary
+    embedding_name: graph_lint_communities_primary
 
 steps:
   - label: "Write first community member"
@@ -74,11 +80,11 @@ steps:
         scope:
           path_prefix: "_integration/graph-communities/"
       expect_json_path:
-        - "communities.items[0].strength_score"
-        - "communities.items[0].document_ids"
-        - "communities.items[0].document_paths"
-        - "communities.items[0].edge_density"
-        - "communities.items[0].provenance_coverage"
+        - "actions[0].payload.communities.items[0].strength_score"
+        - "actions[0].payload.communities.items[0].document_ids"
+        - "actions[0].payload.communities.items[0].document_paths"
+        - "actions[0].payload.communities.items[0].edge_density"
+        - "actions[0].payload.communities.items[0].provenance_coverage"
 
   - label: "Query graph lists stored community members"
     assert:

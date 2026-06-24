@@ -12,6 +12,10 @@ export const MAINTENANCE_ACTIONS = [
   'rebuild_embeddings',
   'retire_embedding',
   'abort',
+  'graph_worker',
+  'graph_lint',
+  'graph_lint_status',
+  'graph_lint_prune',
 ] as const;
 
 const MaintenanceActionSchema = z.enum(MAINTENANCE_ACTIONS);
@@ -59,6 +63,12 @@ export function registerScanTools(server: McpServer, config: FlashQueryConfig): 
         stale_only: z.boolean().optional().describe('Narrow rebuild_embeddings to stale rows.'),
         mismatched_width_only: z.boolean().optional().describe('Narrow rebuild_embeddings to width-mismatched rows.'),
         drop_stamping_columns: z.boolean().optional().describe('Retire option; defaults true in lifecycle processors.'),
+        rules: z.array(z.string()).optional().describe('Graph lint rule IDs to execute for action: graph_lint.'),
+        run_id: z.string().optional().describe('Graph lint run id for action: graph_lint_status.'),
+        limit: z.number().int().positive().optional().describe('Graph lint status list limit.'),
+        keep_last: z.number().int().nonnegative().optional().describe('Graph lint prune retention count.'),
+        older_than: z.string().optional().describe('Graph lint prune ISO-8601 timestamp cutoff.'),
+        max_findings: z.number().int().nonnegative().optional().describe('Maximum graph lint findings returned in payloads.'),
       },
     },
     async ({
@@ -74,6 +84,12 @@ export function registerScanTools(server: McpServer, config: FlashQueryConfig): 
       stale_only,
       mismatched_width_only,
       drop_stamping_columns,
+      rules,
+      run_id,
+      limit,
+      keep_last,
+      older_than,
+      max_findings,
     }) => {
       const input: MaintainVaultInput = {
         action,
@@ -88,6 +104,12 @@ export function registerScanTools(server: McpServer, config: FlashQueryConfig): 
         ...(stale_only === undefined ? {} : { stale_only }),
         ...(mismatched_width_only === undefined ? {} : { mismatched_width_only }),
         ...(drop_stamping_columns === undefined ? {} : { drop_stamping_columns }),
+        ...(rules === undefined ? {} : { rules }),
+        ...(run_id === undefined ? {} : { run_id }),
+        ...(limit === undefined ? {} : { limit }),
+        ...(keep_last === undefined ? {} : { keep_last }),
+        ...(older_than === undefined ? {} : { older_than }),
+        ...(max_findings === undefined ? {} : { max_findings }),
       };
 
       const result = await maintainVault(config, input);
