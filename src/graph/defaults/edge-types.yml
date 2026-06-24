@@ -51,6 +51,7 @@ relations:
     directionality: directed
     detection_method: classified
     description: The source chunk summarizes the target chunk.
+    requires_claim_support: false
   - name: rationale_for
     category: classified
     directionality: directed

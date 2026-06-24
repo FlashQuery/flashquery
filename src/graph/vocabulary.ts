@@ -13,6 +13,7 @@ export interface GraphRelationDefinition {
   detectionMethod: GraphRelationDetectionMethod;
   description: string;
   metadataSchema?: Record<string, unknown>;
+  requiresClaimSupport?: boolean;
 }
 
 const DirectionalitySchema = z.enum(['directed', 'symmetric']);
@@ -26,6 +27,7 @@ const RelationSchema = z
     detection_method: DetectionMethodSchema,
     description: z.string().min(1),
     metadata_schema: z.record(z.string(), z.unknown()).optional(),
+    requires_claim_support: z.boolean().optional(),
   })
   .strict();
 
@@ -104,6 +106,7 @@ const FALLBACK_GRAPH_RELATIONS: GraphRelationDefinition[] = [
     directionality: 'directed',
     detectionMethod: 'classified',
     description: 'The source chunk summarizes the target chunk.',
+    requiresClaimSupport: false,
   },
   {
     name: 'rationale_for',
@@ -136,6 +139,7 @@ function relationFromYaml(raw: z.infer<typeof RelationSchema>): GraphRelationDef
     detectionMethod: raw.detection_method,
     description: raw.description,
     metadataSchema: raw.metadata_schema,
+    requiresClaimSupport: raw.requires_claim_support,
   };
 }
 

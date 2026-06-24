@@ -110,7 +110,7 @@ export async function runGraphLint(options: GraphLintOptions): Promise<GraphLint
     const deadLetters = await loadDeadLetters(client, options.instanceId);
 
     const categoryFindings = {
-      questions: selectedRules.has('LINT-Q1') ? questionFindings(nodes, edges) : [],
+      questions: selectedRules.has('LINT-Q1') ? questionFindings(nodes, edges, new Date(timestamp)) : [],
       provenance: selectedRules.has('LINT-P1') ? provenanceFindings(nodes, edges) : [],
       contradictions: selectedRules.has('LINT-C1') ? contradictionFindings(nodes, edges) : [],
       duplicates: selectedRules.has('LINT-R2') ? duplicateFindings(nodes, edges) : [],
@@ -441,7 +441,7 @@ async function graphEpochFor(client: pg.Client, instanceId: string): Promise<num
   return Number(result.rows[0]?.epoch ?? 0);
 }
 
-function questionFindings(nodes: LintNodeRow[], edges: LintEdgeRow[]): LintCategoryInput[] {
+function questionFindings(nodes: LintNodeRow[], edges: LintEdgeRow[], now = new Date()): LintCategoryInput[] {
   return nodes
     .filter((node) => node.question_status === 'open' || node.question_status === 'deferred' || node.question_status === 'resolved')
     .map((node) => {
@@ -462,7 +462,7 @@ function questionFindings(nodes: LintNodeRow[], edges: LintEdgeRow[]): LintCateg
           heading_path: node.heading_path,
           excerpt: excerpt(node.content),
           question_status: node.question_status,
-          age_days: 0,
+          age_days: ageDays(node.analyzed_at, now),
           community_id: node.community_id,
           community_label: node.community_label,
           downstream_impact_count: dependents.length,
@@ -588,11 +588,11 @@ function communityFindings(communities: DetectedCommunity[]): LintCategoryInput[
 }
 
 function integrityFindings(edges: LintEdgeRow[], dryRun: boolean): LintCategoryInput[] {
-  return edges
+  const staleFindings = edges
     .filter((edge) => edge.status === 'stale')
     .map((edge) => ({
       rule: 'LINT-I1',
-      severity: 'info',
+      severity: 'info' as const,
       stableParts: ['integrity', 'stale_edge', edge.id],
       summary: dryRun ? `Would clear stale edge ${edge.id}` : `Cleared stale edge ${edge.id}`,
       edgeIds: [edge.id],
@@ -604,6 +604,26 @@ function integrityFindings(edges: LintEdgeRow[], dryRun: boolean): LintCategoryI
         applied: dryRun ? false : true,
       },
     }));
+  const activeInactiveFindings = edges
+    .filter((edge) => exactlyOneInactive(edge.source_status, edge.target_status))
+    .map((edge) => ({
+      rule: 'LINT-I2',
+      severity: 'info' as const,
+      stableParts: ['integrity', 'active_inactive_edge', edge.id],
+      summary: `Active graph edge ${edge.id} points to inactive content`,
+      edgeIds: [edge.id],
+      chunkIds: [edge.source_chunk_id, edge.target_chunk_id],
+      item: {
+        fix_type: 'active_inactive_reference',
+        affected_id: edge.id,
+        description: 'Active-to-inactive edge retained for historical provenance and surfaced for review.',
+        applied: false,
+        source_status: edge.source_status,
+        target_status: edge.target_status,
+      },
+    }));
+
+  return [...staleFindings, ...activeInactiveFindings];
 }
 
 function deadLetterFindings(rows: DeadLetterRow[]): LintCategoryInput[] {
@@ -645,7 +665,12 @@ function summarizeQuestions(items: Array<Record<string, unknown>>): Record<strin
   const highest = [...items].sort((a, b) => numberValue(b.downstream_impact_count) - numberValue(a.downstream_impact_count))[0];
   return {
     total_by_status: totalByStatus,
-    oldest_open_age_days: 0,
+    oldest_open_age_days: Math.max(
+      0,
+      ...items
+        .filter((item) => item.question_status === 'open')
+        .map((item) => numberValue(item.age_days))
+    ),
     highest_impact_chunk_id: typeof highest?.chunk_id === 'string' ? highest.chunk_id : null,
   };
 }
@@ -692,6 +717,17 @@ function arrayLength(value: unknown): number {
 
 function numberValue(value: unknown): number {
   return typeof value === 'number' ? value : 0;
+}
+
+function ageDays(timestamp: string | null, now: Date): number {
+  if (!timestamp) return 0;
+  const parsed = new Date(timestamp).getTime();
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.floor((now.getTime() - parsed) / 86_400_000));
+}
+
+function exactlyOneInactive(sourceStatus: string, targetStatus: string): boolean {
+  return (sourceStatus === 'active') !== (targetStatus === 'active');
 }
 
 function isString(value: unknown): value is string {

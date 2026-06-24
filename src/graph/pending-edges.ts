@@ -22,9 +22,11 @@ interface QueryResult<Row = Record<string, unknown>> {
 
 interface QueryBuilder<Row = Record<string, unknown>> extends PromiseLike<QueryResult<Row>> {
   eq(column: string, value: unknown): QueryBuilder<Row>;
+  limit?(count: number): QueryBuilder<Row>;
 }
 
 interface TableQuery {
+  select<Row = Record<string, unknown>>(columns?: string): QueryBuilder<Row>;
   upsert(payload: Record<string, unknown>, options?: Record<string, unknown>): QueryBuilder;
 }
 
@@ -48,6 +50,17 @@ export async function enqueuePendingEdgeCandidates(
     if (!candidate.sourceChunkId || !candidate.targetChunkId) {
       skipped++;
       warnings.add('graph pending edge skipped: missing candidate chunk id');
+      continue;
+    }
+    if (
+      await hasExistingDeadLetterJob(options.supabase, {
+        instanceId: options.instanceId,
+        sourceChunkId: candidate.sourceChunkId,
+        targetChunkId: candidate.targetChunkId,
+      })
+    ) {
+      skipped++;
+      warnings.add('graph pending edge skipped: existing dead-letter job');
       continue;
     }
 
@@ -89,6 +102,28 @@ export async function enqueuePendingEdgeCandidates(
     skipped,
     warnings: [...warnings],
   };
+}
+
+async function hasExistingDeadLetterJob(
+  supabase: SupabaseLike,
+  input: { instanceId: string; sourceChunkId: string; targetChunkId: string }
+): Promise<boolean> {
+  let query = (supabase.from('fqc_pending_edges') as TableQuery)
+    .select('id, status')
+    .eq('instance_id', input.instanceId)
+    .eq('source_chunk_id', input.sourceChunkId)
+    .eq('target_chunk_id', input.targetChunkId)
+    .eq('status', 'dead_letter');
+
+  if (query.limit) {
+    query = query.limit(1);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(`graph pending edge dead-letter check failed for instance ${input.instanceId}: ${error.message}`);
+  }
+  return Array.isArray(data) ? data.length > 0 : Boolean(data);
 }
 
 function dedupeCandidates(candidates: GraphCandidate[]): GraphCandidate[] {

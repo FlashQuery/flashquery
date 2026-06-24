@@ -557,7 +557,7 @@ BEGIN
   ) THEN
     ALTER TABLE fqc_pending_edges
       ADD CONSTRAINT fqc_pending_edges_status_check
-      CHECK (status IN ('pending', 'processing', 'complete', 'failed', 'dead_letter'));
+      CHECK (status IN ('pending', 'processing', 'complete', 'failed', 'dependency_failed', 'dead_letter'));
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint

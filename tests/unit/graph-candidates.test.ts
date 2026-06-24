@@ -26,6 +26,7 @@ function chain<T>(result: T, eqCalls: Array<[string, unknown]> = []) {
 function makeSupabaseMock(input: {
   sourceRows?: Array<Record<string, unknown>>;
   rpcRows?: Array<Record<string, unknown>>;
+  rpcRowsByCall?: Array<Array<Record<string, unknown>>>;
 }) {
   const rpcCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
   const eqCalls: Array<[string, unknown]> = [];
@@ -39,7 +40,7 @@ function makeSupabaseMock(input: {
   });
   const rpc = vi.fn((name: string, args: Record<string, unknown>) => {
     rpcCalls.push({ name, args });
-    return Promise.resolve({ data: input.rpcRows ?? [], error: null });
+    return Promise.resolve({ data: input.rpcRowsByCall?.[rpcCalls.length - 1] ?? input.rpcRows ?? [], error: null });
   });
   return { client: { from, rpc }, rpcCalls, eqCalls };
 }
@@ -134,6 +135,43 @@ describe('graph candidate selection', () => {
         similarityPercentile: 50,
       },
       changedChunkIds: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+    });
+
+    expect(result.candidates.map((candidate) => candidate.targetChunkId)).toEqual([
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    ]);
+  });
+
+  it('T-U-034 applies percentile selection once across all changed source chunks', async () => {
+    const sourceA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const sourceB = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    const supabase = makeSupabaseMock({
+      sourceRows: [
+        { id: sourceA, document_id: 'doc-a', embedding_primary: '[0.1,0.2,0.3]' },
+        { id: sourceB, document_id: 'doc-f', embedding_primary: '[0.2,0.3,0.4]' },
+      ],
+      rpcRowsByCall: [
+        [
+          { chunk_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', document_id: 'doc-b', similarity: 0.99 },
+          { chunk_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', document_id: 'doc-c', similarity: 0.75 },
+        ],
+        [
+          { chunk_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', document_id: 'doc-d', similarity: 0.74 },
+          { chunk_id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', document_id: 'doc-e', similarity: 0.73 },
+        ],
+      ],
+    });
+
+    const result = await selectGraphEdgeCandidates({
+      ...defaultOptions,
+      supabase: supabase.client,
+      graph: {
+        ...defaultOptions.graph,
+        similarityMode: 'percentile',
+        similarityPercentile: 50,
+      },
+      changedChunkIds: [sourceA, sourceB],
     });
 
     expect(result.candidates.map((candidate) => candidate.targetChunkId)).toEqual([
@@ -237,6 +275,7 @@ describe('graph candidate selection', () => {
 
 function makePendingSupabaseMock() {
   const upserts: Array<{ payload: Record<string, unknown>; options?: Record<string, unknown> }> = [];
+  const rows: Array<Record<string, unknown>> = [];
   const eqCalls: Array<[string, unknown]> = [];
   const chain = <T>(result: T) => {
     const query = {
@@ -249,17 +288,18 @@ function makePendingSupabaseMock() {
     return query;
   };
   const from = vi.fn((table: string) => {
-    if (table !== 'fqc_pending_edges') {
-      return { upsert: vi.fn(() => chain({ data: null, error: null })) };
-    }
-    return {
-      upsert: vi.fn((payload: Record<string, unknown>, options?: Record<string, unknown>) => {
-        upserts.push({ payload, options });
-        return chain({ data: { id: 'pending-edge-1' }, error: null });
-      }),
-    };
+      if (table !== 'fqc_pending_edges') {
+        return { upsert: vi.fn(() => chain({ data: null, error: null })) };
+      }
+      return {
+      select: vi.fn(() => chain({ data: rows, error: null })),
+        upsert: vi.fn((payload: Record<string, unknown>, options?: Record<string, unknown>) => {
+          upserts.push({ payload, options });
+          return chain({ data: { id: 'pending-edge-1' }, error: null });
+        }),
+      };
   });
-  return { client: { from }, upserts, eqCalls };
+  return { client: { from }, upserts, eqCalls, rows };
 }
 
 describe('graph pending edge enqueue', () => {
@@ -310,5 +350,34 @@ describe('graph pending edge enqueue', () => {
         onConflict: 'instance_id,source_chunk_id,target_chunk_id',
       }),
     });
+  });
+
+  it('T-U-042 does not resurrect an existing dead-letter job during candidate enqueue', async () => {
+    const supabase = makePendingSupabaseMock();
+    supabase.rows.push({
+      instance_id: 'inst-graph',
+      source_chunk_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      target_chunk_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      status: 'dead_letter',
+    });
+
+    const result = await enqueuePendingEdgeCandidates({
+      supabase: supabase.client,
+      instanceId: 'inst-graph',
+      candidates: [
+        {
+          sourceChunkId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          targetChunkId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          sourceDocumentId: 'doc-a',
+          targetDocumentId: 'doc-b',
+          similarity: 0.91,
+          selectionMode: 'threshold',
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({ inserted: 0, updated: 0, skipped: 1 });
+    expect(result.warnings).toContain('graph pending edge skipped: existing dead-letter job');
+    expect(supabase.upserts).toHaveLength(0);
   });
 });

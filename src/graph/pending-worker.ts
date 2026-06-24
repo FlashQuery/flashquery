@@ -3,6 +3,7 @@ import type { GraphRuntimeConfig } from './config.js';
 import type { GraphRelationDefinition } from './vocabulary.js';
 import { DEFAULT_GRAPH_RELATIONS } from './vocabulary.js';
 import type { ClassifiedGraphEdgeDraft, ClassifyGraphEdgeCandidateResult } from './edge-analysis.js';
+import { analyzeGraphNode } from './node-analysis.js';
 import { completeStaleGraphEdgeReanalysis } from './staleness.js';
 import type { GraphPgClient } from './structural.js';
 import type { FlashQueryConfig } from '../config/types.js';
@@ -11,7 +12,13 @@ import { logger as defaultLogger } from '../logging/logger.js';
 import { getIsShuttingDown as defaultGetIsShuttingDown } from '../server/shutdown-state.js';
 import { createPgClientIPv4 } from '../utils/pg-client.js';
 
-export type PendingGraphEdgeStatus = 'pending' | 'processing' | 'complete' | 'failed' | 'dead_letter';
+export type PendingGraphEdgeStatus =
+  | 'pending'
+  | 'processing'
+  | 'complete'
+  | 'failed'
+  | 'dependency_failed'
+  | 'dead_letter';
 
 export interface PendingGraphEdgeRow {
   id: string;
@@ -75,6 +82,12 @@ export interface ProcessPendingGraphEdgesForConfigOptions {
 interface PendingGraphEdgeNodes {
   sourceNode: AnalyzedGraphNodeRef | null;
   targetNode: AnalyzedGraphNodeRef | null;
+}
+
+interface GraphNodeChunkRow {
+  id?: unknown;
+  content?: unknown;
+  content_hash?: unknown;
 }
 
 type WorkerClassifyResult =
@@ -149,7 +162,10 @@ export async function processPendingGraphEdges(
     try {
       assertInstance(row, options.instanceId);
       await markProcessing(options.supabase, row, options.instanceId, now());
-      const nodes = await loadAnalyzedNodes(options.supabase, options.instanceId, row);
+      let nodes = await loadAnalyzedNodes(options.supabase, options.instanceId, row);
+      if (!options.classifyCandidate) {
+        nodes = await analyzeMissingPendingNodes(options, row, nodes, now());
+      }
       const classified = await classifyPendingRow(options, row, nodes);
 
       if (classified.status === 'classified') {
@@ -181,6 +197,13 @@ export async function processPendingGraphEdges(
       if (classified.status === 'missing_resolver') {
         result.skipped++;
         result.warnings.push('graph_classification_skipped_missing_resolver');
+      }
+
+      if (classified.status === 'dependency_failed') {
+        await markDependencyFailed(options.supabase, row, options.instanceId, classified, now());
+        result.skipped++;
+        result.warnings.push('graph_classification_skipped_node_analysis_required');
+        continue;
       }
 
       throw classifyFailureError(classified);
@@ -242,8 +265,8 @@ export async function processPendingGraphEdgesForConfig(
         now: options.now,
         llmClient,
         graphConfig,
-        relations: DEFAULT_GRAPH_RELATIONS,
-        promptVersion: 'default',
+        relations: graphConfig.resolvedRelations ?? DEFAULT_GRAPH_RELATIONS,
+        promptVersion: graphPromptVersion(graphConfig),
       });
     } finally {
       await pgClient.end().catch(() => undefined);
@@ -258,8 +281,8 @@ export async function processPendingGraphEdgesForConfig(
     now: options.now,
     llmClient,
     graphConfig,
-    relations: DEFAULT_GRAPH_RELATIONS,
-    promptVersion: 'default',
+    relations: graphConfig.resolvedRelations ?? DEFAULT_GRAPH_RELATIONS,
+    promptVersion: graphPromptVersion(graphConfig),
   });
 }
 
@@ -353,6 +376,82 @@ async function loadAnalyzedNodes(
   };
 }
 
+async function analyzeMissingPendingNodes(
+  options: ProcessPendingGraphEdgesOptions,
+  row: PendingGraphEdgeRow,
+  nodes: PendingGraphEdgeNodes,
+  now: Date
+): Promise<PendingGraphEdgeNodes> {
+  if (!options.llmClient || !options.graphConfig || !options.promptVersion) {
+    return nodes;
+  }
+
+  const missingIds = [
+    ...(isNodeReadyForPending(nodes.sourceNode) ? [] : [row.source_chunk_id]),
+    ...(isNodeReadyForPending(nodes.targetNode) ? [] : [row.target_chunk_id]),
+  ];
+  if (missingIds.length === 0) {
+    return nodes;
+  }
+
+  const chunks = await loadPendingNodeChunks(options.supabase, options.instanceId, missingIds);
+  const analyzedNodes = new Map<string, AnalyzedGraphNodeRef>();
+  for (const chunkId of missingIds) {
+    const chunk = chunks.get(chunkId);
+    if (!chunk) continue;
+    const analyzed = await analyzeGraphNode({
+      supabase: options.supabase as Parameters<typeof analyzeGraphNode>[0]['supabase'],
+      instanceId: options.instanceId,
+      chunk,
+      llmClient: options.llmClient,
+      graphConfig: options.graphConfig,
+      promptVersion: options.promptVersion,
+      analyzedAt: now,
+    });
+    if (analyzed.status === 'analyzed') {
+      analyzedNodes.set(chunkId, {
+        chunk_id: analyzed.node.chunk_id,
+        key_claims: analyzed.node.key_claims,
+        analyzed_at: analyzed.node.analyzed_at,
+        analyzed_by_model: analyzed.node.analyzed_by_model,
+      });
+    }
+  }
+
+  return {
+    sourceNode: analyzedNodes.get(row.source_chunk_id) ?? nodes.sourceNode,
+    targetNode: analyzedNodes.get(row.target_chunk_id) ?? nodes.targetNode,
+  };
+}
+
+async function loadPendingNodeChunks(
+  supabase: SupabaseLike,
+  instanceId: string,
+  chunkIds: string[]
+): Promise<Map<string, { id: string; content: string; contentHash: string }>> {
+  const query = (supabase.from('fqc_chunks') as TableQuery)
+    .select<GraphNodeChunkRow>('id, content, content_hash')
+    .eq('instance_id', instanceId);
+
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(`graph node chunk query failed: ${error.message ?? 'unknown error'}`);
+  }
+
+  const wanted = new Set(chunkIds);
+  const chunks = new Map<string, { id: string; content: string; contentHash: string }>();
+  for (const row of rowsFrom<GraphNodeChunkRow>(data)) {
+    const id = stringScalar(row.id);
+    if (!wanted.has(id)) continue;
+    chunks.set(id, {
+      id,
+      content: stringScalar(row.content),
+      contentHash: stringScalar(row.content_hash),
+    });
+  }
+  return chunks;
+}
+
 async function classifyPendingRow(
   options: ProcessPendingGraphEdgesOptions,
   row: PendingGraphEdgeRow,
@@ -429,6 +528,35 @@ async function markComplete(
     .eq('instance_id', instanceId);
   if (error) {
     throw new Error(`graph pending edge completion update failed: ${error.message ?? 'unknown error'}`);
+  }
+}
+
+async function markDependencyFailed(
+  supabase: SupabaseLike,
+  row: PendingGraphEdgeRow,
+  instanceId: string,
+  classified: Extract<WorkerClassifyResult, { status: 'dependency_failed' }>,
+  now: Date
+): Promise<void> {
+  const { error } = await (supabase.from('fqc_pending_edges') as TableQuery)
+    .update({
+      status: 'dependency_failed',
+      attempt_count: row.attempt_count ?? 0,
+      result: {
+        status: 'dependency_failed',
+        code: classified.failure.code,
+        source_ready: classified.failure.source_ready,
+        target_ready: classified.failure.target_ready,
+        retryable: classified.failure.retryable,
+      },
+      last_error: classified.failure.message,
+      next_retry_at: null,
+      updated_at: now.toISOString(),
+    })
+    .eq('id', row.id)
+    .eq('instance_id', instanceId);
+  if (error) {
+    throw new Error(`graph pending edge dependency update failed: ${error.message ?? 'unknown error'}`);
   }
 }
 
@@ -514,6 +642,18 @@ function classifyFailureError(result: Exclude<WorkerClassifyResult, { status: 'c
 function retryDue(row: PendingGraphEdgeRow, now: Date): boolean {
   if (!row.next_retry_at) return true;
   return new Date(row.next_retry_at).getTime() <= now.getTime();
+}
+
+function isNodeReadyForPending(node: AnalyzedGraphNodeRef | null): boolean {
+  return Boolean(node && typeof node.analyzed_at === 'string' && Array.isArray(node.key_claims));
+}
+
+function graphPromptVersion(graphConfig: GraphRuntimeConfig): string {
+  return graphConfig.resolvedPrompts?.find((prompt) => prompt.id === 'classify_edge')?.version ?? '1';
+}
+
+function stringScalar(value: unknown): string {
+  return typeof value === 'string' ? value : '';
 }
 
 function rowsFrom<Row>(data: Row[] | Row | null | undefined): Row[] {

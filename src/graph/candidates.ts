@@ -170,10 +170,11 @@ export async function selectGraphEdgeCandidates(
         ];
       });
 
-    candidates.push(...selectByMode(eligibleRows, graph));
+    candidates.push(...eligibleRows);
   }
 
-  const sorted = sortCandidates(dedupeCandidates(candidates));
+  const selected = selectByMode(dedupeCandidates(candidates), graph);
+  const sorted = sortCandidates(selected);
   const capped = sorted.slice(0, maxJobs);
   const capExceededCount = Math.max(0, sorted.length - capped.length);
   if (capExceededCount > 0) {
@@ -253,7 +254,7 @@ async function callChunkMatchRpc(
   if (error) {
     throw new Error(`graph candidate chunk match failed: ${error.message}`);
   }
-  return (Array.isArray(data) ? data : data ? [data] : []) as MatchChunkRow[];
+  return Array.isArray(data) ? data : data ? [data] : [];
 }
 
 function selectByMode(candidates: GraphCandidate[], graph: GraphRuntimeConfig): GraphCandidate[] {

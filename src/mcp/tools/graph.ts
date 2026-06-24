@@ -101,18 +101,19 @@ export function registerGraphTools(server: McpServer, config: FlashQueryConfig):
                 classification_enabled:
                   graphConfig.classificationPurpose !== undefined ||
                   graphConfig.classificationModel !== undefined,
-                communities: 'seeded_read_only',
+                classification_resolver:
+                  graphConfig.classificationPurpose ??
+                  (graphConfig.classificationModel ? `model:${graphConfig.classificationModel}` : 'disabled'),
               },
             }
           );
         });
-      } catch (err: unknown) {
+      } catch {
         return graphRuntimeError({
           action: input.action,
           message: 'Graph query failed at runtime.',
           details: {
             code: 'graph_runtime_error',
-            cause: err instanceof Error ? err.message : String(err),
           },
         });
       }

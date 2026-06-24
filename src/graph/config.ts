@@ -1,4 +1,6 @@
 import type { FlashQueryConfig } from '../config/types.js';
+import type { GraphPromptDefinition } from './prompts.js';
+import type { GraphRelationDefinition } from './vocabulary.js';
 
 export interface GraphRuntimeConfig {
   enabled: boolean;
@@ -13,6 +15,8 @@ export interface GraphRuntimeConfig {
   relations?: string;
   prompts?: string;
   promptOverrides?: Record<string, unknown>;
+  resolvedRelations?: GraphRelationDefinition[];
+  resolvedPrompts?: GraphPromptDefinition[];
 }
 
 export function graphDisabledConfig(): GraphRuntimeConfig {

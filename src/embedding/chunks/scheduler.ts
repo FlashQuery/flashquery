@@ -16,7 +16,6 @@ import { createPgClientIPv4 } from '../../utils/pg-client.js';
 import {
   documentChunkEmbeddingTarget,
   scheduleBackgroundEmbeddingsForActiveEntries,
-  type EmbeddingWarning,
 } from '../background-embed.js';
 import { diffAndPersistDocumentChunks } from './store.js';
 import type { ParsedChunk } from './types.js';
@@ -269,6 +268,7 @@ async function enqueueGraphCandidateWork(input: {
       instanceId: input.config.instance.id,
       changedChunkIds: input.changedChunkIds,
       graph: input.config.graph,
+      relations: input.config.graph?.resolvedRelations,
     });
     if (selected.candidates.length === 0) {
       return {

@@ -219,16 +219,20 @@ function buildClassifiedEdge(options: {
   relations: GraphRelationDefinition[];
   model: string;
 }): ClassifiedGraphEdgeDraft {
+  const relation = options.relations.find((item) => item.name === options.edge.relation);
+  const requiresClaimSupport = relation?.requiresClaimSupport !== false;
   const errors = [
     ...claimReferenceErrors(
       'source_claims_referenced',
       options.edge.source_claims_referenced,
-      options.sourceClaimCount
+      options.sourceClaimCount,
+      requiresClaimSupport
     ),
     ...claimReferenceErrors(
       'target_claims_referenced',
       options.edge.target_claims_referenced,
-      options.targetClaimCount
+      options.targetClaimCount,
+      requiresClaimSupport
     ),
   ];
 
@@ -261,9 +265,14 @@ function buildClassifiedEdge(options: {
   };
 }
 
-function claimReferenceErrors(field: string, refs: number[], claimCount: number): string[] {
+function claimReferenceErrors(
+  field: string,
+  refs: number[],
+  claimCount: number,
+  requiresClaimSupport: boolean
+): string[] {
   const errors: string[] = [];
-  if (refs.length === 0) {
+  if (requiresClaimSupport && refs.length === 0) {
     errors.push(`${field} must reference at least one key claim`);
   }
   for (const ref of refs) {

@@ -247,7 +247,50 @@ describe('graph query helpers', () => {
       similarity_threshold: 0.72,
       similarity_percentile: 91,
       classification_enabled: true,
+      classification_resolver: 'configured',
       communities: 'seeded_read_only',
     });
+  });
+
+  it('T-U-069 derives schema community state from graph rows when not overridden', async () => {
+    const graph = seedGraph();
+    graph.nodes[0] = {
+      ...graph.nodes[0],
+      community_id: 'community-a',
+      community_label: 'Community A',
+      community_summary: 'A detected community.',
+    };
+    const result = await queryGraph(
+      createInMemoryGraphQueryStore(graph),
+      { instance_id: 'instance-a', action: 'schema' },
+      {
+        relations: DEFAULT_GRAPH_RELATIONS,
+        graph: { enabled: true, classification_enabled: false },
+      }
+    );
+
+    const payload = parseResult(result) as { data: { features: Record<string, unknown> } };
+    expect(payload.data.features).toMatchObject({
+      classification_resolver: 'disabled',
+      communities: 'detected:1',
+    });
+  });
+
+  it('T-U-062 bounds runtime error payloads without raw causes or secrets', async () => {
+    const result = await queryGraph(
+      {
+        listNodes: async () => {
+          throw new Error('postgres://user:password@example.test/db failed with sk-live-123');
+        },
+        listEdges: async () => [],
+      },
+      { instance_id: 'instance-a', action: 'stats' }
+    );
+
+    const serialized = JSON.stringify(parseResult(result));
+    expect(serialized).toContain('graph_runtime_error');
+    expect(serialized).not.toContain('postgres://');
+    expect(serialized).not.toContain('password');
+    expect(serialized).not.toContain('sk-live-123');
   });
 });

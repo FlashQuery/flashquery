@@ -34,9 +34,22 @@ describe('graph lint category builders', () => {
     ];
     const activeFiltered = edges.filter((edge) => !(edge.source_status !== 'active' && edge.target_status !== 'active'));
     const findings = lintTesting.contradictionFindings([], activeFiltered);
+    const integrity = lintTesting.integrityFindings(activeFiltered, false);
 
     expect(findings).toHaveLength(1);
     expect(findings[0]?.edgeIds).toEqual(['e2']);
+    expect(integrity).toEqual([
+      expect.objectContaining({
+        rule: 'LINT-I2',
+        severity: 'info',
+        edgeIds: ['e2'],
+        item: expect.objectContaining({
+          fix_type: 'active_inactive_reference',
+          source_status: 'active',
+          target_status: 'archived',
+        }),
+      }),
+    ]);
   });
 
   it('T-U-046 graph_lint_prune rejects missing retention parameters before touching storage', async () => {
@@ -92,11 +105,12 @@ describe('graph lint category builders', () => {
 
   it('T-U-066 enumerates question lifecycle fields', () => {
     const findings = lintTesting.questionFindings([
-      { chunk_id: 'q1', document_id: 'doc', document_path: '/q.md', document_status: 'active', heading_path: 'Q', content: 'Question?', provenance_basis: null, question_status: 'resolved', question_resolution: 'Done', community_id: 'comm', community_label: 'Community', community_summary: 'Summary', analyzed_at: null },
-    ], []);
+      { chunk_id: 'q1', document_id: 'doc', document_path: '/q.md', document_status: 'active', heading_path: 'Q', content: 'Question?', provenance_basis: null, question_status: 'resolved', question_resolution: 'Done', community_id: 'comm', community_label: 'Community', community_summary: 'Summary', analyzed_at: '2026-06-20T00:00:00.000Z' },
+    ], [], new Date('2026-06-24T00:00:00.000Z'));
 
     expect(findings[0]?.item).toMatchObject({
       question_status: 'resolved',
+      age_days: 4,
       downstream_impact_count: 0,
       stale: false,
       unfolded_dependents: [],

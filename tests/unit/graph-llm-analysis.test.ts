@@ -257,6 +257,87 @@ describe('graph edge analysis', () => {
     expect(result.error.message).toMatch(/target_claims_referenced/i);
   });
 
+  it('T-U-078 allows empty claim references only for relations that do not require claim support', async () => {
+    const result = await classifyGraphEdgeCandidate({
+      instanceId: 'inst',
+      sourceChunkId: 'source',
+      targetChunkId: 'target',
+      sourceNode: {
+        chunk_id: 'source',
+        key_claims: ['Source claim'],
+        analyzed_at: '2026-06-24T00:00:00.000Z',
+      },
+      targetNode: {
+        chunk_id: 'target',
+        key_claims: ['Target claim'],
+        analyzed_at: '2026-06-24T00:00:00.000Z',
+      },
+      llmClient: mockLlm(
+        edgePayload({
+          edges: [
+            {
+              relation: 'summarizes',
+              reasoning: 'The source summarizes the target at a higher level.',
+              source_claims_referenced: [],
+              target_claims_referenced: [],
+              confidence_score: 0.82,
+              metadata: { llm_assessment: 'moderate', low_confidence_flag: false },
+            },
+          ],
+        })
+      ),
+      graphConfig: { enabled: true, classificationPurpose: 'graph-classifier' },
+      relations: DEFAULT_GRAPH_RELATIONS,
+      promptVersion: 'edge-v1',
+    });
+
+    expect(result.status).toBe('classified');
+    if (result.status !== 'classified') throw new Error('expected classified');
+    expect(result.edges[0]).toMatchObject({
+      relation: 'summarizes',
+      sourceClaimsReferenced: [],
+      targetClaimsReferenced: [],
+    });
+  });
+
+  it('T-U-078 still rejects empty claim references for relations that require claim support', async () => {
+    const result = await classifyGraphEdgeCandidate({
+      instanceId: 'inst',
+      sourceChunkId: 'source',
+      targetChunkId: 'target',
+      sourceNode: {
+        chunk_id: 'source',
+        key_claims: ['Source claim'],
+        analyzed_at: '2026-06-24T00:00:00.000Z',
+      },
+      targetNode: {
+        chunk_id: 'target',
+        key_claims: ['Target claim'],
+        analyzed_at: '2026-06-24T00:00:00.000Z',
+      },
+      llmClient: mockLlm(
+        edgePayload({
+          edges: [
+            {
+              relation: 'contradicts',
+              reasoning: 'The source conflicts with the target.',
+              source_claims_referenced: [],
+              target_claims_referenced: [],
+              confidence_score: 0.82,
+              metadata: { llm_assessment: 'moderate', low_confidence_flag: false },
+            },
+          ],
+        })
+      ),
+      graphConfig: { enabled: true, classificationPurpose: 'graph-classifier' },
+      relations: DEFAULT_GRAPH_RELATIONS,
+      promptVersion: 'edge-v1',
+    });
+
+    expect(result.status).toBe('validation_failed');
+    expect(result.error.message).toMatch(/must reference at least one key claim/);
+  });
+
   it('T-U-078 rejects freeform rubric and malformed low-confidence flags at schema parse', () => {
     const result = parseGraphEdgeClassificationPayload(
       edgePayload({

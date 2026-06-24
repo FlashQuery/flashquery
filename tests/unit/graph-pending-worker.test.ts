@@ -27,6 +27,7 @@ function fakeSupabase(rows: PendingGraphEdgeRow[]) {
   const updates: Array<{ table: string; payload: Record<string, unknown>; filters: Record<string, unknown> }> = [];
   const inserts: Array<{ table: string; rows: Record<string, unknown>[] }> = [];
   const deletes: Array<{ table: string; filters: Record<string, unknown> }> = [];
+  const graphNodes: Array<Record<string, unknown>> = [];
 
   const applyFilters = <T extends Record<string, unknown>>(inputRows: T[], filters: Record<string, unknown>) =>
     inputRows.filter((item) => Object.entries(filters).every(([key, value]) => item[key] === value));
@@ -91,18 +92,21 @@ function fakeSupabase(rows: PendingGraphEdgeRow[]) {
   function tableRows(table: string): Array<Record<string, unknown>> {
     if (table === 'fqc_pending_edges') return rows as unknown as Array<Record<string, unknown>>;
     if (table === 'fqc_graph_nodes') {
+      return graphNodes;
+    }
+    if (table === 'fqc_chunks') {
       return [
         {
-          chunk_id: '11111111-1111-4111-8111-111111111111',
+          id: '11111111-1111-4111-8111-111111111111',
           instance_id: 'graph-inst',
-          key_claims: ['source claim'],
-          analyzed_at: '2026-06-24T00:00:00.000Z',
+          content: 'Source chunk content',
+          content_hash: 'source-hash',
         },
         {
-          chunk_id: '22222222-2222-4222-8222-222222222222',
+          id: '22222222-2222-4222-8222-222222222222',
           instance_id: 'graph-inst',
-          key_claims: ['target claim'],
-          analyzed_at: '2026-06-24T00:00:00.000Z',
+          content: 'Target chunk content',
+          content_hash: 'target-hash',
         },
       ];
     }
@@ -113,12 +117,19 @@ function fakeSupabase(rows: PendingGraphEdgeRow[]) {
     updates,
     inserts,
     deletes,
+    graphNodes,
     from(table: string) {
       return {
         select: () => makeBuilder(table, 'select'),
         update: (payload: Record<string, unknown>) => makeBuilder(table, 'update', payload),
         insert: (payload: Record<string, unknown> | Array<Record<string, unknown>>) =>
           makeBuilder(table, 'insert', payload),
+        upsert: (payload: Record<string, unknown>) => {
+          const existing = graphNodes.find((node) => node.chunk_id === payload.chunk_id);
+          if (existing) Object.assign(existing, payload);
+          else graphNodes.push(payload);
+          return { select: () => ({ single: async () => ({ data: payload, error: null }) }) };
+        },
         delete: () => makeBuilder(table, 'delete'),
       };
     },
@@ -128,6 +139,20 @@ function fakeSupabase(rows: PendingGraphEdgeRow[]) {
 describe('graph pending edge worker', () => {
   it('T-U-041 transient failure increments attempts and schedules retry', async () => {
     const supabase = fakeSupabase([row()]);
+    supabase.graphNodes.push(
+      {
+        chunk_id: '11111111-1111-4111-8111-111111111111',
+        instance_id: 'graph-inst',
+        key_claims: ['source claim'],
+        analyzed_at: '2026-06-24T00:00:00.000Z',
+      },
+      {
+        chunk_id: '22222222-2222-4222-8222-222222222222',
+        instance_id: 'graph-inst',
+        key_claims: ['target claim'],
+        analyzed_at: '2026-06-24T00:00:00.000Z',
+      }
+    );
 
     const result = await processPendingGraphEdges({
       supabase,
@@ -157,6 +182,20 @@ describe('graph pending edge worker', () => {
 
   it('T-U-042 max attempts moves job to dead letter and stops automatic retry', async () => {
     const supabase = fakeSupabase([row({ attempt_count: 2, max_attempts: 3 })]);
+    supabase.graphNodes.push(
+      {
+        chunk_id: '11111111-1111-4111-8111-111111111111',
+        instance_id: 'graph-inst',
+        key_claims: ['source claim'],
+        analyzed_at: '2026-06-24T00:00:00.000Z',
+      },
+      {
+        chunk_id: '22222222-2222-4222-8222-222222222222',
+        instance_id: 'graph-inst',
+        key_claims: ['target claim'],
+        analyzed_at: '2026-06-24T00:00:00.000Z',
+      }
+    );
 
     const result = await processPendingGraphEdges({
       supabase,
@@ -192,6 +231,20 @@ describe('graph pending edge worker', () => {
       row({ id: 'pending-1' }),
       row({ id: 'pending-2', source_chunk_id: '33333333-3333-4333-8333-333333333333' }),
     ]);
+    supabase.graphNodes.push(
+      {
+        chunk_id: '11111111-1111-4111-8111-111111111111',
+        instance_id: 'graph-inst',
+        key_claims: ['source claim'],
+        analyzed_at: '2026-06-24T00:00:00.000Z',
+      },
+      {
+        chunk_id: '22222222-2222-4222-8222-222222222222',
+        instance_id: 'graph-inst',
+        key_claims: ['target claim'],
+        analyzed_at: '2026-06-24T00:00:00.000Z',
+      }
+    );
     let calls = 0;
 
     const result = await processPendingGraphEdges({
@@ -230,6 +283,20 @@ describe('graph pending edge worker', () => {
 
   it('uses stale completion after successful classification when a graph client is provided', async () => {
     const supabase = fakeSupabase([row()]);
+    supabase.graphNodes.push(
+      {
+        chunk_id: '11111111-1111-4111-8111-111111111111',
+        instance_id: 'graph-inst',
+        key_claims: ['source claim'],
+        analyzed_at: '2026-06-24T00:00:00.000Z',
+      },
+      {
+        chunk_id: '22222222-2222-4222-8222-222222222222',
+        instance_id: 'graph-inst',
+        key_claims: ['target claim'],
+        analyzed_at: '2026-06-24T00:00:00.000Z',
+      }
+    );
     const graphClient = {
       query: vi.fn(async () => ({ rows: [] })),
     };
@@ -247,5 +314,122 @@ describe('graph pending edge worker', () => {
       '11111111-1111-4111-8111-111111111111',
       '22222222-2222-4222-8222-222222222222',
     ]);
+  });
+
+  it('T-U-037 analyzes missing graph nodes before classifying a pending edge', async () => {
+    const supabase = fakeSupabase([row()]);
+    const llmClient = {
+      completeByPurpose: vi
+        .fn()
+        .mockResolvedValueOnce({
+          text: JSON.stringify({
+            key_claims: ['Source claim'],
+            chunk_summary: 'Source summary.',
+            provenance_basis: 'source text',
+            question_status: null,
+            question_resolution: null,
+            certainty_level: 'high',
+            staleness_risk: 'low',
+            external_refs: [],
+            temporal_markers: [],
+            analyzed_content_hash: 'source-hash',
+          }),
+          modelName: 'graph-model',
+          providerName: 'mock',
+          inputTokens: 1,
+          outputTokens: 1,
+          latencyMs: 1,
+        })
+        .mockResolvedValueOnce({
+          text: JSON.stringify({
+            key_claims: ['Target claim'],
+            chunk_summary: 'Target summary.',
+            provenance_basis: 'source text',
+            question_status: null,
+            question_resolution: null,
+            certainty_level: 'high',
+            staleness_risk: 'low',
+            external_refs: [],
+            temporal_markers: [],
+            analyzed_content_hash: 'target-hash',
+          }),
+          modelName: 'graph-model',
+          providerName: 'mock',
+          inputTokens: 1,
+          outputTokens: 1,
+          latencyMs: 1,
+        })
+        .mockResolvedValueOnce({
+          text: JSON.stringify({ edges: [] }),
+          modelName: 'graph-model',
+          providerName: 'mock',
+          inputTokens: 1,
+          outputTokens: 1,
+          latencyMs: 1,
+        }),
+      complete: vi.fn(),
+    };
+
+    const result = await processPendingGraphEdges({
+      supabase,
+      instanceId: 'graph-inst',
+      now: () => new Date('2026-06-24T00:00:00.000Z'),
+      llmClient: llmClient as never,
+      graphConfig: { enabled: true, classificationPurpose: 'graph-classifier' },
+      relations: [],
+      promptVersion: 'prompt-v1',
+    });
+
+    expect(result).toMatchObject({ processed: 1, succeeded: 1, failed: 0 });
+    expect(supabase.graphNodes).toEqual([
+      expect.objectContaining({
+        chunk_id: '11111111-1111-4111-8111-111111111111',
+        key_claims: ['Source claim'],
+        analyzed_by_model: 'graph-model@prompt-v1',
+      }),
+      expect.objectContaining({
+        chunk_id: '22222222-2222-4222-8222-222222222222',
+        key_claims: ['Target claim'],
+        analyzed_by_model: 'graph-model@prompt-v1',
+      }),
+    ]);
+    expect(llmClient.completeByPurpose).toHaveBeenCalledTimes(3);
+  });
+
+  it('T-U-038 records typed dependency failure without consuming retry attempts', async () => {
+    const supabase = fakeSupabase([row()]);
+
+    const result = await processPendingGraphEdges({
+      supabase,
+      instanceId: 'graph-inst',
+      classifyCandidate: vi.fn(async () => ({
+        status: 'dependency_failed',
+        failure: {
+          code: 'graph_node_analysis_required',
+          retryable: true,
+          source_ready: false,
+          target_ready: true,
+          message: 'Source and target graph node analysis must succeed before edge classification.',
+        },
+      })),
+    });
+
+    expect(result).toMatchObject({ failed: 0, skipped: 1, dead_letter: 0 });
+    expect(supabase.updates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'dependency_failed',
+            attempt_count: 0,
+            result: expect.objectContaining({
+              status: 'dependency_failed',
+              code: 'graph_node_analysis_required',
+              source_ready: false,
+              target_ready: true,
+            }),
+          }),
+        }),
+      ])
+    );
   });
 });

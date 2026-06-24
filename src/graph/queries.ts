@@ -132,6 +132,7 @@ export interface GraphQueryContext {
     similarity_threshold?: number;
     similarity_percentile?: number;
     classification_enabled?: boolean;
+    classification_resolver?: string;
     communities?: string;
   };
 }
@@ -273,7 +274,7 @@ export async function queryGraph(
       case 'stats':
         return graphToolResult(action, statsAction(rows));
       case 'schema':
-        return graphToolResult(action, schemaAction(relations, context));
+        return graphToolResult(action, schemaAction(rows, relations, context));
       case 'contradictions':
         return graphToolResult(action, contradictionsAction(rows, input, relations, limit));
       case 'impact':
@@ -291,10 +292,11 @@ export async function queryGraph(
       case 'list_communities':
         return graphToolResult(action, listCommunitiesAction(rows, input, limit));
     }
-  } catch (err: unknown) {
+  } catch {
     return graphRuntimeError({
       action,
-      message: err instanceof Error ? err.message : String(err),
+      message: 'Graph query failed at runtime.',
+      details: { code: 'graph_runtime_error' },
     });
   }
 }
@@ -553,6 +555,7 @@ function statsAction(rows: LoadedGraphRows): {
 }
 
 function schemaAction(
+  rows: LoadedGraphRows,
   relations: GraphRelationDefinition[],
   context: GraphQueryContext
 ): {
@@ -569,9 +572,11 @@ function schemaAction(
     similarity_threshold: number;
     similarity_percentile: number;
     classification_enabled: boolean;
+    classification_resolver: string;
     communities: string;
   };
 } {
+  const communityCount = new Set(rows.nodes.map((node) => node.community_id).filter(Boolean)).size;
   return {
     relations: relations.map((relation) => ({
       name: relation.name,
@@ -586,7 +591,12 @@ function schemaAction(
       similarity_threshold: context.graph?.similarity_threshold ?? 0.78,
       similarity_percentile: context.graph?.similarity_percentile ?? 95,
       classification_enabled: context.graph?.classification_enabled ?? false,
-      communities: context.graph?.communities ?? 'seeded_read_only',
+      classification_resolver:
+        context.graph?.classification_resolver ??
+        (context.graph?.classification_enabled ? 'configured' : 'disabled'),
+      communities:
+        context.graph?.communities ??
+        (communityCount > 0 ? `detected:${communityCount}` : 'not_detected'),
     },
   };
 }
