@@ -200,15 +200,15 @@ const D = {
     'get_llm_usage({ "purpose": "summarize", "limit": 20 })'
   ),
   maintainVault: description(
-    'Run vault maintenance actions such as sync, repair, or status checks.',
-    'Use when an operator needs administrative vault maintenance through the dedicated system tool.',
+    'Run vault maintenance actions such as sync, repair, graph lint, graph worker, lifecycle, or status checks.',
+    'Use when an operator needs administrative vault maintenance, including graph_lint, graph_lint_status, graph_lint_prune, or graph_worker, through the dedicated system tool.',
     'Do not use when a normal document, memory, or record tool can answer the request directly.',
     'maintain_vault({ "action": "status" })'
   ),
   queryGraph: description(
     'Read the optional document graph through bounded node, edge, traversal, provenance, diagnostic, and seeded community actions.',
-    'Use when graph.enabled is true and you need graph neighbors, paths, subgraphs, stats, schema, provenance chains, weak/ungrounded edges, contradictions, or seeded community metadata.',
-    'Do not use to mutate graph state, run graph maintenance, or perform community detection; graph maintenance belongs under maintain_vault and Phase 173 owns community detection.',
+    'Use when graph.enabled is true and you need graph neighbors, paths, subgraphs, stats, schema, provenance chains, weak/ungrounded edges, contradictions, or already-populated community metadata.',
+    'Do not use to mutate graph state, run graph maintenance, execute graph lint/worker jobs, or refresh communities; those operator workflows belong under maintain_vault.',
     'query_graph({ "action": "neighbors", "chunk_id": "00000000-0000-0000-0000-000000000000", "max_depth": 1 })'
   ),
   manageDirectory: description(

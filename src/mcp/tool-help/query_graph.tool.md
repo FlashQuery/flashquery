@@ -27,7 +27,8 @@ Read the optional document graph through bounded public MCP actions.
 
 Use `query_graph` when `graph.enabled:true` and you need graph details for chunks
 that already exist in FlashQuery. The tool is read-only. It does not run graph
-maintenance, graph lint, LLM classification, or community detection.
+maintenance, graph lint, LLM classification, graph worker jobs, or community
+detection. Use `maintain_vault` for those operator workflows.
 
 Supported actions:
 
@@ -45,11 +46,19 @@ failure and does not set `isError:true`.
 
 Partial graph behavior:
 
-Phase 172 reads deterministic structural graph rows and nullable seeded graph
-metadata. Tier 2/Tier 3 classification, lint execution, and community detection
-are Phase 173 work. Until those later jobs populate data, compound/community
-actions return contract-shaped empty or not-applicable results instead of
-inventing graph state.
+Structural reads work with Tier 1-only graph data. When optional classification
+or community metadata has not been populated yet, compound/community actions
+return contract-shaped empty or not-applicable results instead of inventing
+graph state. Graph worker warnings such as missing resolver or skipped LLM
+classification indicate skipped enrichment, not a broken read contract.
+
+Maintenance boundary:
+
+Graph lint, lint status/pruning, graph worker execution, and community refreshes
+are operator maintenance workflows. Run them through `maintain_vault` actions
+such as `graph_lint`, `graph_lint_status`, `graph_lint_prune`, and
+`graph_worker`. `query_graph` only reads the rows those workflows have already
+written.
 
 Bounds and filters:
 
