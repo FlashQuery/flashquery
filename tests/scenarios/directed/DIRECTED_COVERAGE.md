@@ -11,6 +11,19 @@ This document defines every behavioral coverage point we want to verify through 
 
 ---
 
+## Graph Document Intelligence
+
+Directed public graph workflows for Phase 173 hardening.
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| D-GR-01 | Public write/sync/query workflow exposes deterministic structural graph references edges through `query_graph`. | test_graph_structural_edges | 2026-06-24 | 2026-06-24 |
+| D-GR-02 | Public `query_graph` surface exposes graph actions plus disabled/error envelopes through MCP. | test_query_graph_public_surface | 2026-06-24 | 2026-06-24 |
+| D-GR-03 | Public archive workflow preserves graph state and exposes inactive graph targets only when requested. | test_graph_archive_staleness | 2026-06-24 | 2026-06-24 |
+| D-GR-04 | `get_document` returns graph summary, graph-primary connections, and chunk drill-down IDs. | test_graph_get_document_summary | 2026-06-24 | 2026-06-24 |
+| D-GR-05 | Public `fq_processing` transitions keep graph summaries bounded for full, embedded, and none levels. | test_graph_processing_levels | 2026-06-24 | 2026-06-24 |
+| D-GR-06 | Disabled graph and Tier 1-only graph degrade cleanly with discoverable warnings/remediation. | test_graph_disabled_and_partial | 2026-06-24 | 2026-06-24 |
+
 ## Phase 128 Legacy Surface Final Audit
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
