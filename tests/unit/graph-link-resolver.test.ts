@@ -121,4 +121,31 @@ describe('graph markdown link resolver', () => {
       }),
     ]);
   });
+
+  it('records malformed percent-encoded links as unresolved diagnostics instead of throwing', () => {
+    const sourceChunks = chunks(sourceDocumentId, 'Source', '# Source\n\nSee [bad](Target%ZZ.md) and [[Target#bad%ZZ]].');
+    const targetChunks = chunks(targetDocumentId, 'Target', '# Target\n\ntarget body');
+
+    const result = resolveChunkReferences({
+      sourceChunk: sourceChunks[0]!,
+      documents: [
+        { documentId: targetDocumentId, path: '/target.md', title: 'Target', chunks: targetChunks },
+      ],
+    });
+
+    expect(result.edges).toEqual([]);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'unresolved_target',
+          target: 'Target%ZZ',
+        }),
+        expect.objectContaining({
+          type: 'unresolved_anchor',
+          target: 'Target',
+          anchor: 'bad%ZZ',
+        }),
+      ])
+    );
+  });
 });

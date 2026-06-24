@@ -163,4 +163,88 @@ describe.skipIf(!HAS_SUPABASE).sequential('structural graph edge integration', (
     );
     expect(otherInstance.rows[0]!.count).toBe('0');
   });
+
+  it('removes inbound references when a refreshed target chunk no longer exists', async () => {
+    const source = await insertDocumentWithChunks(
+      client,
+      '/source-inbound.md',
+      'Source Inbound',
+      '# Source Root\n\nSee [[target-inbound#Old Heading]].'
+    );
+    const oldTarget = await insertDocumentWithChunks(
+      client,
+      '/target-inbound.md',
+      'Target Inbound',
+      '# Target Root\n\nroot body\n\n## Old Heading\n\nold target body'
+    );
+
+    await refreshStructuralGraphEdges(client, {
+      instanceId: TEST_INSTANCE_ID,
+      document: source,
+      documents: [source, oldTarget],
+    });
+
+    const oldReferenceCount = await client.query<{ count: string }>(
+      `
+      SELECT count(*)::text AS count
+      FROM fqc_graph_edges
+      WHERE instance_id = $1
+        AND relation = 'references'
+        AND target_chunk_id = $2
+      `,
+      [TEST_INSTANCE_ID, oldTarget.chunks[1]!.id]
+    );
+    expect(oldReferenceCount.rows[0]!.count).toBe('1');
+
+    const newTargetChunks = parseDocumentChunks({
+      instanceId: TEST_INSTANCE_ID,
+      documentId: oldTarget.documentId,
+      title: 'Target Inbound',
+      body: '# Target Root\n\nroot body\n\n## New Heading\n\nnew target body',
+      params: { minChunkTokens: 1, maxChunkTokens: 100, overlapRatio: 0 },
+    });
+
+    await client.query('DELETE FROM fqc_chunks WHERE document_id = $1', [oldTarget.documentId]);
+    for (const chunk of newTargetChunks) {
+      await client.query(
+        `
+        INSERT INTO fqc_chunks (
+          id, instance_id, document_id, heading_path, heading_level, breadcrumb,
+          content, content_hash, chunk_index, parent_chunk_id
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `,
+        [
+          chunk.id,
+          TEST_INSTANCE_ID,
+          chunk.document_id,
+          chunk.heading_path,
+          chunk.heading_level,
+          chunk.breadcrumb,
+          chunk.content,
+          chunk.content_hash,
+          chunk.chunk_index,
+          chunk.parent_chunk_id,
+        ]
+      );
+    }
+
+    await refreshStructuralGraphEdges(client, {
+      instanceId: TEST_INSTANCE_ID,
+      document: { ...oldTarget, chunks: newTargetChunks },
+      documents: [source, { ...oldTarget, chunks: newTargetChunks }],
+    });
+
+    const staleInboundCount = await client.query<{ count: string }>(
+      `
+      SELECT count(*)::text AS count
+      FROM fqc_graph_edges
+      WHERE instance_id = $1
+        AND relation = 'references'
+        AND target_chunk_id = $2
+      `,
+      [TEST_INSTANCE_ID, oldTarget.chunks[1]!.id]
+    );
+    expect(staleInboundCount.rows[0]!.count).toBe('0');
+  });
 });

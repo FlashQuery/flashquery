@@ -100,7 +100,9 @@ export async function scheduleChangedDocumentChunks(
   const processing = parseGraphProcessingLevel(options.frontmatter);
   if (processing.level === null) {
     return {
-      warnings: processing.diagnostics.map((diagnostic) => `${diagnostic.code}:${String(diagnostic.value)}`),
+      warnings: processing.diagnostics.map(
+        (diagnostic): `invalid_fq_processing:${string}` => `${diagnostic.code}:${String(diagnostic.value)}`
+      ),
       processingLevel: null,
       processingDiagnostics: processing.diagnostics,
       changedChunkCount: 0,

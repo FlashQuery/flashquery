@@ -185,15 +185,23 @@ function parseLinkTarget(rawTarget: string): LinkCandidate | null {
   const [target, anchor] = withoutAlias.split('#', 2);
   return {
     target: normalizeTargetName(target),
-    ...(anchor ? { anchor: decodeURIComponent(anchor.trim()) } : {}),
+    ...(anchor ? { anchor: safeDecodeURIComponent(anchor.trim()) } : {}),
   };
 }
 
 function normalizeTargetName(target: string): string {
-  const trimmed = decodeURIComponent(target.trim()).replace(/\\/g, '/');
+  const trimmed = safeDecodeURIComponent(target.trim()).replace(/\\/g, '/');
   const base = basename(trimmed);
   const extension = extname(base);
   return extension ? base.slice(0, -extension.length) : base;
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 function resolveTargetDocument(
