@@ -26,6 +26,7 @@ import { computeVersionToken } from './document-version.js';
 import { isValidUuid } from '../../utils/uuid.js';
 import type { FlashQueryConfig } from '../../config/types.js';
 import { buildDocumentConnections, type DocumentConnectionsOptions, type DocumentConnectionsResult } from './document-connections.js';
+import { buildGraphDocumentSummaryForDocument, type GraphDocumentSummary } from '../../graph/document-summary.js';
 
 type DocumentOutputConfig = FlashQueryConfig;
 
@@ -69,6 +70,7 @@ export interface DocumentEnvelope {
   frontmatter?: Record<string, unknown>;
   headings?: Array<{ level: number; text: string; chars: number }>;
   connections?: DocumentConnectionsResult;
+  graph_summary?: GraphDocumentSummary;
   followed_ref?: FollowedRefResult;
 }
 
@@ -85,6 +87,7 @@ export interface FollowedRefResult {
   frontmatter?: Record<string, unknown>;
   headings?: Array<{ level: number; text: string; chars: number }>;
   connections?: DocumentConnectionsResult;
+  graph_summary?: GraphDocumentSummary;
 }
 
 export type DocumentOutputResponse = DocumentEnvelope;
@@ -230,13 +233,14 @@ export function buildConsolidatedResponse(
     modified: string;
     size: { chars: number };
   },
-  include: Array<'body' | 'frontmatter' | 'headings' | 'connections'>,
+  include: Array<'body' | 'frontmatter' | 'headings' | 'connections' | 'graph_summary'>,
   options: {
     body?: string;
     extractedSections?: Array<{ heading: string; chars: number }>;
     frontmatter?: Record<string, unknown>;
     headings?: Array<{ level: number; text: string; chars: number }>;
     connections?: DocumentConnectionsResult;
+    graphSummary?: GraphDocumentSummary;
   }
 ): DocumentEnvelope {
   const effectiveInclude = include && include.length > 0 ? include : ['body' as const];
@@ -255,6 +259,9 @@ export function buildConsolidatedResponse(
   }
   if (effectiveInclude.includes('connections') && options.connections !== undefined) {
     result.connections = options.connections;
+  }
+  if (effectiveInclude.includes('graph_summary') && options.graphSummary !== undefined) {
+    result.graph_summary = options.graphSummary;
   }
   return result;
 }
@@ -276,7 +283,7 @@ export function validateParameterCombinations(input: {
   error: 'invalid_input';
   message: string;
   details: {
-    conflict: 'sections_without_body' | 'occurrence_with_multi_section' | 'connections_without_include';
+    conflict: 'sections_without_body' | 'occurrence_with_multi_section' | 'connections_without_include' | 'graph_aware_limit_per_chunk';
     [k: string]: unknown;
   };
 } | null {
@@ -303,6 +310,25 @@ export function validateParameterCombinations(input: {
       details: {
         conflict: 'connections_without_include',
         include,
+      },
+    };
+  }
+
+  const connections = input.connections as (DocumentConnectionsOptions | undefined);
+  const hasGraphAwareOption = connections?.graph_limit_per_chunk !== undefined ||
+    connections?.embedding_limit_per_chunk !== undefined ||
+    connections?.include_embedding_only !== undefined ||
+    connections?.include_inactive_targets !== undefined ||
+    connections?.relations !== undefined ||
+    connections?.include_stale !== undefined;
+  if (connections?.limit_per_chunk !== undefined && hasGraphAwareOption) {
+    return {
+      error: 'invalid_input',
+      message: 'connections.limit_per_chunk cannot be combined with graph-aware connection options; use graph_limit_per_chunk and embedding_limit_per_chunk instead',
+      details: {
+        conflict: 'graph_aware_limit_per_chunk',
+        legacy_field: 'limit_per_chunk',
+        replacements: ['graph_limit_per_chunk', 'embedding_limit_per_chunk'],
       },
     };
   }
@@ -412,7 +438,7 @@ export class DocumentRequestError extends Error {
 export async function resolveAndBuildDocument(
   identifier: string,
   options: {
-    effectiveInclude: Array<'body' | 'frontmatter' | 'headings' | 'connections'>;
+    effectiveInclude: Array<'body' | 'frontmatter' | 'headings' | 'connections' | 'graph_summary'>;
     sectionsList: string[];
     effectiveIncludeNested: boolean;
     occurrence: number;
@@ -698,6 +724,7 @@ export async function resolveAndBuildDocument(
   let frontmatterField: Record<string, unknown> | undefined;
   let headingsField: Array<{ level: number; text: string; chars: number }> | undefined;
   let connectionsField: DocumentConnectionsResult | undefined;
+  let graphSummaryField: GraphDocumentSummary | undefined;
 
   if (effectiveInclude.includes('body')) {
     if (sectionsList.length === 1) {
@@ -770,11 +797,20 @@ export async function resolveAndBuildDocument(
     connectionsField = connectionsResult.result;
   }
 
+  if (effectiveInclude.includes('graph_summary')) {
+    graphSummaryField = await buildGraphDocumentSummaryForDocument({
+      supabase: sm.getClient(),
+      config: cfg,
+      documentId: fqcId,
+    });
+  }
+
   return buildConsolidatedResponse(envelope, [...effectiveInclude], {
     body: responseBody,
     extractedSections,
     frontmatter: frontmatterField,
     headings: headingsField,
     connections: connectionsField,
+    graphSummary: graphSummaryField,
   });
 }

@@ -23,10 +23,10 @@ export function registerGetDocumentTool(server: McpServer, deps: DocumentToolDep
             'Array input always returns an array response with per-element success or error objects (the MCP call never fails on partial errors). ' +
             'String input returns a flat object response (backward compatible with Phase 107).'
           ),
-          include: z.array(z.enum(['body', 'frontmatter', 'headings', 'connections']))
+          include: z.array(z.enum(['body', 'frontmatter', 'headings', 'connections', 'graph_summary']))
             .optional()
             .default(['body'])
-            .describe('Which fields to include in the response. Any combination of "body", "frontmatter", "headings", "connections". Default: ["body"].'),
+            .describe('Which fields to include in the response. Any combination of "body", "frontmatter", "headings", "connections", "graph_summary". Default: ["body"].'),
           sections: z.array(z.string()).optional().describe(
             'Optional: heading names to extract (case-insensitive substring). Requires "body" in include. Multi-element returns sections in input order separated by blank lines; repeating a name N times returns the 1st through Nth matches.'
           ),
@@ -49,8 +49,14 @@ export function registerGetDocumentTool(server: McpServer, deps: DocumentToolDep
           connections: z.object({
             limit: z.number().int().positive().max(200).optional().describe('Maximum unique whole-document target chunks. Default: 50.'),
             limit_per_chunk: z.number().int().positive().max(25).optional().describe('Maximum target chunks per source chunk. Default: 5.'),
+            graph_limit_per_chunk: z.number().int().positive().max(25).optional().describe('Graph-aware maximum graph-connected target chunks per source chunk. Default: 5.'),
+            embedding_limit_per_chunk: z.number().int().positive().max(25).optional().describe('Graph-aware maximum embedding-only target chunks per source chunk when include_embedding_only is true. Default: 5.'),
+            include_embedding_only: z.boolean().optional().describe('When true, append embedding-only neighbors after graph-connected targets. Default: false for graph-aware calls.'),
+            include_inactive_targets: z.boolean().optional().describe('When true, include graph connection targets whose documents are archived or missing. Default: false.'),
+            relations: z.array(z.string()).optional().describe('Optional graph relation filter for graph-aware connections.'),
+            include_stale: z.boolean().optional().describe('When true, include stale graph edges. Default: false.'),
             embedding_names: z.array(z.string()).optional().describe('Optional active embedding catalog entry names. Omit for all active entries.'),
-          }).optional().describe('Options for include:["connections"]. Uses stored source chunk vectors only and does not embed query text.'),
+          }).optional().describe('Options for include:["connections"]. Legacy calls use stored source chunk vectors only. Graph-aware options return graph-primary connections and can append embedding-only neighbors without embedding query text.'),
         },
       },
       async ({ identifiers, include, sections, include_nested, occurrence: occurrenceParam, max_depth, follow_ref: followRef, connections }) => {
@@ -61,7 +67,7 @@ export function registerGetDocumentTool(server: McpServer, deps: DocumentToolDep
           };
         }
         const occurrence = occurrenceParam ?? 1;
-        const effectiveInclude: Array<'body' | 'frontmatter' | 'headings' | 'connections'> = include && include.length > 0 ? include : ['body'];
+        const effectiveInclude: Array<'body' | 'frontmatter' | 'headings' | 'connections' | 'graph_summary'> = include && include.length > 0 ? include : ['body'];
         const sectionsList = sections ?? [];
         const effectiveMaxDepth = max_depth ?? 6;
         // WR-02: explicit fallback in case MCP SDK strips the Zod .default(true)
@@ -99,7 +105,7 @@ export function registerGetDocumentTool(server: McpServer, deps: DocumentToolDep
 
         // Build the per-element options bundle once
         const elementOptions = {
-          effectiveInclude: [...effectiveInclude] as Array<'body' | 'frontmatter' | 'headings'>,
+          effectiveInclude: [...effectiveInclude],
           sectionsList,
           effectiveIncludeNested,
           occurrence,
