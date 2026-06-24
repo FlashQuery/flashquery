@@ -38,6 +38,7 @@ import type {
 } from '../mcp/utils/response-formats.js';
 import { maintenanceActionResult } from '../mcp/utils/response-formats.js';
 import { getIsShuttingDown } from '../server/shutdown-state.js';
+import type { GraphLintListPayload, GraphLintPayload } from '../graph/lint-categories.js';
 import { invalidateReconciliationCache } from './plugin-reconciliation.js';
 import {
   reconcileTrackedDocuments,
@@ -47,8 +48,9 @@ import {
 } from './scanner.js';
 
 export type MaintenanceGraphWorkerAction = 'graph_worker';
-export type MaintenanceAction = 'sync' | 'repair' | 'status' | MaintenanceGraphWorkerAction | LifecycleAction;
-type MaintenanceExecutableAction = 'sync' | 'repair' | MaintenanceGraphWorkerAction;
+export type MaintenanceGraphLintAction = 'graph_lint' | 'graph_lint_status' | 'graph_lint_prune';
+export type MaintenanceAction = 'sync' | 'repair' | 'status' | MaintenanceGraphWorkerAction | MaintenanceGraphLintAction | LifecycleAction;
+type MaintenanceExecutableAction = 'sync' | 'repair' | MaintenanceGraphWorkerAction | 'graph_lint';
 export type MaintenanceRequestedAction = MaintenanceAction | MaintenanceAction[];
 export type MaintenanceJobStatus = 'running' | 'completed' | 'failed' | 'aborted';
 
@@ -59,6 +61,12 @@ export interface MaintainVaultInput {
   job_id?: string;
   embedding_name?: string;
   scope?: LifecycleScope;
+  rules?: string[];
+  run_id?: string;
+  limit?: number;
+  keep_last?: number;
+  older_than?: string;
+  max_findings?: number;
   max_rows?: number;
   max_documents_in_response?: number;
   confirm?: string;
@@ -98,17 +106,41 @@ interface MaintenanceGraphWorkerActionResult {
   warnings?: string[];
 }
 
-type LocalMaintenanceActionResult = MaintenanceActionResult | MaintenanceGraphWorkerActionResult;
+interface MaintenanceGraphLintActionResult {
+  action: 'graph_lint';
+  started_at: string;
+  finished_at: string;
+  dry_run: boolean;
+  payload: GraphLintPayload;
+}
+
+interface MaintenanceGraphLintPrunePayload {
+  deleted: number;
+  keep_last?: number;
+  older_than?: string;
+}
+
+type LocalMaintenanceActionResult =
+  | MaintenanceActionResult
+  | MaintenanceGraphWorkerActionResult
+  | MaintenanceGraphLintActionResult;
 
 export type MaintenanceSyncPayload = { actions: LocalMaintenanceActionResult[] };
 
 export type MaintenanceResult<
-  T = MaintenanceSyncPayload | MaintenanceAcceptedPayload | MaintenanceStatusPayload,
+  T =
+    | MaintenanceSyncPayload
+    | MaintenanceAcceptedPayload
+    | MaintenanceStatusPayload
+    | GraphLintPayload
+    | GraphLintListPayload
+    | MaintenanceGraphLintPrunePayload,
 > = { ok: true; payload: T } | { ok: false; error: ErrorEnvelope };
 
 interface MaintenanceJobRecord extends MaintenanceStatusPayload {
-  requestedActions: Array<'sync' | 'repair'>;
+  requestedActions: Array<'sync' | 'repair' | 'graph_lint'>;
   dryRun: boolean;
+  graphLintInput?: MaintainVaultInput;
 }
 
 let maintenanceInProgress = false;
@@ -134,8 +166,28 @@ export async function maintainVault(
   config: FlashQueryConfig,
   input: MaintainVaultInput
 ): Promise<
-  MaintenanceResult<MaintenanceSyncPayload | MaintenanceAcceptedPayload | MaintenanceStatusPayload>
+  MaintenanceResult<
+    | MaintenanceSyncPayload
+    | MaintenanceAcceptedPayload
+    | MaintenanceStatusPayload
+    | GraphLintPayload
+    | GraphLintListPayload
+    | MaintenanceGraphLintPrunePayload
+  >
 > {
+  if (input.action === 'graph_lint_status') {
+    const validation = validateGraphLintStatusParameters(input);
+    if (!validation.ok) return validation;
+    if (input.job_id) return getMaintenanceJobStatus(input.job_id);
+    return await dispatchGraphLintStatus(config, input);
+  }
+
+  if (input.action === 'graph_lint_prune') {
+    const validation = validateGraphLintPruneParameters(input);
+    if (!validation.ok) return validation;
+    return await dispatchGraphLintPrune(config, input);
+  }
+
   if (input.action === 'status') {
     if (input.dry_run === true) {
       return invalidInput('dry_run is not supported for action: status', 'status', {
@@ -173,7 +225,7 @@ export async function maintainVault(
   }
 
   if (input.background) {
-    const job = createJob(normalized.payload as Array<'sync' | 'repair'>, false);
+    const job = createJob(normalized.payload as Array<'sync' | 'repair' | 'graph_lint'>, false, input);
     void runBackgroundJob(config, job.job_id);
     return {
       ok: true,
@@ -183,7 +235,7 @@ export async function maintainVault(
 
   maintenanceInProgress = true;
   try {
-    const actions = await executeActions(config, normalized.payload, input.dry_run === true);
+    const actions = await executeActions(config, normalized.payload, input);
     return { ok: true, payload: { actions } };
   } catch (err: unknown) {
     logger.warn(`maintain_vault failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -288,9 +340,12 @@ function normalizeMaintenanceActions(
   if (action === 'graph_worker') {
     return { ok: true, payload: [action] };
   }
+  if (action === 'graph_lint') {
+    return { ok: true, payload: [action] };
+  }
 
   return invalidInput(
-    'action must be sync, repair, graph_worker, status, or ["repair","sync"]',
+    'action must be sync, repair, graph_worker, graph_lint, graph_lint_status, graph_lint_prune, status, or ["repair","sync"]',
     'maintain_vault',
     {
       parameter: 'action',
@@ -472,6 +527,10 @@ function validateModeOptions(
   input: MaintainVaultInput
 ): MaintenanceResult<null> {
   const identifier = actions.join(',');
+  if (actions[0] === 'graph_lint') {
+    return validateGraphLintParameters(input);
+  }
+
   if (input.dry_run === true && (actions.length !== 1 || actions[0] !== 'repair')) {
     return invalidInput('dry_run is only supported for action: repair', identifier, {
       parameter: 'dry_run',
@@ -490,15 +549,29 @@ function validateModeOptions(
 async function executeActions(
   config: FlashQueryConfig,
   actions: MaintenanceExecutableAction[],
-  dryRun: boolean
+  input: MaintainVaultInput
 ): Promise<LocalMaintenanceActionResult[]> {
   const results: LocalMaintenanceActionResult[] = [];
+  const dryRun = input.dry_run === true;
   for (const action of actions) {
     if (getIsShuttingDown()) {
       throw new Error('maintenance aborted during shutdown');
     }
 
     const startedAt = new Date().toISOString();
+    if (action === 'graph_lint') {
+      const result = await runGraphLintAction(config, input);
+      const finishedAt = new Date().toISOString();
+      results.push({
+        action: 'graph_lint',
+        started_at: startedAt,
+        finished_at: finishedAt,
+        dry_run: dryRun,
+        payload: result,
+      });
+      continue;
+    }
+
     if (action === 'graph_worker') {
       const result = await runGraphWorkerOnce(config);
       const finishedAt = new Date().toISOString();
@@ -582,7 +655,11 @@ async function refreshHostTemplatesAfterSync(
   return await hostTemplateRefreshHook(config);
 }
 
-function createJob(actions: Array<'sync' | 'repair'>, dryRun: boolean): MaintenanceJobRecord {
+function createJob(
+  actions: Array<'sync' | 'repair' | 'graph_lint'>,
+  dryRun: boolean,
+  graphLintInput?: MaintainVaultInput
+): MaintenanceJobRecord {
   const job: MaintenanceJobRecord = {
     job_id: randomUUID(),
     status: 'running',
@@ -590,6 +667,7 @@ function createJob(actions: Array<'sync' | 'repair'>, dryRun: boolean): Maintena
     actions: [],
     requestedActions: actions,
     dryRun,
+    ...(graphLintInput === undefined ? {} : { graphLintInput }),
   };
   jobs.set(job.job_id, job);
   return job;
@@ -613,7 +691,20 @@ async function runBackgroundJob(config: FlashQueryConfig, jobId: string): Promis
 
   maintenanceInProgress = true;
   try {
-    job.actions = await executeActions(config, job.requestedActions, job.dryRun);
+    if (job.requestedActions.length === 1 && job.requestedActions[0] === 'graph_lint') {
+      const input = job.graphLintInput ?? { action: 'graph_lint' };
+      const startedAt = new Date().toISOString();
+      const payload = await runGraphLintAction(config, input);
+      job.actions = [{
+        action: 'graph_lint',
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        dry_run: input.dry_run === true,
+        payload,
+      }];
+    } else {
+      job.actions = await executeActions(config, job.requestedActions, { action: job.requestedActions, dry_run: job.dryRun });
+    }
     job.status = getIsShuttingDown() ? 'aborted' : 'completed';
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -663,6 +754,185 @@ function scanWarnings(result: ScanResult): MaintenanceActionResult['warnings'] {
     warnings.push('maintenance_aborted');
   }
   return warnings.length > 0 ? warnings : undefined;
+}
+
+async function runGraphLintAction(
+  config: FlashQueryConfig,
+  input: MaintainVaultInput
+): Promise<GraphLintPayload> {
+  if (!config.supabase.databaseUrl) {
+    throw new Error('graph_lint requires config.supabase.databaseUrl for run-history storage');
+  }
+  const { runGraphLint } = await import('../graph/lint.js');
+  return await runGraphLint({
+    databaseUrl: config.supabase.databaseUrl,
+    instanceId: config.instance.id,
+    rules: input.rules,
+    scope: input.scope,
+    dryRun: input.dry_run === true,
+    maxFindings: input.max_findings,
+  });
+}
+
+async function dispatchGraphLintStatus(
+  config: FlashQueryConfig,
+  input: MaintainVaultInput
+): Promise<MaintenanceResult<GraphLintPayload | GraphLintListPayload>> {
+  if (!config.supabase.databaseUrl) {
+    return invalidInput('graph_lint_status requires config.supabase.databaseUrl', 'graph_lint_status', {
+      parameter: 'databaseUrl',
+    });
+  }
+  try {
+    const { getGraphLintStatus } = await import('../graph/lint.js');
+    return {
+      ok: true,
+      payload: await getGraphLintStatus({
+        databaseUrl: config.supabase.databaseUrl,
+        instanceId: config.instance.id,
+        runId: input.run_id,
+        limit: input.limit,
+        maxFindings: input.max_findings,
+      }),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: {
+        error: 'not_found',
+        message: err instanceof Error ? err.message : String(err),
+        identifier: input.run_id ?? 'latest',
+      },
+    };
+  }
+}
+
+async function dispatchGraphLintPrune(
+  config: FlashQueryConfig,
+  input: MaintainVaultInput
+): Promise<MaintenanceResult<MaintenanceGraphLintPrunePayload>> {
+  if (!config.supabase.databaseUrl) {
+    return invalidInput('graph_lint_prune requires config.supabase.databaseUrl', 'graph_lint_prune', {
+      parameter: 'databaseUrl',
+    });
+  }
+  try {
+    const { pruneGraphLintRuns } = await import('../graph/lint.js');
+    return {
+      ok: true,
+      payload: await pruneGraphLintRuns({
+        databaseUrl: config.supabase.databaseUrl,
+        instanceId: config.instance.id,
+        keepLast: input.keep_last,
+        olderThan: input.older_than,
+      }),
+    };
+  } catch (err) {
+    return invalidInput(err instanceof Error ? err.message : String(err), 'graph_lint_prune', {
+      parameter: 'keep_last,older_than',
+    });
+  }
+}
+
+function validateGraphLintParameters(input: MaintainVaultInput): MaintenanceResult<null> {
+  const invalid = disallowedParameters(input, [
+    'job_id',
+    'run_id',
+    'limit',
+    'keep_last',
+    'older_than',
+    'max_rows',
+    'embedding_name',
+    'confirm',
+    'stale_only',
+    'mismatched_width_only',
+    'drop_stamping_columns',
+  ]);
+  if (invalid) return invalidInput(`${invalid} is not supported for action: graph_lint`, 'graph_lint', { parameter: invalid });
+  if (input.rules !== undefined && (!Array.isArray(input.rules) || input.rules.some((rule) => typeof rule !== 'string'))) {
+    return invalidInput('rules must be an array of rule IDs', 'graph_lint', { parameter: 'rules' });
+  }
+  if (input.max_findings !== undefined && !isNonNegativeInteger(input.max_findings)) {
+    return invalidInput('max_findings must be a non-negative integer', 'graph_lint', { parameter: 'max_findings' });
+  }
+  return { ok: true, payload: null };
+}
+
+function validateGraphLintStatusParameters(input: MaintainVaultInput): MaintenanceResult<null> {
+  const invalid = disallowedParameters(input, [
+    'rules',
+    'scope',
+    'dry_run',
+    'background',
+    'keep_last',
+    'older_than',
+    'max_rows',
+    'embedding_name',
+    'confirm',
+    'stale_only',
+    'mismatched_width_only',
+    'drop_stamping_columns',
+  ]);
+  if (invalid) return invalidInput(`${invalid} is not supported for action: graph_lint_status`, 'graph_lint_status', { parameter: invalid });
+  if (input.run_id !== undefined && input.limit !== undefined) {
+    return invalidInput('run_id and limit are mutually exclusive for action: graph_lint_status', 'graph_lint_status', {
+      parameter: 'run_id,limit',
+    });
+  }
+  if (input.limit !== undefined && !isPositiveInteger(input.limit)) {
+    return invalidInput('limit must be a positive integer', 'graph_lint_status', { parameter: 'limit' });
+  }
+  if (input.max_findings !== undefined && !isNonNegativeInteger(input.max_findings)) {
+    return invalidInput('max_findings must be a non-negative integer', 'graph_lint_status', { parameter: 'max_findings' });
+  }
+  return { ok: true, payload: null };
+}
+
+function validateGraphLintPruneParameters(input: MaintainVaultInput): MaintenanceResult<null> {
+  const invalid = disallowedParameters(input, [
+    'rules',
+    'scope',
+    'dry_run',
+    'background',
+    'job_id',
+    'run_id',
+    'limit',
+    'max_findings',
+    'max_rows',
+    'embedding_name',
+    'confirm',
+    'stale_only',
+    'mismatched_width_only',
+    'drop_stamping_columns',
+  ]);
+  if (invalid) return invalidInput(`${invalid} is not supported for action: graph_lint_prune`, 'graph_lint_prune', { parameter: invalid });
+  if (input.keep_last === undefined && input.older_than === undefined) {
+    return invalidInput('graph_lint_prune requires keep_last or older_than', 'graph_lint_prune', {
+      parameter: 'keep_last,older_than',
+    });
+  }
+  if (input.keep_last !== undefined && !isNonNegativeInteger(input.keep_last)) {
+    return invalidInput('keep_last must be a non-negative integer', 'graph_lint_prune', { parameter: 'keep_last' });
+  }
+  if (input.older_than !== undefined && Number.isNaN(Date.parse(input.older_than))) {
+    return invalidInput('older_than must be an ISO-8601 timestamp', 'graph_lint_prune', { parameter: 'older_than' });
+  }
+  return { ok: true, payload: null };
+}
+
+function disallowedParameters(input: MaintainVaultInput, params: Array<keyof MaintainVaultInput>): string | null {
+  for (const param of params) {
+    if (input[param] !== undefined) return param;
+  }
+  return null;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return Number.isInteger(value) && typeof value === 'number' && value > 0;
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return Number.isInteger(value) && typeof value === 'number' && value >= 0;
 }
 
 function repairCounts(

@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { loadConfig, type FlashQueryConfig } from '../../../src/config/loader.js';
 import { initLogger } from '../../../src/logging/logger.js';
 import { createPgGraphQueryStore, queryGraph } from '../../../src/graph/queries.js';
+import { maintainVault, resetMaintenanceStateForTests } from '../../../src/services/maintenance.js';
 import { initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
 import { setupTestSupabase } from '../../helpers/supabase.js';
 import { HAS_SUPABASE } from '../../helpers/test-env.js';
@@ -66,11 +67,14 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph provenance and question reads',
   }, 90000);
 
   beforeEach(async () => {
+    resetMaintenanceStateForTests();
+    await client.query('DELETE FROM fqc_graph_lint_runs WHERE instance_id = $1', [TEST_INSTANCE_ID]);
     await client.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]);
   });
 
   afterAll(async () => {
     await client?.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
+    await client?.query('DELETE FROM fqc_graph_lint_runs WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.end().catch(() => undefined);
     await supabaseManager?.close();
   });
@@ -168,5 +172,43 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph provenance and question reads',
         member_count: 2,
       }),
     ]);
+  });
+
+  it('T-I-028 graph lint flags resolved question dependents for follow-up', async () => {
+    const question = await insertChunk(client, { path: '/question.md', heading: 'Question' });
+    const dependent = await insertChunk(client, { path: '/dependent.md', heading: 'Dependent' });
+
+    await client.query(
+      `
+      INSERT INTO fqc_graph_nodes (
+        chunk_id, instance_id, provenance_basis, question_status, question_resolution
+      )
+      VALUES
+        ($1, $3, NULL, 'resolved', 'Resolved by dependent.'),
+        ($2, $3, NULL, NULL, NULL)
+      `,
+      [question, dependent, TEST_INSTANCE_ID]
+    );
+    await client.query(
+      `
+      INSERT INTO fqc_graph_edges (
+        instance_id, source_chunk_id, target_chunk_id, relation, confidence, confidence_score, reasoning, model
+      )
+      VALUES ($1, $3, $2, 'supports', 'INFERRED', 0.91, 'dependent support', 'mock')
+      `,
+      [TEST_INSTANCE_ID, question, dependent]
+    );
+
+    const result = await maintainVault(configForTest(), { action: 'graph_lint', rules: ['LINT-Q1'] });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok || !('actions' in result.payload)) return;
+    const payload = result.payload.actions[0]?.action === 'graph_lint' ? result.payload.actions[0].payload : null;
+    expect(payload?.questions.items[0]).toMatchObject({
+      chunk_id: question,
+      question_status: 'resolved',
+      downstream_impact_count: 1,
+      unfolded_dependents: [dependent],
+    });
   });
 });
