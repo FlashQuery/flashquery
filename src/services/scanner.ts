@@ -19,6 +19,7 @@ import {
   EMBEDDING_DEFERRED_WARNING,
 } from '../embedding/background-embed.js';
 import { scheduleChangedDocumentChunks } from '../embedding/chunks/scheduler.js';
+import { markDocumentGraphEdgesStale } from '../graph/lifecycle.js';
 import { withAncestorDirectoryLocksShared, withDocumentLock } from './document-lock.js';
 import type { ProcessPendingGraphEdgesResult } from '../graph/pending-worker.js';
 
@@ -527,6 +528,35 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
     );
   };
 
+  const markInactiveGraphDrift = async (input: {
+    id: string;
+    path: string;
+    status: string;
+    reason: string;
+  }) => {
+    try {
+      const pgClient = createPgClientIPv4(config.supabase.databaseUrl);
+      await pgClient.connect();
+      try {
+        const staleEdges = await markDocumentGraphEdgesStale(pgClient, {
+          instanceId,
+          documentId: input.id,
+        });
+        logger.warn(
+          `[GRAPH-LIFECYCLE] inactive ${input.status} document drift marked ${staleEdges} graph edge(s) stale without reprocessing: "${input.path}" (${input.reason})`
+        );
+      } finally {
+        await pgClient.end();
+      }
+    } catch (err) {
+      logger.warn(
+        `[GRAPH-LIFECYCLE] failed to mark inactive graph drift for "${input.path}": ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
+  };
+
   for (const relativePath of allVaultFiles) {
     // SHUT-10: Check shutdown flag frequently during scanning
     if (getIsShuttingDown()) {
@@ -905,15 +935,21 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             // and do not count as new (the file was always tracked, just archived).
             if (archivedIdToRow.has(Y)) {
               const archivedRow = archivedIdToRow.get(Y)!;
-              if (
+              const archivedDrifted =
                 archivedRow.path !== relativePath ||
                 archivedRow.content_hash !== H ||
-                templateMetaChanged(archivedRow.template_meta, templateMeta)
-              ) {
+                templateMetaChanged(archivedRow.template_meta, templateMeta);
+              if (archivedDrifted) {
                 await supabase
                   .from('fqc_documents')
                   .update({ path: relativePath, content_hash: H, template_meta: templateMeta, updated_at: now })
                   .eq('id', Y);
+                await markInactiveGraphDrift({
+                  id: Y,
+                  path: relativePath,
+                  status: 'archived',
+                  reason: 'archived file hash or metadata changed',
+                });
               }
               seenFqcIds.add(Y);
               logger.info(`[IDC-04] file retains archived status: "${relativePath}" (fqc_id=${Y})`);

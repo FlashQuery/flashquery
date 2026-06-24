@@ -67,3 +67,33 @@ export async function removeDocumentGraphState(
     [options.instanceId, options.documentId]
   );
 }
+
+export async function markDocumentGraphEdgesStale(
+  client: GraphPgClient,
+  options: DocumentGraphLifecycleOptions
+): Promise<number> {
+  const result = await client.query<{ id: string }>(
+    `
+    UPDATE fqc_graph_edges
+    SET status = 'stale',
+        updated_at = now()
+    WHERE instance_id = $1
+      AND status = 'active'
+      AND (
+        source_chunk_id IN (
+          SELECT id
+          FROM fqc_chunks
+          WHERE instance_id = $1 AND document_id = $2
+        )
+        OR target_chunk_id IN (
+          SELECT id
+          FROM fqc_chunks
+          WHERE instance_id = $1 AND document_id = $2
+        )
+      )
+    RETURNING id
+    `,
+    [options.instanceId, options.documentId]
+  );
+  return result.rows.length;
+}
