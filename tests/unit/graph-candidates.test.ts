@@ -4,6 +4,7 @@ import {
   selectGraphEdgeCandidates,
   type GraphCandidate,
 } from '../../src/graph/candidates.js';
+import { enqueuePendingEdgeCandidates } from '../../src/graph/pending-edges.js';
 
 type QueryResult<Row = Record<string, unknown>> = {
   data?: Row[] | Row | null;
@@ -231,5 +232,83 @@ describe('graph candidate selection', () => {
       ],
     });
     expect(included.candidates).toHaveLength(1);
+  });
+});
+
+function makePendingSupabaseMock() {
+  const upserts: Array<{ payload: Record<string, unknown>; options?: Record<string, unknown> }> = [];
+  const eqCalls: Array<[string, unknown]> = [];
+  const chain = <T>(result: T) => {
+    const query = {
+      eq: vi.fn((column: string, value: unknown) => {
+        eqCalls.push([column, value]);
+        return query;
+      }),
+      then: (resolve: (value: T) => void) => resolve(result),
+    };
+    return query;
+  };
+  const from = vi.fn((table: string) => {
+    if (table !== 'fqc_pending_edges') {
+      return { upsert: vi.fn(() => chain({ data: null, error: null })) };
+    }
+    return {
+      upsert: vi.fn((payload: Record<string, unknown>, options?: Record<string, unknown>) => {
+        upserts.push({ payload, options });
+        return chain({ data: { id: 'pending-edge-1' }, error: null });
+      }),
+    };
+  });
+  return { client: { from }, upserts, eqCalls };
+}
+
+describe('graph pending edge enqueue', () => {
+  it('T-U-059 upserts duplicate candidate pairs on the stable instance/source/target dedupe key', async () => {
+    const supabase = makePendingSupabaseMock();
+
+    const result = await enqueuePendingEdgeCandidates({
+      supabase: supabase.client,
+      instanceId: 'inst-graph',
+      maxAttempts: 7,
+      candidates: [
+        {
+          sourceChunkId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          targetChunkId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          sourceDocumentId: 'doc-a',
+          targetDocumentId: 'doc-b',
+          similarity: 0.91,
+          selectionMode: 'threshold',
+        },
+        {
+          sourceChunkId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          targetChunkId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          sourceDocumentId: 'doc-a',
+          targetDocumentId: 'doc-b',
+          similarity: 0.88,
+          selectionMode: 'threshold',
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({ inserted: 1, updated: 0, skipped: 1, warnings: [] });
+    expect(supabase.upserts).toHaveLength(1);
+    expect(supabase.upserts[0]).toEqual({
+      payload: expect.objectContaining({
+        instance_id: 'inst-graph',
+        source_chunk_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        target_chunk_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        status: 'pending',
+        max_attempts: 7,
+        result: expect.objectContaining({
+          candidate: expect.objectContaining({
+            similarity: 0.91,
+            selection_mode: 'threshold',
+          }),
+        }),
+      }),
+      options: expect.objectContaining({
+        onConflict: 'instance_id,source_chunk_id,target_chunk_id',
+      }),
+    });
   });
 });
