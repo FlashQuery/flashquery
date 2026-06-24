@@ -17,12 +17,14 @@ import {
 import { diffAndPersistDocumentChunks } from './store.js';
 import type { ParsedChunk } from './types.js';
 
+interface QueryResult<Row = Record<string, unknown>> {
+  data?: Row[] | Row | null;
+  error?: { message: string } | null;
+}
+
 interface SupabaseLike {
   from(table: string): unknown;
-  rpc(name: string, args: Record<string, unknown>): PromiseLike<{
-    data?: unknown[] | unknown | null;
-    error?: { message: string } | null;
-  }>;
+  rpc(name: string, args: Record<string, unknown>): PromiseLike<QueryResult>;
 }
 
 interface StructuredLogger {
