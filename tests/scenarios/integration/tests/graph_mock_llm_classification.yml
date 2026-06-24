@@ -1,0 +1,77 @@
+name: graph_mock_llm_classification
+description: >
+  T-Y-003 / IG-03: managed mock LLM returns a graph contradiction
+  classification payload with reasoning through a public tool call, without
+  production LLM credentials.
+coverage: [IG-03]
+server_modes: [managed]
+
+mock_openai:
+  responses:
+    - choices:
+        - message:
+            role: assistant
+            content: |
+              {
+                "edges": [
+                  {
+                    "relation": "contradicts",
+                    "reasoning": "The source says the migration is complete while the target says it is still pending.",
+                    "source_claims_referenced": [0],
+                    "target_claims_referenced": [0],
+                    "confidence_score": 0.91,
+                    "metadata": {
+                      "llm_assessment": "strong",
+                      "low_confidence_flag": false
+                    }
+                  }
+                ]
+              }
+          finish_reason: stop
+      usage:
+        prompt_tokens: 31
+        completion_tokens: 43
+
+extra_config:
+  llm:
+    providers:
+      - name: mock
+        type: openai-compatible
+        endpoint: "${mock_openai.endpoint}"
+        api_key: sk-test
+    models:
+      - name: graph-mock
+        provider_name: mock
+        model: graph-mock
+        type: language
+        cost_per_million:
+          input: 0
+          output: 0
+        capabilities:
+          tool_calling: true
+          usage_on_tool_calls: true
+          strict_tools: true
+          parallel_tool_calls: true
+    purposes:
+      - name: graph_classifier
+        description: Mock graph classifier purpose for YAML coverage
+        models: [graph-mock]
+        defaults:
+          temperature: 0
+          timeout_ms: 30000
+
+steps:
+  - label: "T-Y-003: mock graph classifier returns contradiction relation and reasoning"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: graph_classifier
+        trace_id: "graph-edge-classification:${run.id}"
+        messages:
+          - role: user
+            content: "Classify whether source claim 0 contradicts target claim 0."
+      expect_contains: "contradicts"
+      expect_json_contains:
+        path: response
+        value: "The source says the migration is complete while the target says it is still pending."
