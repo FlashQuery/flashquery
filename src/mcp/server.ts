@@ -21,6 +21,7 @@ import { registerFileTools } from './tools/files.js';
 import { registerLlmTools } from './tools/llm.js';
 import { registerLlmUsageTools } from './tools/llm-usage.js';
 import { registerMacroTools } from './tools/macro.js';
+import { registerGraphTools } from './tools/graph.js';
 import { createBroker, type Broker } from '../services/mcp-broker.js';
 import { registerHostBrokeredTools } from './host-brokered-tools.js';
 import {
@@ -674,6 +675,7 @@ export function createMcpServer(config: FlashQueryConfig, version: string, optio
   registerLlmTools(server, config, { broker });
   registerLlmUsageTools(server, config);
   registerMacroTools(server, config, { broker });
+  registerGraphTools(server, config);
   const catalog = getNativeToolCatalog(server);
   assertRegisteredToolsHaveToolMeta(catalog, toolMeta);
   validateAndCacheNativeToolSchemas(catalog);

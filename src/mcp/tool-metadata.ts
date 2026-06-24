@@ -1,4 +1,4 @@
-export type ToolCategory = 'doc-read' | 'doc-write' | 'memory' | 'plugin' | 'llm' | 'system';
+export type ToolCategory = 'doc-read' | 'doc-write' | 'memory' | 'plugin' | 'llm' | 'system' | 'graph';
 export type ToolTier = 'read-only' | 'read-write' | 'admin';
 export type ToolStatus = 'final' | 'transitional' | 'removed';
 
@@ -205,6 +205,12 @@ const D = {
     'Do not use when a normal document, memory, or record tool can answer the request directly.',
     'maintain_vault({ "action": "status" })'
   ),
+  queryGraph: description(
+    'Read the optional document graph through bounded node, edge, traversal, provenance, diagnostic, and seeded community actions.',
+    'Use when graph.enabled is true and you need graph neighbors, paths, subgraphs, stats, schema, provenance chains, weak/ungrounded edges, contradictions, or seeded community metadata.',
+    'Do not use to mutate graph state, run graph maintenance, or perform community detection; graph maintenance belongs under maintain_vault and Phase 173 owns community detection.',
+    'query_graph({ "action": "neighbors", "chunk_id": "00000000-0000-0000-0000-000000000000", "max_depth": 1 })'
+  ),
   manageDirectory: description(
     'Create or remove vault directories through one explicit action-based directory tool.',
     'Use when you need to create folders or remove empty folders in the vault.',
@@ -280,6 +286,7 @@ export const TOOL_METADATA = [
   current('remove_directory', ['doc-write'], 'read-write', legacyDescription('remove_directory', 'manage_directory', 'Remove empty vault directories.')),
   current('manage_directory', ['doc-write'], 'read-write', D.manageDirectory),
   current('maintain_vault', ['system'], 'admin', D.maintainVault, SYSTEM_ADMIN_REASON),
+  current('query_graph', ['graph'], 'read-only', D.queryGraph),
 ] as const satisfies readonly ToolMetadata[];
 
 const TOOL_METADATA_BY_NAME = new Map<string, ToolMetadata>(TOOL_METADATA.map((entry) => [entry.name, entry]));
