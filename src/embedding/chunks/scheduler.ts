@@ -1,5 +1,7 @@
 import type { FlashQueryConfig } from '../../config/types.js';
 import { FM } from '../../constants/frontmatter-fields.js';
+import { selectGraphEdgeCandidates } from '../../graph/candidates.js';
+import { enqueuePendingEdgeCandidates } from '../../graph/pending-edges.js';
 import { markChangedChunkGraphEdgesStale } from '../../graph/staleness.js';
 import {
   refreshStructuralGraphEdges,
@@ -17,9 +19,14 @@ import type { ParsedChunk } from './types.js';
 
 interface SupabaseLike {
   from(table: string): unknown;
+  rpc(name: string, args: Record<string, unknown>): PromiseLike<{
+    data?: unknown[] | unknown | null;
+    error?: { message: string } | null;
+  }>;
 }
 
 interface StructuredLogger {
+  warn?(message: string, fields?: Record<string, unknown>): void;
   error(message: string, fields?: Record<string, unknown>): void;
 }
 
@@ -49,12 +56,15 @@ export interface ParsedGraphProcessingLevel {
 }
 
 export interface ScheduleChangedDocumentChunksResult {
-  warnings: Array<EmbeddingWarning | `invalid_fq_processing:${string}` | 'invalid_fq_processing'>;
+  warnings: string[];
   processingLevel: GraphProcessingLevel | null;
   processingDiagnostics: GraphProcessingDiagnostic[];
   changedChunkCount: number;
   totalChunkCount: number;
   graphEdgeCount: number;
+  graphCandidateCount: number;
+  pendingEdgeJobCount: number;
+  graphCandidateSkippedCount: number;
 }
 
 interface ChunkGraphRow extends ParsedChunk {
@@ -108,6 +118,9 @@ export async function scheduleChangedDocumentChunks(
       changedChunkCount: 0,
       totalChunkCount: 0,
       graphEdgeCount: 0,
+      graphCandidateCount: 0,
+      pendingEdgeJobCount: 0,
+      graphCandidateSkippedCount: 0,
     };
   }
 
@@ -124,6 +137,9 @@ export async function scheduleChangedDocumentChunks(
       changedChunkCount: 0,
       totalChunkCount: 0,
       graphEdgeCount: 0,
+      graphCandidateCount: 0,
+      pendingEdgeJobCount: 0,
+      graphCandidateSkippedCount: 0,
     };
   }
 
@@ -185,19 +201,101 @@ export async function scheduleChangedDocumentChunks(
       })
     )
   );
+  const embeddingWarnings = results.flatMap((result) => result.warnings);
+  const candidateWork =
+    graphEnabled && shouldRunGraphForProcessingLevel(processing.level)
+      ? await enqueueGraphCandidateWork({
+          config: options.config,
+          supabase: options.supabase,
+          changedChunkIds: result.chunksNeedingEmbedding.map((chunk) => chunk.id),
+          logger: options.logger,
+        })
+      : emptyGraphCandidateWork();
 
   return {
-    warnings: [...new Set(results.flatMap((result) => result.warnings))],
+    warnings: [...new Set([...embeddingWarnings, ...candidateWork.warnings])],
     processingLevel: processing.level,
     processingDiagnostics: [],
     changedChunkCount: result.chunksNeedingEmbedding.length,
     totalChunkCount: result.chunks.length,
     graphEdgeCount,
+    graphCandidateCount: candidateWork.candidateCount,
+    pendingEdgeJobCount: candidateWork.pendingEdgeJobCount,
+    graphCandidateSkippedCount: candidateWork.skippedCount,
   };
 }
 
 function isGraphProcessingLevel(value: string): value is GraphProcessingLevel {
   return (GRAPH_PROCESSING_LEVELS as readonly string[]).includes(value);
+}
+
+function emptyGraphCandidateWork(): {
+  warnings: string[];
+  candidateCount: number;
+  pendingEdgeJobCount: number;
+  skippedCount: number;
+} {
+  return {
+    warnings: [],
+    candidateCount: 0,
+    pendingEdgeJobCount: 0,
+    skippedCount: 0,
+  };
+}
+
+async function enqueueGraphCandidateWork(input: {
+  config: FlashQueryConfig;
+  supabase: SupabaseLike;
+  changedChunkIds: string[];
+  logger?: StructuredLogger;
+}): Promise<ReturnType<typeof emptyGraphCandidateWork>> {
+  if (input.changedChunkIds.length === 0) {
+    return emptyGraphCandidateWork();
+  }
+
+  try {
+    const selected = await selectGraphEdgeCandidates({
+      supabase: input.supabase,
+      instanceId: input.config.instance.id,
+      changedChunkIds: input.changedChunkIds,
+      graph: input.config.graph,
+    });
+    if (selected.candidates.length === 0) {
+      return {
+        warnings: selected.warnings,
+        candidateCount: 0,
+        pendingEdgeJobCount: 0,
+        skippedCount: selected.capExceededCount,
+      };
+    }
+
+    const enqueued = await enqueuePendingEdgeCandidates({
+      supabase: input.supabase,
+      instanceId: input.config.instance.id,
+      candidates: selected.candidates,
+      maxAttempts: input.config.graph?.maxEdgeAttempts,
+    });
+
+    return {
+      warnings: [...selected.warnings, ...enqueued.warnings],
+      candidateCount: selected.candidates.length,
+      pendingEdgeJobCount: enqueued.inserted + enqueued.updated,
+      skippedCount: selected.capExceededCount + enqueued.skipped,
+    };
+  } catch (err) {
+    const message = errorMessage(err);
+    input.logger?.warn?.('graph_candidate_enqueue_failed', { error: message });
+    return {
+      warnings: [`graph classification enqueue skipped: ${message}`],
+      candidateCount: 0,
+      pendingEdgeJobCount: 0,
+      skippedCount: input.changedChunkIds.length,
+    };
+  }
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 async function removeDocumentChunkProcessingState(input: {
