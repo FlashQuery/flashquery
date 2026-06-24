@@ -2,6 +2,8 @@ import { classifyGraphEdgeCandidate, type AnalyzedGraphNodeRef } from './edge-an
 import type { GraphRuntimeConfig } from './config.js';
 import type { GraphRelationDefinition } from './vocabulary.js';
 import type { ClassifiedGraphEdgeDraft, ClassifyGraphEdgeCandidateResult } from './edge-analysis.js';
+import { completeStaleGraphEdgeReanalysis } from './staleness.js';
+import type { GraphPgClient } from './structural.js';
 import type { LlmClient } from '../llm/runtime-types.js';
 import { logger as defaultLogger } from '../logging/logger.js';
 import { getIsShuttingDown as defaultGetIsShuttingDown } from '../server/shutdown-state.js';
@@ -56,6 +58,7 @@ export interface ProcessPendingGraphEdgesOptions {
   graphConfig?: GraphRuntimeConfig;
   relations?: GraphRelationDefinition[];
   promptVersion?: string;
+  graphClient?: GraphPgClient;
 }
 
 interface PendingGraphEdgeNodes {
@@ -139,10 +142,27 @@ export async function processPendingGraphEdges(
       const classified = await classifyPendingRow(options, row, nodes);
 
       if (classified.status === 'classified') {
-        if (classified.edges.length > 0 && classified.written === 0) {
+        const staleCompletion = options.graphClient
+          ? await completeStaleGraphEdgeReanalysis(options.graphClient, {
+              instanceId: options.instanceId,
+              sourceChunkId: row.source_chunk_id,
+              targetChunkId: row.target_chunk_id,
+              edges: classified.edges.map((edge) => ({
+                sourceChunkId: edge.sourceChunkId,
+                targetChunkId: edge.targetChunkId,
+                relation: edge.relation,
+                confidence: 'INFERRED',
+                confidenceScore: edge.confidenceScore,
+                reasoning: edge.reasoning,
+                model: edge.model,
+                metadata: edge.metadata,
+              })),
+            })
+          : undefined;
+        if (!options.graphClient && classified.edges.length > 0 && classified.written === 0) {
           await writeClassifiedEdges(options.supabase, options.instanceId, classified.edges);
         }
-        await markComplete(options.supabase, row, options.instanceId, classified, now());
+        await markComplete(options.supabase, row, options.instanceId, classified, now(), staleCompletion);
         result.succeeded++;
         continue;
       }
@@ -299,7 +319,9 @@ async function classifyPendingRow(
     graphConfig: options.graphConfig,
     relations: options.relations,
     promptVersion: options.promptVersion,
-    supabase: options.supabase as Parameters<typeof classifyGraphEdgeCandidate>[0]['supabase'],
+    supabase: options.graphClient
+      ? undefined
+      : (options.supabase as Parameters<typeof classifyGraphEdgeCandidate>[0]['supabase']),
   });
 }
 
@@ -323,7 +345,8 @@ async function markComplete(
   row: PendingGraphEdgeRow,
   instanceId: string,
   classified: Extract<WorkerClassifyResult, { status: 'classified' }>,
-  now: Date
+  now: Date,
+  staleCompletion?: Awaited<ReturnType<typeof completeStaleGraphEdgeReanalysis>>
 ): Promise<void> {
   const { error } = await (supabase.from('fqc_pending_edges') as TableQuery)
     .update({
@@ -332,6 +355,7 @@ async function markComplete(
         status: 'classified',
         edge_count: classified.edges.length,
         written: classified.written,
+        stale_completion: staleCompletion ?? null,
       },
       last_error: null,
       next_retry_at: null,

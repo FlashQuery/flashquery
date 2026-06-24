@@ -227,4 +227,25 @@ describe('graph pending edge worker', () => {
       }),
     ]);
   });
+
+  it('uses stale completion after successful classification when a graph client is provided', async () => {
+    const supabase = fakeSupabase([row()]);
+    const graphClient = {
+      query: vi.fn(async () => ({ rows: [] })),
+    };
+
+    const result = await processPendingGraphEdges({
+      supabase,
+      graphClient,
+      instanceId: 'graph-inst',
+      classifyCandidate: vi.fn(async () => ({ status: 'classified', edges: [], written: 0 })),
+    });
+
+    expect(result.succeeded).toBe(1);
+    expect(graphClient.query).toHaveBeenCalledWith(expect.stringContaining('SELECT id, relation'), [
+      'graph-inst',
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+    ]);
+  });
 });
