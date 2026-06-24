@@ -198,7 +198,7 @@ describe('graph pending edge worker', () => {
       supabase,
       instanceId: 'graph-inst',
       limit: 1,
-      getIsShuttingDown: () => calls++ > 0,
+      getIsShuttingDown: () => calls++ > 1,
       classifyCandidate: vi.fn(async () => ({ status: 'classified', edges: [], written: 0 })),
     });
 
