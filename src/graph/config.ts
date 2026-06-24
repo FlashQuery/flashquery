@@ -5,6 +5,11 @@ export interface GraphRuntimeConfig {
   embeddingName?: string;
   classificationPurpose?: string;
   classificationModel?: string;
+  similarityMode?: 'threshold' | 'percentile';
+  similarityThreshold?: number;
+  similarityPercentile?: number;
+  maxClassificationJobsPerSave?: number;
+  maxEdgeAttempts?: number;
   relations?: string;
   prompts?: string;
   promptOverrides?: Record<string, unknown>;

@@ -8,6 +8,14 @@ Coverage IDs use the prefix `INT-` to avoid collision with the directed test IDs
 
 ---
 
+## Graph Document Intelligence
+
+Graph-enhanced document intelligence workflows for disabled/default behavior and graph-aware public surfaces.
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| IG-01 | Graph-disabled server keeps ordinary `search` and `get_document` behavior unchanged while `query_graph` remains discoverable through a canonical unsupported envelope. | graph_disabled_noop          | 2026-06-24   | 2026-06-24   |
+
 ## Phase 128 Legacy Surface Final Audit
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |

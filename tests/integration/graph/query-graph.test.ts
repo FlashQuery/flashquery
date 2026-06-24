@@ -250,7 +250,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('query_graph public MCP integration', 
     await supabaseManager?.close();
   });
 
-  it('T-I-008/T-I-026/T-I-036/T-I-037/T-I-042 returns bounded primitive and compound graph reads', async () => {
+  it('T-I-008/T-I-026/T-I-029/T-I-030/T-I-036/T-I-037/T-I-042 returns bounded primitive and compound graph reads', async () => {
     const seeded = await seedGraph(client);
 
     const node = parseToolJson<{ data: { node: { chunk_id: string; document: { status: string } } } }>(
@@ -334,6 +334,16 @@ describe.skipIf(!HAS_SUPABASE).sequential('query_graph public MCP integration', 
     );
     expect(ungrounded.data.edges).toEqual(
       expect.arrayContaining([expect.objectContaining({ target: expect.objectContaining({ chunk_id: seeded.isolated }) })])
+    );
+
+    const ungroundedWithoutFilter = parseToolJson<{ data: { edges: Array<{ relation: string }> } }>(
+      await graph.queryGraph({ action: 'ungrounded_edges' })
+    );
+    expect(ungroundedWithoutFilter.data.edges.map((edge) => edge.relation)).toEqual(
+      expect.arrayContaining(['supports', 'depends_on'])
+    );
+    expect(ungroundedWithoutFilter.data.edges.map((edge) => edge.relation)).not.toEqual(
+      expect.arrayContaining(['contains', 'references'])
     );
   }, 120_000);
 

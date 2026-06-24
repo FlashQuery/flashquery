@@ -134,6 +134,28 @@ graph:
     expect(config.graph?.classificationModel).toBeUndefined();
   });
 
+  it('preserves graph similarity and worker limit settings from config', () => {
+    const config = loadConfig(writeConfig(`
+graph:
+  enabled: true
+  embedding_name: primary
+  similarity_mode: percentile
+  similarity_threshold: 0.72
+  similarity_percentile: 0.91
+  max_classification_jobs_per_save: 7
+  max_edge_attempts: 5
+`));
+
+    expect(config.graph).toMatchObject({
+      enabled: true,
+      similarityMode: 'percentile',
+      similarityThreshold: 0.72,
+      similarityPercentile: 0.91,
+      maxClassificationJobsPerSave: 7,
+      maxEdgeAttempts: 5,
+    });
+  });
+
   it('T-U-050 classification_purpose absent from llm.purposes fails', () => {
     expect(() =>
       loadConfig(writeConfig(`

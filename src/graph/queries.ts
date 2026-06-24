@@ -129,6 +129,8 @@ export interface GraphQueryContext {
   graph?: {
     enabled?: boolean;
     similarity_mode?: string;
+    similarity_threshold?: number;
+    similarity_percentile?: number;
     classification_enabled?: boolean;
     communities?: string;
   };
@@ -159,11 +161,11 @@ const MAX_DEPTH = 5;
 
 export function createInMemoryGraphQueryStore(seed: GraphQueryStoreSeed): GraphQueryStore {
   return {
-    async listNodes(instanceId: string): Promise<GraphNodeRow[]> {
-      return seed.nodes.filter((node) => node.instance_id === instanceId);
+    listNodes(instanceId: string): Promise<GraphNodeRow[]> {
+      return Promise.resolve(seed.nodes.filter((node) => node.instance_id === instanceId));
     },
-    async listEdges(instanceId: string): Promise<GraphEdgeRow[]> {
-      return seed.edges.filter((edge) => edge.instance_id === instanceId);
+    listEdges(instanceId: string): Promise<GraphEdgeRow[]> {
+      return Promise.resolve(seed.edges.filter((edge) => edge.instance_id === instanceId));
     },
   };
 }
@@ -546,6 +548,8 @@ function schemaAction(
   features: {
     enabled: boolean;
     similarity_mode: string;
+    similarity_threshold: number;
+    similarity_percentile: number;
     classification_enabled: boolean;
     communities: string;
   };
@@ -561,6 +565,8 @@ function schemaAction(
     features: {
       enabled: context.graph?.enabled ?? true,
       similarity_mode: context.graph?.similarity_mode ?? 'threshold',
+      similarity_threshold: context.graph?.similarity_threshold ?? 0.78,
+      similarity_percentile: context.graph?.similarity_percentile ?? 0.95,
       classification_enabled: context.graph?.classification_enabled ?? false,
       communities: context.graph?.communities ?? 'seeded_read_only',
     },
@@ -641,8 +647,14 @@ function ungroundedEdgesAction(
   relations: GraphRelationDefinition[],
   limit: number
 ): { edges: GraphEdgePayload[] } {
+  const structuralRelations = new Set(
+    relations
+      .filter((relation) => relation.detectionMethod === 'structural' || relation.category === 'structural')
+      .map((relation) => relation.name)
+  );
   return {
     edges: relationAndStatusFilteredEdges(rows.edges, input, relations)
+      .filter((edge) => !structuralRelations.has(edge.relation))
       .filter((edge) => edge.source.provenance_basis === null || edge.target.provenance_basis === null)
       .slice(0, limit),
   };

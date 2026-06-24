@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
-import { createPgGraphQueryStore, queryGraph, type GraphDirection } from '../../graph/queries.js';
+import { createPgGraphQueryStore, queryGraph } from '../../graph/queries.js';
 import { graphRuntimeError } from '../../graph/response.js';
 import { DEFAULT_GRAPH_RELATIONS } from '../../graph/vocabulary.js';
 import { withPgClient } from '../../utils/pg-client.js';
@@ -80,7 +80,7 @@ export function registerGraphTools(server: McpServer, config: FlashQueryConfig):
               from: input.from,
               to: input.to,
               relations: input.relations,
-              direction: input.direction as GraphDirection | undefined,
+              direction: input.direction,
               max_depth: input.max_depth,
               max_hops: input.max_hops,
               include_stale: input.include_stale,
@@ -95,7 +95,9 @@ export function registerGraphTools(server: McpServer, config: FlashQueryConfig):
               relations: graphConfig.resolvedRelations ?? DEFAULT_GRAPH_RELATIONS,
               graph: {
                 enabled: true,
-                similarity_mode: 'threshold',
+                similarity_mode: graphConfig.similarityMode ?? 'threshold',
+                similarity_threshold: graphConfig.similarityThreshold ?? 0.78,
+                similarity_percentile: graphConfig.similarityPercentile ?? 0.95,
                 classification_enabled:
                   graphConfig.classificationPurpose !== undefined ||
                   graphConfig.classificationModel !== undefined,

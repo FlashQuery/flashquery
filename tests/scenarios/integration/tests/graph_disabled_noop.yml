@@ -1,0 +1,56 @@
+name: graph_disabled_noop
+description: >
+  T-Y-001 / IG-01: with graph absent/disabled, existing search and
+  get_document behavior remains unchanged while query_graph returns the
+  canonical unsupported envelope.
+coverage: [IG-01]
+server_modes: [managed]
+
+extra_config:
+  graph:
+    enabled: false
+
+steps:
+  - label: "Write disabled graph no-op fixture"
+    action: vault.write
+    name: noop_doc
+    path: "graph-disabled/noop.md"
+    title: "Graph Disabled Noop ${run.id}"
+    content: "Graph disabled no-op content remains visible through ordinary document tools."
+    tags: ["graph-disabled-${run.id}"]
+
+  - label: "Synchronize ordinary document state"
+    action: scan_vault
+
+  - label: "Disabled graph search keeps ordinary JSON document shape"
+    assert:
+      op: search
+      args:
+        query: "Graph Disabled Noop ${run.id}"
+        mode: filesystem
+        entity_types: [documents]
+        tags: ["graph-disabled-${run.id}"]
+      expect_json_contains:
+        path: "results[0].path"
+        value: "_integration/graph-disabled/noop.md"
+      expect_not_contains: "\"graph_context\""
+
+  - label: "Disabled graph get_document keeps ordinary document output"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${noop_doc.fq_id}"
+      expect_contains: "Graph disabled no-op content remains visible"
+      expect_not_contains: "\"graph_summary\""
+
+  - label: "Disabled graph query surface is discoverable but unsupported"
+    assert:
+      op: query_graph
+      args:
+        action: schema
+      expect_json_equals:
+        path: "error"
+        value: unsupported
+      expect_json_equals:
+        path: "details.code"
+        value: graph_disabled

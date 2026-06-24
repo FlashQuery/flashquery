@@ -753,7 +753,8 @@ async function expandSearchWithGraph(input: {
             depth: current.depth + 1,
           });
           const existing = byChunk.get(nextId);
-          const top = rankGraphSearchCandidates(existing ? [existing, candidate] : [candidate])[0]!;
+          const top = rankGraphSearchCandidates(existing ? [existing, candidate] : [candidate])[0];
+          if (!top) continue;
           byChunk.set(nextId, top);
         }
         queue.push({ chunkId: nextId, depth: current.depth + 1 });

@@ -315,7 +315,7 @@ export function validateParameterCombinations(input: {
     };
   }
 
-  const connections = input.connections as (DocumentConnectionsOptions | undefined);
+  const connections = input.connections;
   const hasGraphAwareOption = connections?.graph_limit_per_chunk !== undefined ||
     connections?.embedding_limit_per_chunk !== undefined ||
     connections?.include_embedding_only !== undefined ||

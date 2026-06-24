@@ -211,8 +211,10 @@ describe('graph query helpers', () => {
         relations: DEFAULT_GRAPH_RELATIONS,
         graph: {
           enabled: true,
-          similarity_mode: 'threshold',
-          classification_enabled: false,
+          similarity_mode: 'percentile',
+          similarity_threshold: 0.72,
+          similarity_percentile: 0.91,
+          classification_enabled: true,
           communities: 'seeded_read_only',
         },
       }
@@ -241,8 +243,10 @@ describe('graph query helpers', () => {
     );
     expect(payload.data.features).toMatchObject({
       enabled: true,
-      similarity_mode: 'threshold',
-      classification_enabled: false,
+      similarity_mode: 'percentile',
+      similarity_threshold: 0.72,
+      similarity_percentile: 0.91,
+      classification_enabled: true,
       communities: 'seeded_read_only',
     });
   });
