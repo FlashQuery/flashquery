@@ -20,6 +20,7 @@ export interface GraphLintOptions {
   dryRun?: boolean;
   maxFindings?: number;
   now?: () => Date;
+  promptVersion?: string;
 }
 
 export interface GraphLintStatusOptions {
@@ -44,6 +45,7 @@ interface LintNodeRow {
   document_status: string;
   heading_path: string;
   content: string;
+  chunk_updated_at: string | null;
   provenance_basis: string | null;
   question_status: string | null;
   question_resolution: string | null;
@@ -51,6 +53,7 @@ interface LintNodeRow {
   community_label: string | null;
   community_summary: string | null;
   analyzed_at: string | null;
+  analyzed_by_model: string | null;
 }
 
 interface LintEdgeRow {
@@ -84,6 +87,7 @@ const ALL_RULES = new Set([
   'LINT-R2',
   'LINT-COMMUNITY',
   'LINT-I1',
+  'LINT-I3',
   'LINT-DLQ',
 ]);
 
@@ -117,6 +121,9 @@ export async function runGraphLint(options: GraphLintOptions): Promise<GraphLint
       communities: selectedRules.has('LINT-COMMUNITY') ? communityFindings(communities) : [],
       integrity: [
         ...(selectedRules.has('LINT-I1') ? integrityFindings(edges, options.dryRun === true) : []),
+        ...(selectedRules.has('LINT-I3') && options.promptVersion
+          ? promptStalenessFindings(nodes, options.promptVersion)
+          : []),
         ...(selectedRules.has('LINT-DLQ') ? deadLetterFindings(deadLetters) : []),
       ],
     };
@@ -159,12 +166,15 @@ export async function runGraphLint(options: GraphLintOptions): Promise<GraphLint
       },
       provenance: {
         summary: {
-          unclassified_terminus_count: applied.provenance.items.length,
-          load_bearing_unclassified_count: applied.provenance.items.length,
-          shallow_chain_count: 0,
-          weak_chain_count: 0,
+          unclassified_terminus_count: applied.provenance.items.filter((item) => item.kind === 'ungrounded').length,
+          load_bearing_unclassified_count: applied.provenance.items.filter((item) => item.kind === 'ungrounded').length,
+          shallow_chain_count: applied.provenance.items.filter((item) => item.kind === 'shallow_chain').length,
+          weak_chain_count: applied.provenance.items.filter((item) => item.kind === 'weak_chain').length,
         },
         items: applied.provenance.items,
+        ungrounded: applied.provenance.items.filter((item) => item.kind === 'ungrounded'),
+        shallow_chains: applied.provenance.items.filter((item) => item.kind === 'shallow_chain'),
+        weak_chains: applied.provenance.items.filter((item) => item.kind === 'weak_chain'),
       },
       contradictions: {
         summary: {
@@ -199,6 +209,7 @@ export async function runGraphLint(options: GraphLintOptions): Promise<GraphLint
     };
 
     if (options.dryRun !== true) {
+      await clearStaleEdges(client, options.instanceId, applied.integrity.items);
       await persistGraphLintRun(client, options.instanceId, payload);
     }
 
@@ -364,13 +375,15 @@ async function loadLintNodes(client: pg.Client, instanceId: string, pathPrefix?:
       COALESCE(d.status, 'active') AS document_status,
       c.heading_path,
       c.content,
+      c.updated_at::text AS chunk_updated_at,
       n.provenance_basis,
       n.question_status,
       n.question_resolution,
       n.community_id,
       n.community_label,
       n.community_summary,
-      n.analyzed_at::text
+      n.analyzed_at::text,
+      n.analyzed_by_model
     FROM fqc_graph_nodes n
     JOIN fqc_chunks c ON c.id = n.chunk_id
     JOIN fqc_documents d ON d.id = c.document_id
@@ -441,13 +454,42 @@ async function graphEpochFor(client: pg.Client, instanceId: string): Promise<num
   return Number(result.rows[0]?.epoch ?? 0);
 }
 
+async function clearStaleEdges(client: pg.Client, instanceId: string, integrityItems: Array<Record<string, unknown>>): Promise<void> {
+  const edgeIds = integrityItems
+    .filter((item) => item.fix_type === 'stale_edge_cleared' && item.applied === true)
+    .map((item) => item.affected_id)
+    .filter(isString);
+  if (edgeIds.length === 0) return;
+  await client.query(
+    `
+    UPDATE fqc_graph_edges
+    SET status = 'active',
+        updated_at = now()
+    WHERE instance_id = $1
+      AND id = ANY($2::uuid[])
+      AND status = 'stale'
+    `,
+    [instanceId, edgeIds]
+  );
+}
+
 function questionFindings(nodes: LintNodeRow[], edges: LintEdgeRow[], now = new Date()): LintCategoryInput[] {
+  const byChunk = new Map(nodes.map((node) => [node.chunk_id, node]));
   return nodes
     .filter((node) => node.question_status === 'open' || node.question_status === 'deferred' || node.question_status === 'resolved')
     .map((node) => {
       const dependents = edges
         .filter((edge) => edge.target_chunk_id === node.chunk_id || edge.source_chunk_id === node.chunk_id)
         .map((edge) => edge.source_chunk_id === node.chunk_id ? edge.target_chunk_id : edge.source_chunk_id);
+      const resolutionTime = parseResolutionTime(node.question_resolution);
+      const unchangedDependents = resolutionTime
+        ? dependents.filter((id) => {
+            const dependent = byChunk.get(id);
+            if (!dependent?.chunk_updated_at) return false;
+            const updatedAt = new Date(dependent.chunk_updated_at).getTime();
+            return Number.isFinite(updatedAt) && updatedAt <= resolutionTime.getTime();
+          })
+        : [];
       return {
         rule: 'LINT-Q1',
         severity: node.question_status === 'resolved' ? 'info' : 'attention',
@@ -467,7 +509,8 @@ function questionFindings(nodes: LintNodeRow[], edges: LintEdgeRow[], now = new 
           community_label: node.community_label,
           downstream_impact_count: dependents.length,
           dependent_chunk_ids: dependents,
-          stale: dependents.some((id) => edges.some((edge) => edge.status === 'stale' && (edge.source_chunk_id === id || edge.target_chunk_id === id))),
+          stale: unchangedDependents.length > 0 || dependents.some((id) => edges.some((edge) => edge.status === 'stale' && (edge.source_chunk_id === id || edge.target_chunk_id === id))),
+          follow_up_required_chunk_ids: unchangedDependents,
           unfolded_dependents: node.question_status === 'resolved' ? dependents : [],
         },
       };
@@ -475,11 +518,12 @@ function questionFindings(nodes: LintNodeRow[], edges: LintEdgeRow[], now = new 
 }
 
 function provenanceFindings(nodes: LintNodeRow[], edges: LintEdgeRow[]): LintCategoryInput[] {
-  return nodes
+  const byChunk = new Map(nodes.map((node) => [node.chunk_id, node]));
+  const ungrounded = nodes
     .filter((node) => !node.provenance_basis && !edges.some((edge) => edge.target_chunk_id === node.chunk_id && edge.confidence === 'EXTRACTED'))
     .map((node) => ({
       rule: 'LINT-P1',
-      severity: 'warning',
+      severity: 'warning' as const,
       stableParts: ['provenance', node.chunk_id],
       summary: `No extracted provenance for ${node.document_path}`,
       chunkIds: [node.chunk_id],
@@ -495,6 +539,47 @@ function provenanceFindings(nodes: LintNodeRow[], edges: LintEdgeRow[]): LintCat
         downstream_dependent_count: edges.filter((edge) => edge.target_chunk_id === node.chunk_id).length,
       },
     }));
+  const shallowChains = edges
+    .filter((edge) => edge.confidence === 'INFERRED')
+    .flatMap((edge) => {
+      const terminus = byChunk.get(edge.target_chunk_id);
+      if (!terminus || terminus.provenance_basis || edges.some((candidate) => candidate.target_chunk_id === terminus.chunk_id && candidate.confidence === 'EXTRACTED')) {
+        return [];
+      }
+      return [{
+        rule: 'LINT-P1',
+        severity: 'warning' as const,
+        stableParts: ['provenance', 'shallow_chain', edge.id],
+        summary: `Provenance chain terminates at unclassified node ${terminus.chunk_id}`,
+        chunkIds: [edge.source_chunk_id, edge.target_chunk_id],
+        edgeIds: [edge.id],
+        documentIds: [terminus.document_id],
+        item: {
+          kind: 'shallow_chain',
+          chain_depth: 1,
+          terminus_chunk_id: terminus.chunk_id,
+          terminus_classified: false,
+          chain: [edge.id],
+        },
+      }];
+    });
+  const weakChains = edges
+    .filter((edge) => edge.confidence_score < 0.7)
+    .map((edge) => ({
+      rule: 'LINT-P1',
+      severity: 'info' as const,
+      stableParts: ['provenance', 'weak_chain', edge.id],
+      summary: `Weak provenance edge ${edge.id}`,
+      chunkIds: [edge.source_chunk_id, edge.target_chunk_id],
+      edgeIds: [edge.id],
+      item: {
+        kind: 'weak_chain',
+        chain: [edge.id],
+        weakest_edge: edge.id,
+        weakest_confidence_score: edge.confidence_score,
+      },
+    }));
+  return [...ungrounded, ...shallowChains, ...weakChains];
 }
 
 function contradictionFindings(nodes: LintNodeRow[], edges: LintEdgeRow[]): LintCategoryInput[] {
@@ -580,9 +665,9 @@ function communityFindings(communities: DetectedCommunity[]): LintCategoryInput[
       provenance_coverage: community.provenance_coverage,
       unclassified_pair_ratio: Number((1 - community.provenance_coverage).toFixed(4)),
       sparse: community.sparse,
-      fragile_conclusion_count: 0,
-      hub_without_support_count: 0,
-      unclassified_bridges_to: [],
+      fragile_conclusion_count: community.fragile_conclusion_count,
+      hub_without_support_count: community.hub_without_support_count,
+      unclassified_bridges_to: community.unclassified_bridges_to,
     },
   }));
 }
@@ -624,6 +709,30 @@ function integrityFindings(edges: LintEdgeRow[], dryRun: boolean): LintCategoryI
     }));
 
   return [...staleFindings, ...activeInactiveFindings];
+}
+
+function promptStalenessFindings(nodes: LintNodeRow[], currentPromptVersion: string): LintCategoryInput[] {
+  return nodes.flatMap((node) => {
+    const storedVersion = promptVersionFromAnalyzedByModel(node.analyzed_by_model);
+    if (!storedVersion || storedVersion === currentPromptVersion) return [];
+    return [{
+      rule: 'LINT-I3',
+      severity: 'attention' as const,
+      stableParts: ['integrity', 'prompt_version_stale', node.chunk_id, storedVersion, currentPromptVersion],
+      summary: `Graph node ${node.chunk_id} was analyzed with stale prompt version ${storedVersion}`,
+      chunkIds: [node.chunk_id],
+      documentIds: [node.document_id],
+      item: {
+        fix_type: 'prompt_version_reanalysis_required',
+        affected_id: node.chunk_id,
+        description: 'Graph node analysis prompt version changed; node should be prioritized for re-analysis.',
+        applied: false,
+        stored_prompt_version: storedVersion,
+        current_prompt_version: currentPromptVersion,
+        analyzed_by_model: node.analyzed_by_model,
+      },
+    }];
+  });
 }
 
 function deadLetterFindings(rows: DeadLetterRow[]): LintCategoryInput[] {
@@ -730,6 +839,19 @@ function exactlyOneInactive(sourceStatus: string, targetStatus: string): boolean
   return (sourceStatus === 'active') !== (targetStatus === 'active');
 }
 
+function promptVersionFromAnalyzedByModel(value: string | null): string | null {
+  if (!value) return null;
+  const separator = value.lastIndexOf('@');
+  if (separator < 0 || separator === value.length - 1) return null;
+  return value.slice(separator + 1);
+}
+
+function parseResolutionTime(value: string | null): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? parsed : null;
+}
+
 function isString(value: unknown): value is string {
   return typeof value === 'string';
 }
@@ -742,4 +864,5 @@ export const __testing = {
   duplicateFindings,
   communityFindings,
   integrityFindings,
+  promptStalenessFindings,
 };

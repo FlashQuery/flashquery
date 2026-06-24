@@ -75,6 +75,7 @@ describe('graph lint category builders', () => {
       'duplicateFindings',
       'communityFindings',
       'integrityFindings',
+      'promptStalenessFindings',
     ]);
   });
 
@@ -92,6 +93,9 @@ describe('graph lint category builders', () => {
         avg_internal_confidence: 1,
         provenance_coverage: 1,
         sparse: false,
+        fragile_conclusion_count: 1,
+        hub_without_support_count: 2,
+        unclassified_bridges_to: ['a:b'],
       },
     ]);
 
@@ -100,36 +104,61 @@ describe('graph lint category builders', () => {
       strength_score: 0.5,
       document_ids: ['doc-a'],
       sparse: false,
+      fragile_conclusion_count: 1,
+      hub_without_support_count: 2,
+      unclassified_bridges_to: ['a:b'],
     });
   });
 
   it('T-U-066 enumerates question lifecycle fields', () => {
     const findings = lintTesting.questionFindings([
-      { chunk_id: 'q1', document_id: 'doc', document_path: '/q.md', document_status: 'active', heading_path: 'Q', content: 'Question?', provenance_basis: null, question_status: 'resolved', question_resolution: 'Done', community_id: 'comm', community_label: 'Community', community_summary: 'Summary', analyzed_at: '2026-06-20T00:00:00.000Z' },
-    ], [], new Date('2026-06-24T00:00:00.000Z'));
+      { chunk_id: 'q1', document_id: 'doc', document_path: '/q.md', document_status: 'active', heading_path: 'Q', content: 'Question?', chunk_updated_at: '2026-06-21T00:00:00.000Z', provenance_basis: null, question_status: 'resolved', question_resolution: '2026-06-22T00:00:00.000Z', community_id: 'comm', community_label: 'Community', community_summary: 'Summary', analyzed_at: '2026-06-20T00:00:00.000Z', analyzed_by_model: 'model@1' },
+      { chunk_id: 'd1', document_id: 'doc', document_path: '/d.md', document_status: 'active', heading_path: 'D', content: 'Dependent', chunk_updated_at: '2026-06-21T12:00:00.000Z', provenance_basis: null, question_status: null, question_resolution: null, community_id: null, community_label: null, community_summary: null, analyzed_at: null, analyzed_by_model: null },
+    ], [
+      { id: 'e1', source_chunk_id: 'q1', target_chunk_id: 'd1', relation: 'depends_on', confidence: 'INFERRED', confidence_score: 0.8, reasoning: null, status: 'active', metadata: null, source_status: 'active', target_status: 'active' },
+    ], new Date('2026-06-24T00:00:00.000Z'));
 
     expect(findings[0]?.item).toMatchObject({
       question_status: 'resolved',
       age_days: 4,
-      downstream_impact_count: 0,
-      stale: false,
-      unfolded_dependents: [],
+      downstream_impact_count: 1,
+      stale: true,
+      follow_up_required_chunk_ids: ['d1'],
+      unfolded_dependents: ['d1'],
     });
   });
 
   it('T-U-067 includes community structural health fields', () => {
     const [finding] = lintTesting.communityFindings([
-      { community_id: 'comm', community_label: 'Label', community_summary: 'Summary', member_chunk_ids: ['a', 'b', 'c'], document_ids: ['doc'], document_paths: ['/doc.md'], strength_score: 0.25, edge_density: 0.5, avg_internal_confidence: 0.5, provenance_coverage: 1, sparse: true },
+      { community_id: 'comm', community_label: 'Label', community_summary: 'Summary', member_chunk_ids: ['a', 'b', 'c'], document_ids: ['doc'], document_paths: ['/doc.md'], strength_score: 0.25, edge_density: 0.5, avg_internal_confidence: 0.5, provenance_coverage: 1, sparse: true, fragile_conclusion_count: 2, hub_without_support_count: 1, unclassified_bridges_to: ['b:c'] },
     ]);
 
     expect(finding?.item).toMatchObject({
       strength_score: 0.25,
       document_paths: ['/doc.md'],
       unclassified_pair_ratio: 0,
-      fragile_conclusion_count: 0,
-      hub_without_support_count: 0,
-      unclassified_bridges_to: [],
+      fragile_conclusion_count: 2,
+      hub_without_support_count: 1,
+      unclassified_bridges_to: ['b:c'],
     });
+  });
+
+  it('surfaces stale graph node prompt versions for re-analysis prioritization', () => {
+    const findings = lintTesting.promptStalenessFindings([
+      { chunk_id: 'n1', document_id: 'doc', document_path: '/n.md', document_status: 'active', heading_path: 'N', content: 'Node', chunk_updated_at: '2026-06-24T00:00:00.000Z', provenance_basis: 'source', question_status: null, question_resolution: null, community_id: null, community_label: null, community_summary: null, analyzed_at: '2026-06-20T00:00:00.000Z', analyzed_by_model: 'model@1' },
+      { chunk_id: 'n2', document_id: 'doc', document_path: '/n2.md', document_status: 'active', heading_path: 'N2', content: 'Node', chunk_updated_at: '2026-06-24T00:00:00.000Z', provenance_basis: 'source', question_status: null, question_resolution: null, community_id: null, community_label: null, community_summary: null, analyzed_at: '2026-06-20T00:00:00.000Z', analyzed_by_model: 'model@2' },
+    ], '2');
+
+    expect(findings).toEqual([
+      expect.objectContaining({
+        rule: 'LINT-I3',
+        item: expect.objectContaining({
+          fix_type: 'prompt_version_reanalysis_required',
+          stored_prompt_version: '1',
+          current_prompt_version: '2',
+        }),
+      }),
+    ]);
   });
 
   it('T-U-068 mirrors semantic items into raw findings', () => {

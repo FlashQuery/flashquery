@@ -26,11 +26,16 @@ export interface DetectedCommunity {
   avg_internal_confidence: number;
   provenance_coverage: number;
   sparse: boolean;
+  fragile_conclusion_count: number;
+  hub_without_support_count: number;
+  unclassified_bridges_to: string[];
 }
 
 const MIN_COMMUNITY_MEMBERS = 3;
 const MIN_INTERNAL_EDGES = 2;
 
+// v1 community maintenance is deliberately deterministic: labels and summaries
+// are derived from stored topology so graph_lint has no extra LLM dependency.
 export function detectTopologyCommunities(input: {
   nodes: CommunityNodeRow[];
   edges: CommunityEdgeRow[];
@@ -75,6 +80,24 @@ export function detectTopologyCommunities(input: {
     const avgConfidence = internalEdges.reduce((sum, edge) => sum + edge.confidence_score, 0) / internalEdges.length;
     const provenanceEdges = internalEdges.filter((edge) => edge.relation === 'supports' || edge.relation === 'references');
     const provenanceCoverage = internalEdges.length === 0 ? 0 : provenanceEdges.length / internalEdges.length;
+    const fragileConclusionCount = internalEdges.filter((edge) => edge.confidence_score < 0.7).length;
+    const degreeByMember = new Map(members.map((member) => [member, 0]));
+    const supportByMember = new Set<string>();
+    for (const edge of internalEdges) {
+      degreeByMember.set(edge.source_chunk_id, (degreeByMember.get(edge.source_chunk_id) ?? 0) + 1);
+      degreeByMember.set(edge.target_chunk_id, (degreeByMember.get(edge.target_chunk_id) ?? 0) + 1);
+      if (edge.relation === 'supports' || edge.relation === 'references') {
+        supportByMember.add(edge.source_chunk_id);
+        supportByMember.add(edge.target_chunk_id);
+      }
+    }
+    const hubWithoutSupportCount = [...degreeByMember.entries()].filter(
+      ([member, degree]) => degree >= 2 && !supportByMember.has(member)
+    ).length;
+    const unclassifiedBridgesTo = internalEdges
+      .filter((edge) => edge.relation !== 'supports' && edge.relation !== 'references' && edge.confidence_score < 0.75)
+      .map((edge) => `${edge.source_chunk_id}:${edge.target_chunk_id}`)
+      .sort();
     const documentIds = [...new Set(members.map((id) => byChunk.get(id)?.document_id).filter(isString))].sort();
     const documentPaths = [...new Set(members.map((id) => byChunk.get(id)?.document_path).filter(isString))].sort();
     const communityId = `comm-${communities.length + 1}-${members.sort()[0]?.slice(0, 8) ?? 'graph'}`;
@@ -92,6 +115,9 @@ export function detectTopologyCommunities(input: {
       avg_internal_confidence: Number(avgConfidence.toFixed(4)),
       provenance_coverage: Number(provenanceCoverage.toFixed(4)),
       sparse: edgeDensity < 0.34,
+      fragile_conclusion_count: fragileConclusionCount,
+      hub_without_support_count: hubWithoutSupportCount,
+      unclassified_bridges_to: unclassifiedBridgesTo,
     });
   }
 

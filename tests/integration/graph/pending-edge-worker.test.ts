@@ -24,6 +24,7 @@ function pendingRow(overrides: Partial<PendingGraphEdgeRow> = {}): PendingGraphE
 function chain<T>(result: T) {
   const query = {
     eq: vi.fn(() => query),
+    in: vi.fn(() => query),
     or: vi.fn(() => query),
     order: vi.fn(() => query),
     limit: vi.fn(() => query),

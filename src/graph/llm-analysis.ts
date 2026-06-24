@@ -11,8 +11,7 @@ import type { ErrorEnvelope } from '../mcp/utils/response-formats.js';
 
 export type GraphLlmOperation =
   | 'graph_node_analysis'
-  | 'graph_edge_classification'
-  | 'graph_community_maintenance';
+  | 'graph_edge_classification';
 
 export interface GraphLlmFailure {
   ok: false;

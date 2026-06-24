@@ -68,6 +68,7 @@ export interface ProcessPendingGraphEdgesOptions {
   graphConfig?: GraphRuntimeConfig;
   relations?: GraphRelationDefinition[];
   promptVersion?: string;
+  nodePromptVersion?: string;
   graphClient?: GraphPgClient;
 }
 
@@ -106,6 +107,7 @@ interface QueryResult<Row = Record<string, unknown>> {
 
 interface QueryBuilder<Row = Record<string, unknown>> extends PromiseLike<QueryResult<Row>> {
   eq(column: string, value: unknown): QueryBuilder<Row>;
+  in(column: string, value: unknown[]): QueryBuilder<Row>;
   or?(filter: string): QueryBuilder<Row>;
   order?(column: string, options?: Record<string, unknown>): QueryBuilder<Row>;
   limit?(count: number): QueryBuilder<Row>;
@@ -266,7 +268,8 @@ export async function processPendingGraphEdgesForConfig(
         llmClient,
         graphConfig,
         relations: graphConfig.resolvedRelations ?? DEFAULT_GRAPH_RELATIONS,
-        promptVersion: graphPromptVersion(graphConfig),
+        promptVersion: graphPromptVersion(graphConfig, 'classify_edge'),
+        nodePromptVersion: graphPromptVersion(graphConfig, 'analyze_node'),
       });
     } finally {
       await pgClient.end().catch(() => undefined);
@@ -282,7 +285,8 @@ export async function processPendingGraphEdgesForConfig(
     llmClient,
     graphConfig,
     relations: graphConfig.resolvedRelations ?? DEFAULT_GRAPH_RELATIONS,
-    promptVersion: graphPromptVersion(graphConfig),
+    promptVersion: graphPromptVersion(graphConfig, 'classify_edge'),
+    nodePromptVersion: graphPromptVersion(graphConfig, 'analyze_node'),
   });
 }
 
@@ -363,7 +367,8 @@ async function loadAnalyzedNodes(
 ): Promise<PendingGraphEdgeNodes> {
   const { data, error } = await (supabase.from('fqc_graph_nodes') as TableQuery)
     .select<AnalyzedGraphNodeRef>('chunk_id, key_claims, analyzed_at, analyzed_by_model')
-    .eq('instance_id', instanceId);
+    .eq('instance_id', instanceId)
+    .in('chunk_id', [row.source_chunk_id, row.target_chunk_id]);
 
   if (error) {
     throw new Error(`graph node dependency query failed: ${error.message ?? 'unknown error'}`);
@@ -382,7 +387,8 @@ async function analyzeMissingPendingNodes(
   nodes: PendingGraphEdgeNodes,
   now: Date
 ): Promise<PendingGraphEdgeNodes> {
-  if (!options.llmClient || !options.graphConfig || !options.promptVersion) {
+  const promptVersion = options.nodePromptVersion ?? options.promptVersion;
+  if (!options.llmClient || !options.graphConfig || !promptVersion) {
     return nodes;
   }
 
@@ -405,7 +411,7 @@ async function analyzeMissingPendingNodes(
       chunk,
       llmClient: options.llmClient,
       graphConfig: options.graphConfig,
-      promptVersion: options.promptVersion,
+      promptVersion,
       analyzedAt: now,
     });
     if (analyzed.status === 'analyzed') {
@@ -431,7 +437,8 @@ async function loadPendingNodeChunks(
 ): Promise<Map<string, { id: string; content: string; contentHash: string }>> {
   const query = (supabase.from('fqc_chunks') as TableQuery)
     .select<GraphNodeChunkRow>('id, content, content_hash')
-    .eq('instance_id', instanceId);
+    .eq('instance_id', instanceId)
+    .in('id', chunkIds);
 
   const { data, error } = await query;
   if (error) {
@@ -648,8 +655,8 @@ function isNodeReadyForPending(node: AnalyzedGraphNodeRef | null): boolean {
   return Boolean(node && typeof node.analyzed_at === 'string' && Array.isArray(node.key_claims));
 }
 
-function graphPromptVersion(graphConfig: GraphRuntimeConfig): string {
-  return graphConfig.resolvedPrompts?.find((prompt) => prompt.id === 'classify_edge')?.version ?? '1';
+function graphPromptVersion(graphConfig: GraphRuntimeConfig, promptId: string): string {
+  return graphConfig.resolvedPrompts?.find((prompt) => prompt.id === promptId)?.version ?? '1';
 }
 
 function stringScalar(value: unknown): string {

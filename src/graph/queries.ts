@@ -669,18 +669,80 @@ function weakPathsAction(
   edges: GraphEdgePayload[];
 } {
   const threshold = input.confidence_threshold ?? 0.7;
-  const edges = relationAndStatusFilteredEdges(rows.edges, input, relations)
-    .filter((edge) => edge.confidence_score < threshold)
-    .slice(0, limit);
+  const maxDepth = clampDepth(input.max_depth ?? input.max_hops);
+  const filteredEdges = relationAndStatusFilteredEdges(rows.edges, input, relations);
+  const paths = enumerateWeakPaths(rows, filteredEdges, input, relations, threshold, maxDepth, limit);
+  const weakEdges = new Map<string, GraphEdgePayload>();
+  for (const path of paths) {
+    for (const edge of path.edges) {
+      if (edge.confidence_score < threshold) weakEdges.set(edge.id, edge);
+    }
+  }
   return {
     threshold,
-    paths: edges.map((edge) => ({
+    paths,
+    edges: [...weakEdges.values()].slice(0, limit),
+  };
+}
+
+function enumerateWeakPaths(
+  rows: LoadedGraphRows,
+  edges: GraphEdgePayload[],
+  input: GraphQueryInput,
+  relations: GraphRelationDefinition[],
+  threshold: number,
+  maxDepth: number,
+  limit: number
+): Array<{ nodes: GraphNodePayload[]; edges: GraphEdgePayload[]; weakest_confidence_score: number }> {
+  const roots = input.chunk_id
+    ? rows.nodes.filter((node) => node.chunk_id === input.chunk_id)
+    : rows.nodes;
+  const paths: Array<{ nodes: GraphNodePayload[]; edges: GraphEdgePayload[]; weakest_confidence_score: number }> = [];
+  const seen = new Set<string>();
+
+  for (const root of roots) {
+    const queue: Array<{ node: GraphNodePayload; nodeIds: string[]; edgeIds: string[] }> = [
+      { node: root, nodeIds: [root.chunk_id], edgeIds: [] },
+    ];
+    while (queue.length > 0 && paths.length < limit) {
+      const current = queue.shift();
+      if (!current || current.edgeIds.length >= maxDepth) continue;
+      for (const edge of adjacentEdges(edges, current.node.chunk_id, input.direction ?? 'both', relations, input)) {
+        const next = edge.source.chunk_id === current.node.chunk_id ? edge.target : edge.source;
+        if (current.nodeIds.includes(next.chunk_id)) continue;
+        const nextEdgeIds = [...current.edgeIds, edge.id];
+        const nextNodeIds = [...current.nodeIds, next.chunk_id];
+        const pathEdges = nextEdgeIds
+          .map((id) => edges.find((candidate) => candidate.id === id))
+          .filter((candidate): candidate is GraphEdgePayload => candidate !== undefined);
+        const weakest = Math.min(...pathEdges.map((candidate) => candidate.confidence_score));
+        if (pathEdges.length > 1 && weakest < threshold) {
+          const key = nextEdgeIds.join('>');
+          if (!seen.has(key)) {
+            seen.add(key);
+            paths.push({
+              nodes: nextNodeIds
+                .map((id) => rows.nodes.find((candidate) => candidate.chunk_id === id))
+                .filter((candidate): candidate is GraphNodePayload => candidate !== undefined),
+              edges: pathEdges,
+              weakest_confidence_score: weakest,
+            });
+          }
+        }
+        queue.push({ node: next, nodeIds: nextNodeIds, edgeIds: nextEdgeIds });
+      }
+    }
+  }
+
+  if (paths.length > 0) return paths;
+  return edges
+    .filter((edge) => edge.confidence_score < threshold)
+    .slice(0, limit)
+    .map((edge) => ({
       nodes: [edge.source, edge.target],
       edges: [edge],
       weakest_confidence_score: edge.confidence_score,
-    })),
-    edges,
-  };
+    }));
 }
 
 function ungroundedEdgesAction(

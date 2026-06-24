@@ -1,4 +1,14 @@
 prompts:
+  - id: analyze_node
+    version: "1"
+    template: |-
+      Analyze one graph chunk. Return only JSON matching the graph node analysis schema.
+
+      Chunk:
+      {{chunk_content}}
+    required_variables:
+      - chunk_content
+    overridable: true
   - id: classify_edge
     version: "1"
     template: |-

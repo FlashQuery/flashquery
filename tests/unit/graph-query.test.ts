@@ -201,6 +201,41 @@ describe('graph query helpers', () => {
     ]);
   });
 
+  it('returns multi-hop weak paths with computed weakest link', async () => {
+    const store = createInMemoryGraphQueryStore(seedGraph());
+
+    const result = await queryGraph(store, {
+      instance_id: 'instance-a',
+      action: 'weak_paths',
+      chunk_id: 'a',
+      max_depth: 3,
+      confidence_threshold: 0.7,
+    });
+
+    const payload = parseResult(result) as {
+      data: {
+        paths: Array<{ nodes: Array<{ chunk_id: string }>; edges: Array<{ id: string }>; weakest_confidence_score: number }>;
+        edges: Array<{ id: string }>;
+      };
+    };
+
+    expect(payload.data.paths).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        nodes: [
+          expect.objectContaining({ chunk_id: 'a' }),
+          expect.objectContaining({ chunk_id: 'b' }),
+          expect.objectContaining({ chunk_id: 'c' }),
+        ],
+        edges: [
+          expect.objectContaining({ id: 'edge-a-b' }),
+          expect.objectContaining({ id: 'edge-b-c' }),
+        ],
+        weakest_confidence_score: 0.61,
+      }),
+    ]));
+    expect(payload.data.edges).toEqual([expect.objectContaining({ id: 'edge-b-c' })]);
+  });
+
   it('T-U-069 shapes schema from loaded vocabulary and graph feature flags', async () => {
     const store = createInMemoryGraphQueryStore(seedGraph());
 

@@ -29,7 +29,13 @@ export interface GraphLintPayload {
   scope_applied: Record<string, unknown> | null;
   counts: GraphLintCounts;
   questions: { summary: Record<string, unknown>; items: Array<Record<string, unknown>> };
-  provenance: { summary: Record<string, unknown>; items: Array<Record<string, unknown>> };
+  provenance: {
+    summary: Record<string, unknown>;
+    items: Array<Record<string, unknown>>;
+    ungrounded?: Array<Record<string, unknown>>;
+    shallow_chains?: Array<Record<string, unknown>>;
+    weak_chains?: Array<Record<string, unknown>>;
+  };
   contradictions: { summary: Record<string, unknown>; items: Array<Record<string, unknown>> };
   duplicates: { summary: Record<string, unknown>; items: Array<Record<string, unknown>> };
   communities: { summary: Record<string, unknown>; items: Array<Record<string, unknown>> };

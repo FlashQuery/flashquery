@@ -31,6 +31,14 @@ export const DEFAULT_GRAPH_PROMPTS_PATH = 'src/graph/defaults/graph-prompts.yml'
 
 const FALLBACK_GRAPH_PROMPTS: GraphPromptDefinition[] = [
   {
+    id: 'analyze_node',
+    version: '1',
+    template:
+      'Analyze one graph chunk. Return only JSON matching the graph node analysis schema.\n\nChunk:\n{{chunk_content}}',
+    requiredVariables: ['chunk_content'],
+    overridable: true,
+  },
+  {
     id: 'classify_edge',
     version: '1',
     template:

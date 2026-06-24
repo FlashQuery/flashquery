@@ -771,6 +771,7 @@ async function runGraphLintAction(
     scope: input.scope,
     dryRun: input.dry_run === true,
     maxFindings: input.max_findings,
+    promptVersion: config.graph?.resolvedPrompts?.find((prompt) => prompt.id === 'analyze_node')?.version,
   });
 }
 

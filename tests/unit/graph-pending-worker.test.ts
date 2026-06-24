@@ -30,7 +30,9 @@ function fakeSupabase(rows: PendingGraphEdgeRow[]) {
   const graphNodes: Array<Record<string, unknown>> = [];
 
   const applyFilters = <T extends Record<string, unknown>>(inputRows: T[], filters: Record<string, unknown>) =>
-    inputRows.filter((item) => Object.entries(filters).every(([key, value]) => item[key] === value));
+    inputRows.filter((item) =>
+      Object.entries(filters).every(([key, value]) => Array.isArray(value) ? value.includes(item[key]) : item[key] === value)
+    );
 
   const makeBuilder = (table: string, operation: 'select' | 'update' | 'insert' | 'delete', payload?: unknown) => {
     const filters: Record<string, unknown> = {};
@@ -378,6 +380,7 @@ describe('graph pending edge worker', () => {
       graphConfig: { enabled: true, classificationPurpose: 'graph-classifier' },
       relations: [],
       promptVersion: 'prompt-v1',
+      nodePromptVersion: 'node-v1',
     });
 
     expect(result).toMatchObject({ processed: 1, succeeded: 1, failed: 0 });
@@ -385,12 +388,12 @@ describe('graph pending edge worker', () => {
       expect.objectContaining({
         chunk_id: '11111111-1111-4111-8111-111111111111',
         key_claims: ['Source claim'],
-        analyzed_by_model: 'graph-model@prompt-v1',
+        analyzed_by_model: 'graph-model@node-v1',
       }),
       expect.objectContaining({
         chunk_id: '22222222-2222-4222-8222-222222222222',
         key_claims: ['Target claim'],
-        analyzed_by_model: 'graph-model@prompt-v1',
+        analyzed_by_model: 'graph-model@node-v1',
       }),
     ]);
     expect(llmClient.completeByPurpose).toHaveBeenCalledTimes(3);
