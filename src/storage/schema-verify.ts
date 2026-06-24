@@ -293,6 +293,7 @@ export async function verifySchema(
     'fqc_graph_edges',
     'fqc_pending_edges',
     'fqc_graph_maintenance_state',
+    'fqc_graph_lint_runs',
   ];
 
   const missingTables: string[] = [];
@@ -361,6 +362,13 @@ export async function verifySchema(
     { table: 'fqc_pending_edges', column: 'result' },
     { table: 'fqc_pending_edges', column: 'last_error' },
     { table: 'fqc_pending_edges', column: 'next_retry_at' },
+    { table: 'fqc_graph_lint_runs', column: 'instance_id' },
+    { table: 'fqc_graph_lint_runs', column: 'run_id' },
+    { table: 'fqc_graph_lint_runs', column: 'graph_epoch' },
+    { table: 'fqc_graph_lint_runs', column: 'timestamp' },
+    { table: 'fqc_graph_lint_runs', column: 'scope' },
+    { table: 'fqc_graph_lint_runs', column: 'counts' },
+    { table: 'fqc_graph_lint_runs', column: 'payload' },
   ];
   const missingColumns: string[] = [];
 
@@ -388,6 +396,11 @@ export async function verifySchema(
   ) {
     graphSchemaErrors.push(
       'fqc_pending_edges must have a unique dedupe constraint on (instance_id, source_chunk_id, target_chunk_id)'
+    );
+  }
+  if (!(await uniqueConstraintExists(client, 'fqc_graph_lint_runs', ['instance_id', 'run_id']))) {
+    graphSchemaErrors.push(
+      'fqc_graph_lint_runs must have a unique lookup constraint on (instance_id, run_id)'
     );
   }
   if (graphSchemaErrors.length > 0) {

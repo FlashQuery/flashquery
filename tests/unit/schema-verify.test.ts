@@ -128,8 +128,8 @@ describe('verifySchema', () => {
     // Should not throw
     await expect(verifySchema(mockClient)).resolves.toBeUndefined();
 
-    // Verify that tableExists was called 16 times, plus required-column and graph-contract checks.
-    expect(mockQuery).toHaveBeenCalledTimes(70);
+    // Verify that tableExists was called for all required tables, plus required-column and graph-contract checks.
+    expect(mockQuery).toHaveBeenCalledTimes(79);
   });
 
   it('throws error listing missing tables when one table is missing', async () => {
@@ -186,11 +186,11 @@ describe('verifySchema', () => {
     });
 
     await expect(verifySchema(mockClient)).rejects.toThrow(
-      'Missing required tables after DDL: [fqc_memory, fqc_vault, fqc_documents, fqc_chunks, fqc_plugin_registry, fqc_llm_providers, fqc_llm_models, fqc_llm_purposes, fqc_llm_purpose_models, fqc_llm_usage, fqc_purpose_templates, fqc_pending_embeds, fqc_graph_nodes, fqc_graph_edges, fqc_pending_edges, fqc_graph_maintenance_state]'
+      'Missing required tables after DDL: [fqc_memory, fqc_vault, fqc_documents, fqc_chunks, fqc_plugin_registry, fqc_llm_providers, fqc_llm_models, fqc_llm_purposes, fqc_llm_purpose_models, fqc_llm_usage, fqc_purpose_templates, fqc_pending_embeds, fqc_graph_nodes, fqc_graph_edges, fqc_pending_edges, fqc_graph_maintenance_state, fqc_graph_lint_runs]'
     );
 
-    // All 16 tables should be checked
-    expect(mockQuery).toHaveBeenCalledTimes(16);
+    // All required tables should be checked
+    expect(mockQuery).toHaveBeenCalledTimes(17);
   });
 
   it('checks tables in the correct order', async () => {
@@ -215,6 +215,7 @@ describe('verifySchema', () => {
       'fqc_graph_edges',
       'fqc_pending_edges',
       'fqc_graph_maintenance_state',
+      'fqc_graph_lint_runs',
     ];
 
     // Table name is passed as a parameterized argument (callArgs[1]), not in the SQL string

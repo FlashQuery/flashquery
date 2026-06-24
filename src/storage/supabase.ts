@@ -588,6 +588,24 @@ CREATE TABLE IF NOT EXISTS fqc_graph_maintenance_state (
 CREATE INDEX IF NOT EXISTS idx_fqc_graph_maintenance_state_status
   ON fqc_graph_maintenance_state(instance_id, status);
 
+CREATE TABLE IF NOT EXISTS fqc_graph_lint_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  instance_id TEXT NOT NULL,
+  run_id UUID NOT NULL DEFAULT gen_random_uuid(),
+  graph_epoch BIGINT NOT NULL DEFAULT 0,
+  timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+  scope JSONB,
+  counts JSONB NOT NULL DEFAULT '{}'::jsonb,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(instance_id, run_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fqc_graph_lint_runs_instance_timestamp
+  ON fqc_graph_lint_runs(instance_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_fqc_graph_lint_runs_instance_run_id
+  ON fqc_graph_lint_runs(instance_id, run_id);
+
 -- Phase 32: description column added here, but dropped in Phase 69 (SPEC-19) — omitted to prevent
 -- add/drop cycle that exhausts PostgreSQL's 1600 attnum slots over repeated test runs.
 
