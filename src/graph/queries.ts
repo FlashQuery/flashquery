@@ -255,7 +255,7 @@ export async function queryGraph(
   }
 
   try {
-    const rows = await loadPayloadRows(store, input.instance_id);
+    const rows = filterLoadedRowsForAction(await loadPayloadRows(store, input.instance_id), action, input);
     const limit = clampLimit(input.limit);
     const relations = context.relations ?? DEFAULT_GRAPH_RELATIONS;
 
@@ -342,6 +342,24 @@ export function filterGraphEdgesForSurface(
 interface LoadedGraphRows {
   nodes: GraphNodePayload[];
   edges: GraphEdgePayload[];
+}
+
+function filterLoadedRowsForAction(
+  rows: LoadedGraphRows,
+  action: GraphAction,
+  input: GraphQueryInput
+): LoadedGraphRows {
+  if (!input.document_status || action === 'provenance_chain') {
+    return rows;
+  }
+  return {
+    nodes: filterGraphNodesForSurface(rows.nodes, 'query_graph', {
+      document_status: input.document_status,
+    }),
+    edges: filterGraphEdgesForSurface(rows.edges, 'query_graph', {
+      document_status: input.document_status,
+    }),
+  };
 }
 
 async function loadPayloadRows(store: GraphQueryStore, instanceId: string): Promise<LoadedGraphRows> {

@@ -295,6 +295,16 @@ describe.skipIf(!HAS_SUPABASE).sequential('query_graph public MCP integration', 
     expect(stats.data.node_count).toBe(6);
     expect(stats.data.by_relation).toMatchObject({ contains: 1, supports: 2 });
 
+    const archivedStats = parseToolJson<{
+      data: { node_count: number; by_document_status: Record<string, number> };
+    }>(
+      await graph.queryGraph({ action: 'stats', document_status: 'archived' })
+    );
+    expect(archivedStats.data).toMatchObject({
+      node_count: 1,
+      by_document_status: { archived: 1 },
+    });
+
     const schema = parseToolJson<{ data: { relations: Array<{ name: string }>; features: { enabled: boolean } } }>(
       await graph.queryGraph({ action: 'schema' })
     );
