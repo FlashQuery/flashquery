@@ -20,6 +20,7 @@ import {
 } from '../embedding/background-embed.js';
 import { scheduleChangedDocumentChunks } from '../embedding/chunks/scheduler.js';
 import { withAncestorDirectoryLocksShared, withDocumentLock } from './document-lock.js';
+import type { ProcessPendingGraphEdgesResult } from '../graph/pending-worker.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // scanMutex — DCP-03: serializes concurrent runScanOnce() calls
@@ -39,6 +40,7 @@ export interface ScanResult {
   deletedFiles: number;
   embeddingStatus: 'complete' | 'partial' | 'timed_out' | 'skipped' | 'drain_query_failed'; // Result of embedding drain
   embedsAwaited: number; // Number of embed promises awaited during drain
+  graphWorker?: ProcessPendingGraphEdgesResult;
 }
 
 export interface FrontmatterRepairOptions {
@@ -1289,6 +1291,43 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
     }
   }
 
+  let graphWorker: ProcessPendingGraphEdgesResult | undefined;
+  if (config.graph?.enabled === true && !getIsShuttingDown()) {
+    try {
+      const { processPendingGraphEdgesForConfig } = await import('../graph/pending-worker.js');
+      graphWorker = await processPendingGraphEdgesForConfig({
+        config,
+        supabase,
+        logger,
+        limit: config.graph.maxClassificationJobsPerSave ?? 25,
+      });
+      if (graphWorker.selected > 0 || graphWorker.warnings.length > 0) {
+        logger.info(
+          `[PENDING-GRAPH] selected=${graphWorker.selected} processed=${graphWorker.processed} succeeded=${graphWorker.succeeded} failed=${graphWorker.failed} dead_letter=${graphWorker.dead_letter} skipped=${graphWorker.skipped}`
+        );
+      }
+      if (graphWorker.failed > 0 && embeddingStatus === 'complete') {
+        embeddingStatus = 'partial';
+      }
+    } catch (pendingGraphErr: unknown) {
+      graphWorker = {
+        selected: 0,
+        processed: 0,
+        succeeded: 0,
+        failed: 1,
+        dead_letter: 0,
+        skipped: 0,
+        warnings: ['graph_worker_failed'],
+      };
+      logger.error(
+        `[PENDING-GRAPH] worker_failed: ${pendingGraphErr instanceof Error ? pendingGraphErr.message : String(pendingGraphErr)}`
+      );
+      if (embeddingStatus === 'complete') {
+        embeddingStatus = 'partial';
+      }
+    }
+  }
+
   return {
     hashMismatches,
     statusMismatches,
@@ -1297,6 +1336,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
     deletedFiles,
     embeddingStatus,
     embedsAwaited,
+    ...(graphWorker === undefined ? {} : { graphWorker }),
   };
   } finally {
     release();

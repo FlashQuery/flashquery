@@ -1,12 +1,15 @@
 import { classifyGraphEdgeCandidate, type AnalyzedGraphNodeRef } from './edge-analysis.js';
 import type { GraphRuntimeConfig } from './config.js';
 import type { GraphRelationDefinition } from './vocabulary.js';
+import { DEFAULT_GRAPH_RELATIONS } from './vocabulary.js';
 import type { ClassifiedGraphEdgeDraft, ClassifyGraphEdgeCandidateResult } from './edge-analysis.js';
 import { completeStaleGraphEdgeReanalysis } from './staleness.js';
 import type { GraphPgClient } from './structural.js';
+import type { FlashQueryConfig } from '../config/types.js';
 import type { LlmClient } from '../llm/runtime-types.js';
 import { logger as defaultLogger } from '../logging/logger.js';
 import { getIsShuttingDown as defaultGetIsShuttingDown } from '../server/shutdown-state.js';
+import { createPgClientIPv4 } from '../utils/pg-client.js';
 
 export type PendingGraphEdgeStatus = 'pending' | 'processing' | 'complete' | 'failed' | 'dead_letter';
 
@@ -61,6 +64,14 @@ export interface ProcessPendingGraphEdgesOptions {
   graphClient?: GraphPgClient;
 }
 
+export interface ProcessPendingGraphEdgesForConfigOptions {
+  config: FlashQueryConfig;
+  supabase: SupabaseLike;
+  limit?: number;
+  logger?: StructuredLogger;
+  now?: () => Date;
+}
+
 interface PendingGraphEdgeNodes {
   sourceNode: AnalyzedGraphNodeRef | null;
   targetNode: AnalyzedGraphNodeRef | null;
@@ -92,7 +103,7 @@ interface QueryBuilder<Row = Record<string, unknown>> extends PromiseLike<QueryR
 interface TableQuery {
   select<Row = Record<string, unknown>>(columns?: string): QueryBuilder<Row>;
   update(payload: Record<string, unknown>): QueryBuilder;
-  insert(payload: Record<string, unknown> | Array<Record<string, unknown>>): QueryBuilder | { select(columns?: string): PromiseLike<QueryResult> };
+  insert(payload: Record<string, unknown> | Array<Record<string, unknown>>): { select(columns?: string): PromiseLike<QueryResult> };
   delete(): QueryBuilder;
 }
 
@@ -197,6 +208,59 @@ export async function processPendingGraphEdges(
   }
 
   return result;
+}
+
+export async function processPendingGraphEdgesForConfig(
+  options: ProcessPendingGraphEdgesForConfigOptions
+): Promise<ProcessPendingGraphEdgesResult> {
+  const graphConfig = options.config.graph;
+  if (graphConfig?.enabled !== true) {
+    return emptyResult();
+  }
+
+  if (!graphConfig.classificationPurpose && !graphConfig.classificationModel) {
+    return emptyResult(['graph_classification_skipped_missing_resolver']);
+  }
+
+  const { llmClient } = await import('../llm/client.js');
+  if (!llmClient) {
+    return emptyResult(['graph_classification_skipped_missing_llm_client']);
+  }
+
+  let graphClient: GraphPgClient | undefined;
+  if (options.config.supabase.databaseUrl) {
+    const pgClient = createPgClientIPv4(options.config.supabase.databaseUrl);
+    await pgClient.connect();
+    graphClient = pgClient;
+    try {
+      return await processPendingGraphEdges({
+        supabase: options.supabase,
+        graphClient,
+        instanceId: options.config.instance.id,
+        limit: options.limit ?? graphConfig.maxClassificationJobsPerSave,
+        logger: options.logger,
+        now: options.now,
+        llmClient,
+        graphConfig,
+        relations: DEFAULT_GRAPH_RELATIONS,
+        promptVersion: 'default',
+      });
+    } finally {
+      await pgClient.end().catch(() => undefined);
+    }
+  }
+
+  return await processPendingGraphEdges({
+    supabase: options.supabase,
+    instanceId: options.config.instance.id,
+    limit: options.limit ?? graphConfig.maxClassificationJobsPerSave,
+    logger: options.logger,
+    now: options.now,
+    llmClient,
+    graphConfig,
+    relations: DEFAULT_GRAPH_RELATIONS,
+    promptVersion: 'default',
+  });
 }
 
 export async function listGraphDeadLetterJobs(options: {
@@ -385,8 +449,7 @@ async function writeClassifiedEdges(
     status: 'active',
     metadata: edge.metadata,
   }));
-  const insert = (supabase.from('fqc_graph_edges') as TableQuery).insert(rows);
-  const result = 'select' in insert ? await insert.select('id') : await insert;
+  const result = await (supabase.from('fqc_graph_edges') as TableQuery).insert(rows).select('id');
   if (result.error) {
     throw new Error(`graph edge insert failed: ${result.error.message ?? 'unknown error'}`);
   }
@@ -480,5 +543,17 @@ function makeDefaultStructuredLogger(): StructuredLogger {
   return {
     warn: (message, fields) => defaultLogger?.warn?.(`${message}: ${JSON.stringify(fields ?? {})}`),
     error: (message, fields) => defaultLogger?.error?.(`${message}: ${JSON.stringify(fields ?? {})}`),
+  };
+}
+
+function emptyResult(warnings: string[] = []): ProcessPendingGraphEdgesResult {
+  return {
+    selected: 0,
+    processed: 0,
+    succeeded: 0,
+    failed: 0,
+    dead_letter: 0,
+    skipped: 0,
+    warnings,
   };
 }

@@ -46,7 +46,9 @@ import {
   type ScanResult,
 } from './scanner.js';
 
-export type MaintenanceAction = 'sync' | 'repair' | 'status' | LifecycleAction;
+export type MaintenanceGraphWorkerAction = 'graph_worker';
+export type MaintenanceAction = 'sync' | 'repair' | 'status' | MaintenanceGraphWorkerAction | LifecycleAction;
+type MaintenanceExecutableAction = 'sync' | 'repair' | MaintenanceGraphWorkerAction;
 export type MaintenanceRequestedAction = MaintenanceAction | MaintenanceAction[];
 export type MaintenanceJobStatus = 'running' | 'completed' | 'failed' | 'aborted';
 
@@ -76,11 +78,29 @@ export interface MaintenanceStatusPayload {
   status: MaintenanceJobStatus;
   started_at: string;
   finished_at?: string;
-  actions: MaintenanceActionResult[];
+  actions: LocalMaintenanceActionResult[];
   error?: ErrorEnvelope;
 }
 
-export type MaintenanceSyncPayload = { actions: MaintenanceActionResult[] };
+interface MaintenanceGraphWorkerActionResult {
+  action: 'graph_worker';
+  started_at: string;
+  finished_at: string;
+  dry_run: false;
+  counts: {
+    selected: number;
+    processed: number;
+    succeeded: number;
+    failed: number;
+    dead_letter: number;
+    skipped: number;
+  };
+  warnings?: string[];
+}
+
+type LocalMaintenanceActionResult = MaintenanceActionResult | MaintenanceGraphWorkerActionResult;
+
+export type MaintenanceSyncPayload = { actions: LocalMaintenanceActionResult[] };
 
 export type MaintenanceResult<
   T = MaintenanceSyncPayload | MaintenanceAcceptedPayload | MaintenanceStatusPayload,
@@ -153,7 +173,7 @@ export async function maintainVault(
   }
 
   if (input.background) {
-    const job = createJob(normalized.payload, false);
+    const job = createJob(normalized.payload as Array<'sync' | 'repair'>, false);
     void runBackgroundJob(config, job.job_id);
     return {
       ok: true,
@@ -226,7 +246,7 @@ async function getMaintenanceJobStatusForInput(
 
 function normalizeMaintenanceActions(
   action: MaintenanceRequestedAction
-): MaintenanceResult<Array<'sync' | 'repair'>> {
+): MaintenanceResult<MaintenanceExecutableAction[]> {
   if (Array.isArray(action)) {
     const unique = new Set(action);
     if (unique.size !== action.length || unique.size === 0) {
@@ -265,9 +285,12 @@ function normalizeMaintenanceActions(
   if (action === 'sync' || action === 'repair') {
     return { ok: true, payload: [action] };
   }
+  if (action === 'graph_worker') {
+    return { ok: true, payload: [action] };
+  }
 
   return invalidInput(
-    'action must be sync, repair, status, or ["repair","sync"]',
+    'action must be sync, repair, graph_worker, status, or ["repair","sync"]',
     'maintain_vault',
     {
       parameter: 'action',
@@ -445,7 +468,7 @@ async function dispatchRetireEmbedding(
 }
 
 function validateModeOptions(
-  actions: Array<'sync' | 'repair'>,
+  actions: MaintenanceExecutableAction[],
   input: MaintainVaultInput
 ): MaintenanceResult<null> {
   const identifier = actions.join(',');
@@ -466,16 +489,37 @@ function validateModeOptions(
 
 async function executeActions(
   config: FlashQueryConfig,
-  actions: Array<'sync' | 'repair'>,
+  actions: MaintenanceExecutableAction[],
   dryRun: boolean
-): Promise<MaintenanceActionResult[]> {
-  const results: MaintenanceActionResult[] = [];
+): Promise<LocalMaintenanceActionResult[]> {
+  const results: LocalMaintenanceActionResult[] = [];
   for (const action of actions) {
     if (getIsShuttingDown()) {
       throw new Error('maintenance aborted during shutdown');
     }
 
     const startedAt = new Date().toISOString();
+    if (action === 'graph_worker') {
+      const result = await runGraphWorkerOnce(config);
+      const finishedAt = new Date().toISOString();
+      results.push({
+        action: 'graph_worker',
+        started_at: startedAt,
+        finished_at: finishedAt,
+        dry_run: false,
+        counts: {
+          selected: result.selected,
+          processed: result.processed,
+          succeeded: result.succeeded,
+          failed: result.failed,
+          dead_letter: result.dead_letter,
+          skipped: result.skipped,
+        },
+        ...(result.warnings.length === 0 ? {} : { warnings: result.warnings }),
+      });
+      continue;
+    }
+
     if (action === 'repair') {
       const result = await reconcileTrackedDocuments(config, { dryRun });
       const finishedAt = new Date().toISOString();
@@ -510,6 +554,25 @@ async function executeActions(
     );
   }
   return results;
+}
+
+async function runGraphWorkerOnce(config: FlashQueryConfig): Promise<{
+  selected: number;
+  processed: number;
+  succeeded: number;
+  failed: number;
+  dead_letter: number;
+  skipped: number;
+  warnings: string[];
+}> {
+  const { supabaseManager } = await import('../storage/supabase.js');
+  const { processPendingGraphEdgesForConfig } = await import('../graph/pending-worker.js');
+  return await processPendingGraphEdgesForConfig({
+    config,
+    supabase: supabaseManager.getClient(),
+    logger,
+    limit: config.graph?.maxClassificationJobsPerSave ?? 25,
+  });
 }
 
 async function refreshHostTemplatesAfterSync(
@@ -586,6 +649,15 @@ function scanWarnings(result: ScanResult): MaintenanceActionResult['warnings'] {
   const warnings: NonNullable<MaintenanceActionResult['warnings']> = [];
   if (result.embeddingStatus === 'drain_query_failed') {
     warnings.push('embedding_drain_query_failed');
+  }
+  if (result.graphWorker) {
+    warnings.push(...result.graphWorker.warnings);
+    if (result.graphWorker.failed > 0) {
+      warnings.push('graph_worker_failed');
+    }
+    if (result.graphWorker.dead_letter > 0) {
+      warnings.push('graph_worker_dead_letter');
+    }
   }
   if (getIsShuttingDown()) {
     warnings.push('maintenance_aborted');
