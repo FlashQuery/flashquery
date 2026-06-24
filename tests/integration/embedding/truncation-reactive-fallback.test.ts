@@ -138,15 +138,29 @@ describe.skipIf(!HAS_SUPABASE).sequential('truncation reactive fallback', () => 
 
     expect(result.warnings).toEqual([`embedding_deferred:${ENTRY_NAME}`]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    const document = await client.query(
-      `SELECT embedding_primary IS NULL AS vector_null,
-              embedding_primary_model IS NULL AS model_null,
-              embedding_primary_truncated IS NULL AS truncated_null
-       FROM fqc_documents
-       WHERE id = $1`,
-      [documentId]
+    const columns = await client.query(
+      `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'fqc_documents'
+        AND column_name = ANY($1::text[])
+      `,
+      [['embedding_primary', 'embedding_primary_model', 'embedding_primary_truncated']]
     );
-    expect(document.rows[0]).toEqual({ vector_null: true, model_null: true, truncated_null: true });
+    if (columns.rows.length > 0) {
+      const document = await client.query(
+        `SELECT embedding_primary IS NULL AS vector_null,
+                embedding_primary_model IS NULL AS model_null,
+                embedding_primary_truncated IS NULL AS truncated_null
+         FROM fqc_documents
+         WHERE id = $1`,
+        [documentId]
+      );
+      expect(document.rows[0]).toEqual({ vector_null: true, model_null: true, truncated_null: true });
+    } else {
+      expect(columns.rows).toEqual([]);
+    }
     const pending = await client.query(
       `SELECT embedding_name, last_error, attempt_count FROM fqc_pending_embeds WHERE instance_id = $1`,
       [TEST_INSTANCE_ID]

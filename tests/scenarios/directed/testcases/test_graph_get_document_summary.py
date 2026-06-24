@@ -24,7 +24,19 @@ def _payload(result: Any) -> dict[str, Any]:
 
 
 def _graph_config() -> dict[str, Any]:
-    return {"graph": {"enabled": True, "embedding_name": "primary"}}
+    embedding_name = "graph_get_document_summary_primary"
+    return {
+        "embeddings": [
+            {
+                "name": embedding_name,
+                "dimensions": 768,
+                "endpoints": [
+                    {"provider_name": "local-ollama", "model": "nomic-embed-text"},
+                ],
+            },
+        ],
+        "graph": {"enabled": True, "embedding_name": embedding_name},
+    }
 
 
 def _track(ctx: TestContext, path: str, payload: dict[str, Any]) -> None:

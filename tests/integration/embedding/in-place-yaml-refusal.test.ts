@@ -80,7 +80,7 @@ describe.skipIf(!HAS_SUPABASE)('embedding-config-sync in-place YAML refusal', ()
   it('identity-refusal error names affected tables and remediation paths', async () => {
     await expect(syncEmbeddingCatalog(configWithEmbeddings([
       { name: 'primary', dimensions: 3072, endpoints: [{ providerName: 'openai', model: 'text-embedding-3-large' }] },
-    ]))).rejects.toThrow(/fqc_documents, fqc_memory[\s\S]*Option A[\s\S]*Option B/i);
+    ]))).rejects.toThrow(/fqc_chunks, fqc_memory[\s\S]*Option A[\s\S]*Option B/i);
   });
 
   it('T-I-011 applies rate_limit changes with INFO audit log', async () => {

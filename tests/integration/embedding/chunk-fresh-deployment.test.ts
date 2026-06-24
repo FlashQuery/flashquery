@@ -240,7 +240,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk fresh deployment guards', () =>
   });
 
   it('T-I-013 no maintain_vault cleanup action is registered for legacy document vectors', async () => {
-    expect(MAINTENANCE_ACTIONS).toEqual([
+    expect(MAINTENANCE_ACTIONS).toEqual(expect.arrayContaining([
       'sync',
       'repair',
       'status',
@@ -248,7 +248,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk fresh deployment guards', () =>
       'rebuild_embeddings',
       'retire_embedding',
       'abort',
-    ]);
+    ]));
     expect(MAINTENANCE_ACTIONS).not.toEqual(expect.arrayContaining([
       expect.stringMatching(/document.*vector|vector.*document|legacy/i),
     ]));

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.3
 milestone_name: Graph Document Intelligence
 status: complete
-last_updated: "2026-06-24T04:44:09.292Z"
-last_activity: 2026-06-24 -- Phase 172 complete: structural graph helpers, processing gates, query_graph, graph-expanded search, graph-aware get_document, and final validation shipped.
+last_updated: "2026-06-24T17:24:50.428Z"
+last_activity: 2026-06-24 -- Phase 173 complete: async classification, graph worker lifecycle, graph lint, communities, public scenarios, and verification gates shipped.
 progress:
   total_phases: 3
-  completed_phases: 2
-  total_plans: 11
-  completed_plans: 11
-  percent: 67
+  completed_phases: 3
+  total_plans: 18
+  completed_plans: 18
+  percent: 100
 ---
 
 # FlashQuery Core — State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-23)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns - across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 172 — Structural Graph and Read Surfaces
+**Current focus:** Phase 173 — Async Classification, Lifecycle, Lint, Communities, and Hardening
 
 ## Current Position
 
-Phase: 172 (Structural Graph and Read Surfaces) — COMPLETE
+Phase: 173 (Async Classification, Lifecycle, Lint, Communities, and Hardening) — COMPLETE
 Plan: 7 of 7
-Status: Phase 172 complete
-Last activity: 2026-06-24 -- Phase 172 complete: structural graph helpers, processing gates, query_graph, graph-expanded search, graph-aware get_document, and final validation shipped.
+Status: Phase 173 complete
+Last activity: 2026-06-24 -- Phase 173 complete: async classification, graph worker lifecycle, graph lint, communities, public scenarios, and verification gates shipped.
 
 ## Performance Metrics
 
@@ -64,7 +64,7 @@ None.
 ## Session Continuity
 
 **Last session:** 2026-06-24T04:44:09.271Z
-**Next action:** run Phase 172 review/verification close-out, then plan or execute Phase 173.
+**Next action:** run milestone v4.3 close-out or start the next planned milestone.
 **Context needed:** `.planning/PROJECT.md`, `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, and the graph source requirements/test plan in `flashquery-product/Roadmap/Features/Graph Document Intelligence (Jun 2026)/`.
 
 ## Deferred Items
@@ -89,4 +89,4 @@ None. The milestone audit passed with no implementation tech debt.
 
 ## Operator Next Steps
 
-- Verify Phase 171, then execute Phase 172 with /gsd-execute-phase 172
+- Close out milestone v4.3 or start the next planned milestone.

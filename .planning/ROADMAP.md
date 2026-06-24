@@ -29,6 +29,7 @@
 **Plans:** 4/4 plans complete
 
 Plans:
+
 - [x] 171-01-PLAN.md — Graph config, sidecars, and relation vocabulary
 - [x] 171-02-PLAN.md — Graph namespace template variables
 - [x] 171-03-PLAN.md — Graph schema DDL and verification, including full `fqc_graph_nodes` inventory
@@ -67,6 +68,7 @@ Plans:
 **Plans:** 7/7 plans complete
 
 Plans:
+
 - [x] 172-01-PLAN.md — Chunk-keyed structural graph helpers and stale marking
 - [x] 172-02-PLAN.md — `fq_processing` gates and structural graph processing wiring
 - [x] 172-03-PLAN.md — Graph query helpers, seeded community read-through, provenance, and status filters
@@ -131,6 +133,34 @@ Plans:
 5. Graph lint returns persisted semantic categories with deltas, raw findings, community metadata, duplicate edge propagation details, and stored-status retrieval without rerunning lint.
 6. E2E, directed, and YAML scenario coverage proves public workflows for structural graph, query_graph, graph search/get-document, archive staleness, processing levels, disabled/partial graph, mock LLM classification, and graph lint communities.
 
+**Plans:** 7/7 plans complete
+
+Plans:
+**Wave 1**
+
+- [x] 173-01-PLAN.md — Candidate selection and pending edge enqueue
+- [x] 173-02-PLAN.md — Tier 3 node and edge LLM analysis
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 173-03-PLAN.md — Pending edge worker, dead letters, shutdown, and stale completion
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 173-04-PLAN.md — fq_processing, archive/missing lifecycle, and surface filtering
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 173-05-PLAN.md — graph_lint/status/prune maintenance actions and semantic lint categories
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 173-06-PLAN.md — Communities and real-data query/search/get_document integration
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 173-07-PLAN.md — Public workflow hardening and full phase gate
+
 **Verification commands:**
 
 - `npm test -- --run tests/unit/graph-candidates.test.ts tests/unit/graph-llm-analysis.test.ts tests/unit/graph-pending-worker.test.ts tests/unit/graph-cost-controls.test.ts`
@@ -147,7 +177,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 173. Async Classification, Lifecycle, Lint, Communities, and Hardening | v4.3 | 0/0 | Pending | - |
+| 173. Async Classification, Lifecycle, Lint, Communities, and Hardening | v4.3 | 7/7 | Complete   | 2026-06-24 |
 | 172. Structural Graph and Read Surfaces | v4.3 | 7/7 | Complete   | 2026-06-24 |
 | 171. Graph Foundation, Schema, and Vocabulary | v4.3 | 4/4 | Complete   | 2026-06-23 |
 | 170. JSON Validation and Repair Infrastructure | v4.2 | 4/4 | Complete | 2026-06-22 |

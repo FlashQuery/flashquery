@@ -8,9 +8,15 @@ deps: [embeddings]
 server_modes: [managed]
 
 extra_config:
+  embeddings:
+    - name: graph_search_expansion_primary
+      dimensions: 768
+      endpoints:
+        - provider_name: local-ollama
+          model: nomic-embed-text
   graph:
     enabled: true
-    embedding_name: primary
+    embedding_name: graph_search_expansion_primary
 
 steps:
   - label: "Write graph search connected document"

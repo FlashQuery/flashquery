@@ -331,6 +331,10 @@ async function updateTargetEmbeddingWithPg(
     return;
   }
 
+  if (target.kind === 'document') {
+    await ensureLegacyDocumentEmbeddingColumns(databaseUrl, stamp, vector.length);
+  }
+
   await queryPgPool(
     databaseUrl,
     `UPDATE ${pg.escapeIdentifier(target.targetTable)}
@@ -350,6 +354,33 @@ async function updateTargetEmbeddingWithPg(
       target.instanceId,
       target.targetId,
     ]
+  );
+}
+
+async function ensureLegacyDocumentEmbeddingColumns(
+  databaseUrl: string,
+  stamp: EmbeddingWriteStamp,
+  dimensions: number
+): Promise<void> {
+  assertSafeEmbeddingName(stamp.embeddingName);
+  if (!Number.isInteger(dimensions) || dimensions <= 0) {
+    throw new Error(`Invalid embedding dimensions for ${stamp.embeddingName}: ${dimensions}`);
+  }
+  const baseColumn = `embedding_${stamp.embeddingName}`;
+
+  await queryPgPool(
+    databaseUrl,
+    `
+    ALTER TABLE ${pg.escapeIdentifier(TARGET_TABLES.document)}
+      ADD COLUMN IF NOT EXISTS ${pg.escapeIdentifier(baseColumn)} vector(${dimensions}),
+      ADD COLUMN IF NOT EXISTS ${pg.escapeIdentifier(`${baseColumn}_model`)} TEXT,
+      ADD COLUMN IF NOT EXISTS ${pg.escapeIdentifier(`${baseColumn}_dimensions`)} INT,
+      ADD COLUMN IF NOT EXISTS ${pg.escapeIdentifier(`${baseColumn}_provider`)} TEXT,
+      ADD COLUMN IF NOT EXISTS ${pg.escapeIdentifier(`${baseColumn}_truncated`)} BOOLEAN;
+    CREATE INDEX IF NOT EXISTS ${pg.escapeIdentifier(`idx_${TARGET_TABLES.document}_${baseColumn}`)}
+      ON ${pg.escapeIdentifier(TARGET_TABLES.document)} USING hnsw (${pg.escapeIdentifier(baseColumn)} vector_cosine_ops);
+    `,
+    []
   );
 }
 

@@ -35,11 +35,18 @@ function makeConfig(vaultPath: string): FlashQueryConfig {
   } as unknown as FlashQueryConfig;
 }
 
-function wrapDrainQuery<T extends object>(query: T): T {
+function wrapDrainQuery<T extends object>(query: T, state = { eqCalls: 0 }): T {
   return new Proxy(query, {
     get(target, prop, receiver) {
-      if (prop === 'is') {
-        return () => Promise.resolve({ data: null, error: { message: 'forced drain query failure' } });
+      if (prop === 'eq') {
+        return (...args: unknown[]) => {
+          state.eqCalls += 1;
+          const next = Reflect.get(target, prop, target).apply(target, args);
+          if (state.eqCalls >= 2) {
+            return Promise.resolve({ data: null, error: { message: 'forced drain query failure' } });
+          }
+          return next === target ? receiver : wrapDrainQuery(next, state);
+        };
       }
       const value = Reflect.get(target, prop, receiver);
       if (typeof value !== 'function') return value;

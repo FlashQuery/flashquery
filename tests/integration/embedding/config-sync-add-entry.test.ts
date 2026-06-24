@@ -97,6 +97,6 @@ describe.skipIf(!HAS_SUPABASE)('embedding-config-sync add entry', () => {
     expect(infoSpy).toHaveBeenCalledWith(
       expect.stringContaining("Embedding catalog: added entry 'primary'")
     );
-    expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('fqc_documents, fqc_memory'));
+    expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('fqc_chunks, fqc_memory'));
   });
 });

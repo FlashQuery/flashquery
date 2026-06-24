@@ -44,6 +44,17 @@ function makeVector(dimensions: number): number[] {
   return Array.from({ length: dimensions }, (_, index) => (index === 0 ? 0.5 : 0));
 }
 
+async function dropEntryColumns(client: pg.Client): Promise<void> {
+  for (const table of ['fqc_chunks', 'fqc_documents', 'fqc_memory']) {
+    await client.query(`DROP INDEX IF EXISTS idx_${table}_embedding_${ENTRY_NAME}`);
+    for (const suffix of ['', '_model', '_dimensions', '_provider', '_truncated', '_indexed_at']) {
+      await client.query(
+        `ALTER TABLE ${table} DROP COLUMN IF EXISTS ${pg.escapeIdentifier(`embedding_${ENTRY_NAME}${suffix}`)} CASCADE`
+      );
+    }
+  }
+}
+
 function makeConfig(): FlashQueryConfig {
   return {
     instance: {
@@ -81,9 +92,10 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding retry worker (integration)', (
     config.instance.vault.path = vaultPath;
     initLogger(config);
     await initSupabase(config);
-    await createCoreEmbeddingColumnSet(config, { name: ENTRY_NAME, dimensions: embeddingDimensions });
     client = new pg.Client({ connectionString: TEST_DATABASE_URL });
     await client.connect();
+    await dropEntryColumns(client);
+    await createCoreEmbeddingColumnSet(config, { name: ENTRY_NAME, dimensions: embeddingDimensions });
     vector = makeVector(embeddingDimensions);
     await client.query('DROP TABLE IF EXISTS fqcp_phase146_worker_records');
     await client.query(`
@@ -121,6 +133,7 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding retry worker (integration)', (
     await client?.query('DELETE FROM fqc_memory WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.query('DELETE FROM fqcp_phase146_worker_records WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
+    await dropEntryColumns(client).catch(() => undefined);
     await client?.end();
     await rm(vaultPath, { recursive: true, force: true }).catch(() => undefined);
     await supabaseManager.close();
@@ -144,8 +157,8 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding retry worker (integration)', (
 
     await client.query(
       `
-      INSERT INTO fqc_documents (id, instance_id, path, title, status, embedding_${ENTRY_NAME})
-      VALUES ($1, $2, 'pending-worker.md', 'Pending Worker', 'active', NULL)
+      INSERT INTO fqc_documents (id, instance_id, path, title, status)
+      VALUES ($1, $2, 'pending-worker.md', 'Pending Worker', 'active')
       `,
       [docId, TEST_INSTANCE_ID]
     );
@@ -229,8 +242,8 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding retry worker (integration)', (
     const docId = '00000000-0000-4000-8000-000000000504';
     await client.query(
       `
-      INSERT INTO fqc_documents (id, instance_id, path, title, status, embedding_${ENTRY_NAME})
-      VALUES ($1, $2, 'scanner-worker.md', 'Scanner Worker', 'active', NULL)
+      INSERT INTO fqc_documents (id, instance_id, path, title, status)
+      VALUES ($1, $2, 'scanner-worker.md', 'Scanner Worker', 'active')
       `,
       [docId, TEST_INSTANCE_ID]
     );

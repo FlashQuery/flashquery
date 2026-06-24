@@ -23,6 +23,7 @@ const managedColumns = [
   'embedding_primary_dimensions',
   'embedding_primary_provider',
   'embedding_primary_truncated',
+  'embedding_primary_indexed_at',
 ] as const;
 
 function configWithEmbeddings(embeddings: FlashQueryConfig['embeddings']): FlashQueryConfig {
@@ -39,7 +40,7 @@ function configWithEmbeddings(embeddings: FlashQueryConfig['embeddings']): Flash
 async function cleanupPrimarySchema(client: pg.Client): Promise<void> {
   await client.query('DROP FUNCTION IF EXISTS match_memories_primary(vector, double precision, integer, text[], text, text, boolean)');
   await client.query('DROP FUNCTION IF EXISTS match_documents_primary(vector, double precision, integer, text, text[], text, boolean)');
-  for (const table of ['fqc_documents', 'fqc_memory']) {
+  for (const table of ['fqc_chunks', 'fqc_memory']) {
     await client.query(`DROP INDEX IF EXISTS idx_${table}_embedding_primary`);
     for (const column of managedColumns) {
       await client.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS ${column}`);
@@ -61,9 +62,9 @@ async function createDrift(client: pg.Client): Promise<void> {
      VALUES ($1, 'primary', 96, $2::jsonb, 'yaml', 'active')`,
     [TEST_INSTANCE_ID, JSON.stringify([{ provider_name: 'openai', model: 'text-embedding-3-small' }])]
   );
-  await client.query('DROP INDEX IF EXISTS idx_fqc_documents_embedding_primary');
-  await client.query('ALTER TABLE fqc_documents DROP COLUMN embedding_primary');
-  await client.query('ALTER TABLE fqc_documents ADD COLUMN embedding_primary vector(64)');
+  await client.query('DROP INDEX IF EXISTS idx_fqc_chunks_embedding_primary');
+  await client.query('ALTER TABLE fqc_chunks DROP COLUMN embedding_primary');
+  await client.query('ALTER TABLE fqc_chunks ADD COLUMN embedding_primary vector(64)');
 }
 
 async function createStartupDrift(client: pg.Client): Promise<FlashQueryConfig> {
@@ -121,8 +122,8 @@ describe.skipIf(!HAS_SUPABASE).sequential('test-dev-repair gated embedding repai
 
     await repairEmbeddingDimensionDrift(client, { instanceId: TEST_INSTANCE_ID, enabled: true });
 
-    await expect(vectorType(client, 'fqc_documents', 'embedding_primary')).resolves.toBe('vector(96)');
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/destructive.*data loss.*primary.*fqc_documents/i));
+    await expect(vectorType(client, 'fqc_chunks', 'embedding_primary')).resolves.toBe('vector(96)');
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/destructive.*data loss.*primary.*fqc_chunks/i));
     await expect(verifySchema(client, { instanceId: TEST_INSTANCE_ID })).resolves.toBeUndefined();
   }, 90000);
 
@@ -130,7 +131,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('test-dev-repair gated embedding repai
     await createDrift(client);
 
     await expect(verifySchema(client, { instanceId: TEST_INSTANCE_ID })).rejects.toThrow(/configured width 96.*actual width 64/i);
-    await expect(vectorType(client, 'fqc_documents', 'embedding_primary')).resolves.toBe('vector(64)');
+    await expect(vectorType(client, 'fqc_chunks', 'embedding_primary')).resolves.toBe('vector(64)');
   }, 90000);
 
   it('fails the integrated startup validation when drift exists and repair gate is unset', async () => {
@@ -139,9 +140,9 @@ describe.skipIf(!HAS_SUPABASE).sequential('test-dev-repair gated embedding repai
     delete process.env.FQ_EMBEDDING_REPAIR;
     try {
       await expect(verifyStartupEmbeddingCatalog(config)).rejects.toThrow(
-        /entry primary.*fqc_documents.*embedding_primary.*configured width 96.*actual width 64/i
+        /entry primary.*fqc_chunks.*embedding_primary.*configured width 96.*actual width 64/i
       );
-      await expect(vectorType(client, 'fqc_documents', 'embedding_primary')).resolves.toBe('vector(64)');
+      await expect(vectorType(client, 'fqc_chunks', 'embedding_primary')).resolves.toBe('vector(64)');
     } finally {
       if (originalGate === undefined) delete process.env.FQ_EMBEDDING_REPAIR;
       else process.env.FQ_EMBEDDING_REPAIR = originalGate;
@@ -154,7 +155,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('test-dev-repair gated embedding repai
     process.env.FQ_EMBEDDING_REPAIR = '1';
     try {
       await expect(verifyStartupEmbeddingCatalog(config)).resolves.toBeUndefined();
-      await expect(vectorType(client, 'fqc_documents', 'embedding_primary')).resolves.toBe('vector(96)');
+      await expect(vectorType(client, 'fqc_chunks', 'embedding_primary')).resolves.toBe('vector(96)');
     } finally {
       if (originalGate === undefined) delete process.env.FQ_EMBEDDING_REPAIR;
       else process.env.FQ_EMBEDDING_REPAIR = originalGate;

@@ -35,7 +35,19 @@ TEST_NAME = "test_graph_structural_edges"
 
 
 def _graph_config() -> dict[str, Any]:
-    return {"graph": {"enabled": True, "embedding_name": "primary"}}
+    embedding_name = "graph_structural_edges_primary"
+    return {
+        "embeddings": [
+            {
+                "name": embedding_name,
+                "dimensions": 768,
+                "endpoints": [
+                    {"provider_name": "local-ollama", "model": "nomic-embed-text"},
+                ],
+            },
+        ],
+        "graph": {"enabled": True, "embedding_name": embedding_name},
+    }
 
 
 def _payload(result: Any) -> dict[str, Any]:

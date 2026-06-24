@@ -70,16 +70,25 @@ describe.skipIf(!HAS_SUPABASE).sequential('deactivated embedding search operatio
     expect(result.warnings).not.toContain(`embedding_deferred:${ENTRY_OLD}`);
     expect(result.warnings).toEqual([]);
     const row = await harness.client.query(
-      `SELECT embedding_${ENTRY_ACTIVE}::text AS active_vec,
-              embedding_${ENTRY_OLD}::text AS old_vec
+      `SELECT embedding_${ENTRY_ACTIVE}::text AS active_vec
        FROM fqc_documents
        WHERE id = $1`,
       [documentId]
     );
     expect(row.rows[0]).toMatchObject({
       active_vec: '[1,0,0]',
-      old_vec: null,
     });
+    const oldColumn = await harness.client.query(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = 'fqc_documents'
+           AND column_name = $1
+       ) AS exists`,
+      [`embedding_${ENTRY_OLD}`]
+    );
+    expect(oldColumn.rows[0].exists).toBe(false);
   }, 90_000);
 
   it('T-I-019 refuses explicit search against a deactivated entry', async () => {
