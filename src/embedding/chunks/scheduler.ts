@@ -1,6 +1,10 @@
 import type { FlashQueryConfig } from '../../config/types.js';
 import { FM } from '../../constants/frontmatter-fields.js';
 import { selectGraphEdgeCandidates } from '../../graph/candidates.js';
+import {
+  removeDocumentChunkProcessingState,
+  removeDocumentGraphState,
+} from '../../graph/lifecycle.js';
 import { enqueuePendingEdgeCandidates } from '../../graph/pending-edges.js';
 import { markChangedChunkGraphEdgesStale } from '../../graph/staleness.js';
 import {
@@ -8,7 +12,7 @@ import {
   type GraphPgClient,
   type StructuralGraphDocument,
 } from '../../graph/structural.js';
-import { createPgClientIPv4, withPgClient } from '../../utils/pg-client.js';
+import { createPgClientIPv4 } from '../../utils/pg-client.js';
 import {
   documentChunkEmbeddingTarget,
   scheduleBackgroundEmbeddingsForActiveEntries,
@@ -127,11 +131,15 @@ export async function scheduleChangedDocumentChunks(
   }
 
   if (!shouldRunChunksForProcessingLevel(processing.level)) {
-    await removeDocumentChunkProcessingState({
-      databaseUrl: options.config.supabase.databaseUrl,
-      instanceId: options.config.instance.id,
-      documentId: options.documentId,
-    });
+    const client = createPgClientIPv4(options.config.supabase.databaseUrl);
+    try {
+      await removeDocumentChunkProcessingState(client, {
+        instanceId: options.config.instance.id,
+        documentId: options.documentId,
+      });
+    } finally {
+      await client.end().catch(() => undefined);
+    }
     return {
       warnings: [],
       processingLevel: processing.level,
@@ -298,53 +306,6 @@ async function enqueueGraphCandidateWork(input: {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
-}
-
-async function removeDocumentChunkProcessingState(input: {
-  databaseUrl: string;
-  instanceId: string;
-  documentId: string;
-}): Promise<void> {
-  await withPgClient(input.databaseUrl, async (client) => {
-    await client.query(
-      `
-      DELETE FROM fqc_pending_embeds
-      WHERE instance_id = $1
-        AND target_table = 'fqc_chunks'
-        AND target_id IN (
-          SELECT id::text
-          FROM fqc_chunks
-          WHERE instance_id = $1 AND document_id = $2
-        )
-      `,
-      [input.instanceId, input.documentId]
-    );
-    await client.query(
-      `
-      DELETE FROM fqc_chunks
-      WHERE instance_id = $1 AND document_id = $2
-      `,
-      [input.instanceId, input.documentId]
-    );
-  });
-}
-
-async function removeDocumentGraphState(
-  client: GraphPgClient,
-  options: { instanceId: string; documentId: string }
-): Promise<void> {
-  await client.query(
-    `
-    DELETE FROM fqc_graph_nodes
-    WHERE instance_id = $1
-      AND chunk_id IN (
-        SELECT id
-        FROM fqc_chunks
-        WHERE instance_id = $1 AND document_id = $2
-      )
-    `,
-    [options.instanceId, options.documentId]
-  );
 }
 
 async function loadStructuralGraphDocuments(
