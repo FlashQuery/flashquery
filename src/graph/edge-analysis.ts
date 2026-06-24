@@ -29,11 +29,37 @@ export interface ClassifiedGraphEdgeDraft extends GraphEdgeDraft {
   metadata: NonNullable<GraphEdgeDraft['metadata']>;
 }
 
+interface EdgeInsertBuilder {
+  select(columns?: string): PromiseLike<{ data: unknown[] | null; error: { message?: string } | null }>;
+}
+
+interface EdgeTable {
+  insert(rows: GraphEdgeInsertRow[]): EdgeInsertBuilder;
+}
+
+interface EdgeSupabaseClient {
+  from(table: 'fqc_graph_edges'): EdgeTable;
+}
+
+export interface GraphEdgeInsertRow {
+  instance_id: string;
+  source_chunk_id: string;
+  target_chunk_id: string;
+  relation: string;
+  confidence: 'INFERRED';
+  confidence_score: number;
+  reasoning: string | null;
+  model: string;
+  status: 'active';
+  metadata: NonNullable<GraphEdgeDraft['metadata']>;
+}
+
 export type ClassifyGraphEdgeCandidateResult =
   | {
       status: 'classified';
       edges: ClassifiedGraphEdgeDraft[];
       llm: GraphLlmCompletionSuccess;
+      written: number;
     }
   | {
       status: 'dependency_failed';
@@ -59,6 +85,7 @@ export async function classifyGraphEdgeCandidate(options: {
   graphConfig: GraphRuntimeConfig;
   relations: GraphRelationDefinition[];
   promptVersion: string;
+  supabase?: EdgeSupabaseClient;
 }): Promise<ClassifyGraphEdgeCandidateResult> {
   const sourceReady = isNodeAnalysisReady(options.sourceNode);
   const targetReady = isNodeAnalysisReady(options.targetNode);
@@ -132,13 +159,43 @@ export async function classifyGraphEdgeCandidate(options: {
         model: analyzedByModel(llm.modelName, options.promptVersion),
       })
     );
-    return { status: 'classified', edges, llm };
+    if (!options.supabase || edges.length === 0) {
+      return { status: 'classified', edges, llm, written: 0 };
+    }
+
+    const rows = edges.map((edge) => toGraphEdgeInsertRow(options.instanceId, edge));
+    const { error } = await options.supabase.from('fqc_graph_edges').insert(rows).select('id');
+    if (error) {
+      return {
+        status: 'validation_failed',
+        error: new Error(error.message ?? 'Graph edge insert failed'),
+      };
+    }
+    return { status: 'classified', edges, llm, written: rows.length };
   } catch (error: unknown) {
     return {
       status: 'validation_failed',
       error: error instanceof Error ? error : new Error(String(error)),
     };
   }
+}
+
+export function toGraphEdgeInsertRow(
+  instanceId: string,
+  edge: ClassifiedGraphEdgeDraft
+): GraphEdgeInsertRow {
+  return {
+    instance_id: instanceId,
+    source_chunk_id: edge.sourceChunkId,
+    target_chunk_id: edge.targetChunkId,
+    relation: edge.relation,
+    confidence: 'INFERRED',
+    confidence_score: edge.confidenceScore,
+    reasoning: edge.reasoning ?? null,
+    model: edge.model,
+    status: 'active',
+    metadata: edge.metadata,
+  };
 }
 
 export function isNodeAnalysisReady(node: AnalyzedGraphNodeRef | null): node is AnalyzedGraphNodeRef & {

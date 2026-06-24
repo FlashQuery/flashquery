@@ -280,6 +280,15 @@ describe('graph edge analysis', () => {
 
   it('classifies valid edge drafts with graph purpose/model/trace metadata', async () => {
     const llm = mockLlm(edgePayload());
+    const inserted: unknown[] = [];
+    const supabase = {
+      from: vi.fn(() => ({
+        insert: vi.fn((rows: unknown[]) => {
+          inserted.push(...rows);
+          return { select: vi.fn(async () => ({ data: [{ id: 'edge-1' }], error: null })) };
+        }),
+      })),
+    };
     const result = await classifyGraphEdgeCandidate({
       instanceId: 'inst',
       sourceChunkId: 'source',
@@ -298,6 +307,7 @@ describe('graph edge analysis', () => {
       graphConfig: { enabled: true, classificationPurpose: 'graph-classifier' },
       relations: DEFAULT_GRAPH_RELATIONS,
       promptVersion: 'edge-v1',
+      supabase,
     });
 
     expect(result.status).toBe('classified');
@@ -312,6 +322,19 @@ describe('graph edge analysis', () => {
           source_claims_referenced: [0],
           target_claims_referenced: [0],
         }),
+      }),
+    ]);
+    expect(result.written).toBe(1);
+    expect(inserted).toEqual([
+      expect.objectContaining({
+        instance_id: 'inst',
+        source_chunk_id: 'source',
+        target_chunk_id: 'target',
+        relation: 'contradicts',
+        confidence: 'INFERRED',
+        confidence_score: 0.88,
+        reasoning: 'Claim A conflicts with Claim C.',
+        model: 'purpose-graph-model@edge-v1',
       }),
     ]);
     expect(llm.completeByPurpose).toHaveBeenCalledWith(
