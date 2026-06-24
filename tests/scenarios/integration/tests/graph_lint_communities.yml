@@ -1,0 +1,93 @@
+name: graph_lint_communities
+description: >
+  T-Y-004 / IG-04: graph lint labels topology-only communities and
+  query_graph lists the labeled community members through public MCP reads.
+coverage: [IG-04]
+deps: [embeddings]
+server_modes: [managed]
+
+extra_config:
+  graph:
+    enabled: true
+    embedding_name: primary
+
+steps:
+  - label: "Write first community member"
+    action: vault.write
+    name: community_a
+    path: "graph-communities/a.md"
+    title: "Graph Community Alpha ${run.id}"
+    content: |
+      ## Alpha Claim
+
+      Alpha links to [[Graph Community Beta ${run.id}]] and [[Graph Community Gamma ${run.id}]].
+    tags: ["graph-communities-${run.id}"]
+
+  - label: "Write second community member"
+    action: vault.write
+    name: community_b
+    path: "graph-communities/b.md"
+    title: "Graph Community Beta ${run.id}"
+    content: |
+      ## Beta Claim
+
+      Beta links back to [[Graph Community Alpha ${run.id}]] and onward to [[Graph Community Gamma ${run.id}]].
+    tags: ["graph-communities-${run.id}"]
+
+  - label: "Write third community member"
+    action: vault.write
+    name: community_c
+    path: "graph-communities/c.md"
+    title: "Graph Community Gamma ${run.id}"
+    content: |
+      ## Gamma Claim
+
+      Gamma links to [[Graph Community Alpha ${run.id}]] and [[Graph Community Beta ${run.id}]].
+    tags: ["graph-communities-${run.id}"]
+
+  - label: "Synchronize graph structural state"
+    action: scan_vault
+
+  - label: "Run graph lint community labeling"
+    action: maintain_vault
+    args:
+      action: graph_lint
+      scope:
+        path_prefix: "_integration/graph-communities/"
+
+  - label: "Community lint payload reports structural health"
+    assert:
+      op: maintain_vault
+      args:
+        action: graph_lint_status
+        limit: 1
+      expect_json_path:
+        - "runs[0].run_id"
+        - "runs[0].counts"
+
+  - label: "Community lint category exposes health fields"
+    assert:
+      op: maintain_vault
+      args:
+        action: graph_lint
+        dry_run: true
+        scope:
+          path_prefix: "_integration/graph-communities/"
+      expect_json_path:
+        - "communities.items[0].strength_score"
+        - "communities.items[0].document_ids"
+        - "communities.items[0].document_paths"
+        - "communities.items[0].edge_density"
+        - "communities.items[0].provenance_coverage"
+
+  - label: "Query graph lists stored community members"
+    assert:
+      op: query_graph
+      args:
+        action: list_communities
+        min_members: 3
+      expect_json_path:
+        - "data.communities[0].community_id"
+        - "data.communities[0].community_label"
+        - "data.communities[0].strength_score"
+        - "data.communities[0].representative_members[0].chunk_id"
