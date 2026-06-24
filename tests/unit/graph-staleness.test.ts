@@ -145,7 +145,7 @@ describe('graph staleness helpers', () => {
     expect(result).toEqual({ updated: 1, replaced: 0, deleted: 0, inserted: 0 });
     expect(calls[1]!.sql).toContain('UPDATE fqc_graph_edges');
     expect(calls[1]!.sql).toContain("status = 'active'");
-    expect(calls[1]!.sql).toContain('WHERE id = $8');
+    expect(calls[1]!.sql).toContain('WHERE id = $7');
     expect(calls[1]!.params).toEqual([
       'stale-instance',
       'supports',
