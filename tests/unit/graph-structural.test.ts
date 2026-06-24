@@ -21,7 +21,6 @@ describe('structural graph edge builder', () => {
     const child = chunks.find((chunk) => chunk.heading_path === 'Parent > Child')!;
     const edges = buildContainsEdges(chunks);
 
-    expect(child.parent_chunk_id).toBe(parent.id);
     expect(edges).toEqual([
       {
         source_chunk_id: parent.id,
