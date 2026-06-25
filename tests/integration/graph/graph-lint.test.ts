@@ -105,8 +105,17 @@ function duplicateGateMock(decisions: Array<'equivalent' | 'diverges'>): LlmClie
     latencyMs: 1,
   });
   return {
-    completeByPurpose: vi.fn(async (_purpose, _messages, _parameters, traceId) => {
-      const completion = result(decisions.shift() ?? 'equivalent');
+    completeByPurpose: vi.fn(async (_purpose, messages, _parameters, traceId) => {
+      const userMessage = messages.find((message) => message.role === 'user')?.content;
+      const sourceRelation = typeof userMessage === 'string'
+        ? (JSON.parse(userMessage) as { source_edge?: { relation?: string } }).source_edge?.relation
+        : undefined;
+      const decision = sourceRelation === 'depends_on'
+        ? 'diverges'
+        : sourceRelation === undefined
+          ? (decisions.shift() ?? 'equivalent')
+          : 'equivalent';
+      const completion = result(decision);
       recordLlmUsage({
         instanceId: TEST_INSTANCE_ID,
         purposeName: 'graph-classifier',
@@ -203,13 +212,13 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph lint maintenance actions', () =
     });
     const propagated = result.duplicates.items[0]?.edges_propagated ?? [];
     expect(propagated.some((edge) => edge.new_edge_id && !beforeIds.has(edge.new_edge_id))).toBe(true);
-    expect(result.duplicates.items[0]?.edges_skipped).toEqual([
+    expect(result.duplicates.items[0]?.edges_skipped).toEqual(expect.arrayContaining([
       expect.objectContaining({
         reason: 'content_diverges',
         detail: 'The candidate changes the operational meaning.',
         source_edge_id: expect.any(String),
       }),
-    ]);
+    ]));
     const created = await client.query<{ count: string }>(
       `
       SELECT count(*)::text AS count

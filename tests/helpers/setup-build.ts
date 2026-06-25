@@ -16,6 +16,7 @@ import { join } from 'node:path';
 const projectRoot = join(import.meta.dirname, '..', '..');
 const distDir = join(projectRoot, 'dist');
 const lockPath = join(projectRoot, 'dist', '.e2e-build.lock');
+const buildCompletePath = join(projectRoot, 'dist', `.e2e-build.${process.ppid}.complete`);
 const staleLockMs = 5 * 60 * 1000;
 
 function sleep(ms: number): void {
@@ -55,13 +56,18 @@ function acquireBuildLock(): () => void {
 
 console.log('[integration-setup] Waiting for production bundle build lock...');
 const releaseBuildLock = acquireBuildLock();
-console.log('[integration-setup] Building production bundle (unconditional)...');
 try {
-  execSync('npm run build', {
-    cwd: projectRoot,
-    stdio: 'inherit',
-  });
-  console.log('[integration-setup] Built production bundle');
+  if (existsSync(buildCompletePath)) {
+    console.log('[integration-setup] Production bundle already built for this Vitest run');
+  } else {
+    console.log('[integration-setup] Building production bundle (unconditional per Vitest run)...');
+    execSync('npm run build', {
+      cwd: projectRoot,
+      stdio: 'inherit',
+    });
+    writeFileSync(buildCompletePath, `${process.pid}\n${new Date().toISOString()}\n`);
+    console.log('[integration-setup] Built production bundle');
+  }
 } catch (err) {
   throw new Error(`Failed to build production bundle: ${err instanceof Error ? err.message : String(err)}`);
 } finally {

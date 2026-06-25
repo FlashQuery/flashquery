@@ -296,14 +296,14 @@ describe('macro concurrency integration', () => {
 
     const source = `
       label = input_var "label"
-      first = fq.search({ query: $label })
+      first_result = fq.search({ query: $label })
       status --progress 1 --total 2 "progress-$label"
       visible = list_tasks
       second = fq.search({ query: "ready:$label" })
       sleep 50
       exit {
         label: $label,
-        first: $first,
+        first: $first_result,
         second: $second,
         task_id: task_id,
         visible: $visible

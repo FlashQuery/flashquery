@@ -8,15 +8,16 @@ import { runGraphLint } from '../../../src/graph/lint.js';
 import { initLogger } from '../../../src/logging/logger.js';
 import { createPgGraphQueryStore, queryGraph } from '../../../src/graph/queries.js';
 import { maintainVault, resetMaintenanceStateForTests } from '../../../src/services/maintenance.js';
-import { initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
+import { createCoreEmbeddingColumnSet, initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
 import { setupTestSupabase } from '../../helpers/supabase.js';
-import { HAS_SUPABASE } from '../../helpers/test-env.js';
+import { HAS_SUPABASE, TEST_EMBEDDING_DIMENSIONS } from '../../helpers/test-env.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const configPath = resolve(__dirname, '../../fixtures/flashquery.test.yml');
 const TEST_INSTANCE_ID = 'graph-provenance-question-test';
-const EMBEDDING_DIMENSIONS = 1536;
+const EMBEDDING_NAME = 'primary';
+const EMBEDDING_DIMENSIONS = Math.min(TEST_EMBEDDING_DIMENSIONS, 3);
 
 function parseResult(result: { content: Array<{ type: 'text'; text: string }> }): unknown {
   return JSON.parse(result.content[0]?.text ?? '{}');
@@ -29,15 +30,28 @@ function configForTest(): FlashQueryConfig {
   if (process.env.DATABASE_URL) config.supabase.databaseUrl = process.env.DATABASE_URL;
   config.supabase.skipDdl = false;
   config.instance.id = TEST_INSTANCE_ID;
-  config.embeddings = [{ name: 'primary', dimensions: EMBEDDING_DIMENSIONS, endpoints: [] }];
+  config.embeddings = [{ name: EMBEDDING_NAME, dimensions: EMBEDDING_DIMENSIONS, endpoints: [] }];
   config.graph = {
     ...(config.graph ?? {}),
     enabled: true,
-    embeddingName: 'primary',
+    embeddingName: EMBEDDING_NAME,
     similarityMode: 'threshold',
     similarityThreshold: 0.78,
   };
   return config;
+}
+
+async function resetPrimaryEmbeddingColumns(client: pg.Client): Promise<void> {
+  for (const table of ['fqc_chunks', 'fqc_memory']) {
+    await client.query(`DROP INDEX IF EXISTS ${pg.escapeIdentifier(`idx_${table}_embedding_${EMBEDDING_NAME}`)}`);
+    for (const suffix of ['', '_model', '_dimensions', '_provider', '_truncated', '_indexed_at']) {
+      await client.query(
+        `ALTER TABLE IF EXISTS ${table} DROP COLUMN IF EXISTS ${pg.escapeIdentifier(
+          `embedding_${EMBEDDING_NAME}${suffix}`
+        )} CASCADE`
+      );
+    }
+  }
 }
 
 async function insertChunk(
@@ -96,8 +110,10 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph provenance and question reads',
   beforeAll(async () => {
     const config = configForTest();
     initLogger(config);
-    await initSupabase(config);
     client = await setupTestSupabase();
+    await resetPrimaryEmbeddingColumns(client);
+    await initSupabase(config);
+    await createCoreEmbeddingColumnSet(config, { name: EMBEDDING_NAME, dimensions: EMBEDDING_DIMENSIONS });
   }, 90000);
 
   beforeEach(async () => {

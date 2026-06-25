@@ -73,6 +73,11 @@ describe('buildSchemaDDL', () => {
     expect(ddl).toContain('CREATE INDEX IF NOT EXISTS idx_fqc_memory_embedding');
   });
 
+  it('repairs existing fqc_memory tables that predate the legacy embedding column', () => {
+    const ddl = buildSchemaDDL(1536);
+    expect(ddl).toContain('ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS embedding vector(1536)');
+  });
+
   it('creates fqc_documents table with no DEFAULT on id', () => {
     const ddl = buildSchemaDDL(1536);
     expect(ddl).toContain('CREATE TABLE IF NOT EXISTS fqc_documents');

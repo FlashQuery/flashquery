@@ -815,7 +815,7 @@ export async function resolveAndBuildDocument(
     connectionsField = connectionsResult.result;
   }
 
-  if (effectiveInclude.includes('graph_summary') && cfg.graph?.enabled === true) {
+  if (effectiveInclude.includes('graph_summary')) {
     graphSummaryField = await buildGraphDocumentSummaryForDocument({
       supabase: sm.getClient(),
       config: cfg,

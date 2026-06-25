@@ -286,6 +286,8 @@ CREATE TABLE IF NOT EXISTS fqc_memory (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS embedding vector(${dimensions});
+
 -- Phase 125: memory lifecycle visibility columns for final search/memory tools.
 	ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS is_latest BOOLEAN DEFAULT true;
 	ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;

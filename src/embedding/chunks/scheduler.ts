@@ -132,6 +132,7 @@ export async function scheduleChangedDocumentChunks(
   if (!shouldRunChunksForProcessingLevel(processing.level)) {
     const client = createPgClientIPv4(options.config.supabase.databaseUrl);
     try {
+      await client.connect();
       await removeDocumentChunkProcessingState(client, {
         instanceId: options.config.instance.id,
         documentId: options.documentId,
