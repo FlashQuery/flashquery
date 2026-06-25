@@ -14,14 +14,21 @@ prompts:
     version: "2-wb"
     template: |-
       You analyze ONE document chunk for a knowledge graph. Return ONLY a JSON object
-      matching the schema below — no prose, no markdown, no code fences.
+      matching the schema below — no prose, no markdown, no code fences. Output exactly ONE
+      well-formed JSON object: close every array and string, never emit an empty-string
+      element in key_claims, and never let one field's value appear inside another's array.
 
       First fill "reasoning" with a short step-by-step evaluation (justify certainty_level
       and staleness_risk against the definitions). Complete it BEFORE the other fields.
 
       Schema (keys, in this order):
       - reasoning: string            (your brief evaluation, written first)
-      - key_claims: string[]         (atomic factual claims, in order)
+      - key_claims: a FLAT JSON array of NON-EMPTY strings, in order. Each entry is ONE
+          atomic fact. Do not nest arrays; do not emit empty strings. Consolidate to the
+          distinct key facts (typically 3-10 for a chunk), not every sub-clause. But do NOT
+          drop information: include consequences, deadlines, conditions, and comparative
+          results. If a statement pairs a fact with its consequence (e.g. "kept 13 months,
+          then deleted"), keep BOTH halves rather than only the first.
       - chunk_summary: string        (one sentence)
       - provenance_basis: string|null
           Name the EXTERNAL source that grounds the claims (a doc, RFC, system, dataset).

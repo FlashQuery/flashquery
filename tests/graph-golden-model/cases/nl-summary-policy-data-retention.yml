@@ -1,0 +1,8 @@
+kind: nl
+field: chunk_summary
+description: "Longer passage (policy-data-retention) — summary should be grounded, representative, and concise."
+input: |
+  Under the updated data-retention policy, customer event logs are kept for 13 months and then permanently deleted. Personally identifiable information in support tickets must be redacted within 30 days of ticket closure. Backups follow a separate schedule: encrypted snapshots are retained for 35 days. The policy takes effect on 1 July 2026, and teams must complete the migration of existing logs by that date. An exception process exists for legal holds, which suspend deletion until the hold is lifted.
+criteria: [grounded, representative, concise]
+must_capture:
+  - "the new retention policy keeps event logs 13 months, redacts ticket PII within 30 days, and takes effect 1 July 2026"

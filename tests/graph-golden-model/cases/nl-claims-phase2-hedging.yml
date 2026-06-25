@@ -1,0 +1,11 @@
+kind: nl
+field: key_claims
+description: Phase 2 faithfulness — hedged claims must keep their uncertainty in the claim text (not asserted as settled fact).
+input: |
+  The outage was most likely caused by the morning config change, though the root cause is
+  not yet confirmed. Engineers suspect a connection leak but have not reproduced it. A full
+  post-mortem is pending.
+criteria: [grounded, atomic, complete, faithful]
+must_capture:
+  - "the outage was likely (not confirmed) caused by the morning config change"
+  - "engineers suspect a connection leak but have not reproduced it"

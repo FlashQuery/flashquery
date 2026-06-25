@@ -1,0 +1,8 @@
+kind: nl
+field: chunk_summary
+description: "Longer passage (spec-offline-mode) — summary should be grounded, representative, and concise."
+input: |
+  The offline mode feature lets users keep editing documents without a network connection. Edits are stored locally and synced when connectivity returns, using last-writer-wins for scalar fields and a merge for list fields. The feature is limited to documents under 5 megabytes in the first version. Conflicts that cannot be merged are surfaced to the user with both versions shown side by side. An open question remains about whether to support offline access to shared team templates, which is deferred to a later milestone.
+criteria: [grounded, representative, concise]
+must_capture:
+  - "offline mode allows local editing that syncs on reconnect, limited to documents under 5 MB in v1"

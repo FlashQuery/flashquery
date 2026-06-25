@@ -28,6 +28,7 @@ export async function runNlOp(c: NlCase, transport: LlmTransport, settings: Sett
   let extractParse: ParseInfo | undefined;
   let extractRaw: string | undefined;
   let extractMs = 0;
+  let payload: Record<string, unknown> | undefined;
 
   if (c.given === undefined) {
     const node = await runNodeOp({ content: c.input }, transport, settings);
@@ -35,14 +36,20 @@ export async function runNlOp(c: NlCase, transport: LlmTransport, settings: Sett
     extractParse = node.parse;
     extractRaw = node.raw;
     extractMs = node.latencyMs;
-    output = node.payload ? (node.payload as Record<string, unknown>)[c.field] : undefined;
+    payload = node.payload as Record<string, unknown> | undefined;
+    output = payload ? payload[c.field] : undefined;
   }
+
+  // Cross-output consistency: judge `field` against the model's OWN key_claims rather than
+  // the source text. (Only meaningful in extract mode.)
+  const reference =
+    c.against === 'key_claims' && payload ? JSON.stringify(payload.key_claims) : c.input;
 
   // Only judge if we actually have an output to judge.
   const judge =
     output === undefined
       ? ({ ok: false, raw: '', summary: 'no output to judge (extraction failed or field missing)', prompt: '' } as JudgeResult)
-      : await runJudge({ transport, input: c.input, field: c.field, output, criteria });
+      : await runJudge({ transport, input: reference, field: c.field, output, criteria });
 
   return {
     field: c.field,

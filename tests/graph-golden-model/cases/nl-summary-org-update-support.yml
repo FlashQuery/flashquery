@@ -1,0 +1,8 @@
+kind: nl
+field: chunk_summary
+description: "Longer passage (org-update-support) — summary should be grounded, representative, and concise."
+input: |
+  Starting next month the support organization splits into two tiers: a front-line team handling first response and triage, and a specialist team owning complex escalations. The front-line team will be staffed to cover three time zones for 16-hour coverage, with weekend coverage handled best-effort. Escalations that are not resolved within two business days are automatically reviewed by an engineering liaison. The change aims to cut median first-response time, currently around four hours. Headcount is unchanged; this is a reorganization of existing staff.
+criteria: [grounded, representative, concise]
+must_capture:
+  - "support reorganizes into front-line and specialist tiers to cut response time, with no headcount change"

@@ -1,0 +1,13 @@
+kind: nl
+field: key_claims
+description: Phase 2 faithfulness — who said/did what must be preserved, not collapsed into bare facts.
+input: |
+  The platform team proposed migrating to gRPC. The mobile team objected, citing client
+  library gaps. Security reviewed the proposal and found no blockers. Leadership deferred the
+  decision to next quarter.
+criteria: [grounded, atomic, complete, faithful]
+must_capture:
+  - "the platform team proposed migrating to gRPC"
+  - "the mobile team objected, citing client library gaps"
+  - "security found no blockers"
+  - "leadership deferred the decision to next quarter"

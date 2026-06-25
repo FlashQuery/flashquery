@@ -1,0 +1,9 @@
+kind: nl
+field: key_claims
+description: Phase 1 subtle control — a quantifier/modal swap (all/must weakened to some/may) must be caught as not faithful.
+given:
+  - "Some callers may migrate to /query before the cutoff"
+input: |
+  All callers must migrate to /query before the Q3 2026 cutoff.
+criteria: [faithful]
+expect_fail: [faithful]

@@ -1,0 +1,11 @@
+kind: nl
+field: key_claims
+description: "Longer passage (research-cache-invalidation) — claims should be grounded, atomic, and complete, capturing the key facts."
+input: |
+  We benchmarked three cache-invalidation strategies under a read-heavy workload. Time-to-live expiration was simplest but served stale data up to the TTL window, which averaged 90 seconds in our test. Write-through invalidation eliminated staleness but increased write latency by 18%. An event-driven approach that invalidated on change kept staleness near zero while adding only 5% write latency, at the cost of a message-queue dependency. The event-driven approach also failed open: if the queue was down, entries fell back to TTL. We recommend event-driven invalidation for correctness-sensitive data.
+criteria: [grounded, atomic, complete]
+must_capture:
+  - "TTL expiration served stale data up to the TTL window, averaging 90 seconds"
+  - "write-through invalidation eliminated staleness but increased write latency by 18%"
+  - "the event-driven approach kept staleness near zero while adding only 5% write latency"
+  - "the event-driven approach falls back to TTL if the queue is down"

@@ -1,0 +1,11 @@
+kind: nl
+field: key_claims
+description: "Longer passage (org-update-support) — claims should be grounded, atomic, and complete, capturing the key facts."
+input: |
+  Starting next month the support organization splits into two tiers: a front-line team handling first response and triage, and a specialist team owning complex escalations. The front-line team will be staffed to cover three time zones for 16-hour coverage, with weekend coverage handled best-effort. Escalations that are not resolved within two business days are automatically reviewed by an engineering liaison. The change aims to cut median first-response time, currently around four hours. Headcount is unchanged; this is a reorganization of existing staff.
+criteria: [grounded, atomic, complete]
+must_capture:
+  - "support splits into a front-line triage team and a specialist escalation team"
+  - "the front-line team covers three time zones for 16-hour coverage"
+  - "escalations unresolved within two business days are reviewed by an engineering liaison"
+  - "headcount is unchanged"

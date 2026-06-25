@@ -1,0 +1,11 @@
+kind: nl
+field: key_claims
+description: "Longer passage (security-advisory) — claims should be grounded, atomic, and complete, capturing the key facts."
+input: |
+  A high-severity vulnerability was found in the file-upload service that allowed an authenticated user to read files outside their workspace via a path-traversal sequence. The issue affected versions 3.1 through 3.4 and was patched in 3.4.1. There is no evidence of exploitation in production based on log review. As a mitigation before patching, operators can disable the legacy upload endpoint. Customers on the managed cloud were patched automatically; self-hosted customers must upgrade manually. A full disclosure will be published 30 days after the patch.
+criteria: [grounded, atomic, complete]
+must_capture:
+  - "a path-traversal vulnerability let authenticated users read files outside their workspace"
+  - "versions 3.1 through 3.4 were affected and patched in 3.4.1"
+  - "there is no evidence of exploitation in production"
+  - "self-hosted customers must upgrade manually"

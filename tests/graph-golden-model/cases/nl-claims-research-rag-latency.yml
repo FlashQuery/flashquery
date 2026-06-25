@@ -1,0 +1,11 @@
+kind: nl
+field: key_claims
+description: "Longer passage (research-rag-latency) — claims should be grounded, atomic, and complete, capturing the key facts."
+input: |
+  Our study evaluated three retrieval strategies on a 50,000-document corpus. Hybrid BM25-plus-vector retrieval improved answer accuracy by 9 percentage points over pure vector search, while adding only 40 milliseconds of median latency. Pure graph traversal was the most accurate on multi-hop questions but was four times slower and degraded on single-fact lookups. We found that reranking the top 50 candidates contributed most of the accuracy gain, and that beyond 50 candidates returns diminished sharply. All experiments used the same 7-billion-parameter model and were repeated across five seeds.
+criteria: [grounded, atomic, complete]
+must_capture:
+  - "hybrid BM25-plus-vector retrieval improved accuracy by 9 percentage points over pure vector search"
+  - "the hybrid approach added only 40 milliseconds of median latency"
+  - "pure graph traversal was most accurate on multi-hop questions"
+  - "reranking the top 50 candidates contributed most of the accuracy gain"

@@ -1,0 +1,9 @@
+kind: nl
+field: key_claims
+description: Phase 1 subtle control — a dropped negation (source says NOT adopted; output says adopted) must be caught as not faithful.
+given:
+  - "The team decided to adopt the new payments provider"
+input: |
+  After review, the team decided NOT to adopt the new payments provider this quarter.
+criteria: [faithful]
+expect_fail: [faithful]

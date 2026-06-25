@@ -1,0 +1,9 @@
+kind: nl
+field: chunk_summary
+against: key_claims
+description: Phase 5 cross-output consistency — the summary must assert nothing beyond what the extracted key_claims support.
+input: |
+  The legacy /search endpoint is deprecated as of v2 and will be removed. All callers must
+  migrate to /query before the Q3 2026 cutoff; after that date the old endpoint returns 410
+  Gone. This decision was ratified by the platform team (see RFC-0042).
+criteria: [consistent]

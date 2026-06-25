@@ -1,0 +1,11 @@
+kind: nl
+field: key_claims
+description: "Longer passage (sla-enterprise) — claims should be grounded, atomic, and complete, capturing the key facts."
+input: |
+  The enterprise SLA guarantees 99.95% monthly uptime, measured excluding scheduled maintenance windows announced at least 72 hours in advance. If uptime falls below 99.95% but stays above 99.9%, the customer receives a 10% service credit; below 99.9%, the credit rises to 25%. Support response targets are one hour for critical issues and one business day for low-severity issues. Credits must be requested within 30 days of the affected month. The SLA does not cover outages caused by the customer's own misconfiguration.
+criteria: [grounded, atomic, complete]
+must_capture:
+  - "the SLA guarantees 99.95% monthly uptime excluding announced maintenance"
+  - "uptime between 99.9% and 99.95% earns a 10% service credit"
+  - "uptime below 99.9% earns a 25% credit"
+  - "critical issues have a one-hour support response target"

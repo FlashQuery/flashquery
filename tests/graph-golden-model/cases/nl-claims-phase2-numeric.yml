@@ -1,0 +1,14 @@
+kind: nl
+field: key_claims
+description: Phase 2 faithfulness — exact figures, units, and percentages must be preserved without rounding or unit drift.
+input: |
+  The service processed 1.2 million requests on launch day, peaking at 4,800 requests per
+  second. Median latency held at 120 milliseconds while p99 reached 1.4 seconds. The error
+  budget for the month is 0.1%, and we consumed 0.04% of it during the launch.
+criteria: [grounded, atomic, complete, faithful]
+must_capture:
+  - "the service processed 1.2 million requests on launch day"
+  - "it peaked at 4,800 requests per second"
+  - "median latency was 120 milliseconds"
+  - "p99 latency reached 1.4 seconds"
+  - "the monthly error budget is 0.1% and 0.04% was consumed"

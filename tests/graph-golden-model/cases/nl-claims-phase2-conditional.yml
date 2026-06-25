@@ -1,0 +1,11 @@
+kind: nl
+field: key_claims
+description: Phase 2 faithfulness — conditions/scope ("only when/only for") must survive into the claim.
+input: |
+  Auto-scaling kicks in only when CPU stays above 70% for five minutes. The discount applies
+  solely to annual prepay customers. Offline edits sync only after connectivity is restored.
+criteria: [grounded, atomic, complete, faithful]
+must_capture:
+  - "auto-scaling triggers only when CPU stays above 70% for five minutes"
+  - "the discount applies only to annual prepay customers"
+  - "offline edits sync only after connectivity is restored"

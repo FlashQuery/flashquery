@@ -1,0 +1,8 @@
+kind: nl
+field: chunk_summary
+description: "Longer passage (pricing-change) — summary should be grounded, representative, and concise."
+input: |
+  The pricing model moves from per-seat to a hybrid of a platform fee plus usage. Existing customers keep their current per-seat pricing until their next renewal, after which they move to the new model. The platform fee includes a baseline allotment of API calls, and overages are billed at a published per-call rate. Nonprofit and education customers receive a 40% discount on the platform fee. Annual prepay earns two free months. The change is effective for new customers on 1 August 2026.
+criteria: [grounded, representative, concise]
+must_capture:
+  - "pricing shifts to a platform-fee-plus-usage model, effective for new customers on 1 August 2026"

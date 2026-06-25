@@ -14,7 +14,8 @@ import { loadCases, type CaseSide, type EdgeCase, type GraphCase, type NlCase, t
 import { runNodeOp } from './node-op.ts';
 import { runEdgeOp } from './edge-op.ts';
 import { runNlOp } from './nl-op.ts';
-import { scoreEdge, scoreNode, scoreNl } from './score.ts';
+import { resolveCriteria, runJudge } from './judge.ts';
+import { scoreEdge, scoreNode, scoreNl, type Check } from './score.ts';
 import {
   printCrossModel,
   printModelRun,
@@ -73,6 +74,33 @@ async function runEdgeCase(c: EdgeCase, transport: LlmTransport, settings: Retur
   const scored = scoreEdge(c, result);
   const derivedClaims =
     source.derived || target.derived ? { source: source.derived, target: target.derived } : undefined;
+
+  // Phase 4: optionally judge the primary edge's natural-language reasoning.
+  const checks: Check[] = [...scored.checks];
+  let nl: CaseDetail['nl'];
+  if (c.expect.judge_reasoning && c.expect.judge_reasoning.length) {
+    const primary = [...result.edges].filter((e) => e.valid).sort((a, b) => b.confidenceScore - a.confidenceScore)[0];
+    if (!primary) {
+      checks.push({ name: 'reasoning judged', pass: false, detail: 'no valid edge to judge' });
+    } else {
+      const criteria = resolveCriteria('reasoning', c.expect.judge_reasoning, undefined);
+      const reference = `Source claims: ${JSON.stringify(source.ref.key_claims)}\nTarget claims: ${JSON.stringify(target.ref.key_claims)}\nChosen relation: ${primary.relation}`;
+      const jr = await runJudge({ transport, input: reference, field: 'edge reasoning', output: primary.reasoning, criteria });
+      checks.push({ name: 'reasoning judge returned valid JSON', pass: jr.ok && !!jr.verdict, detail: jr.ok ? undefined : jr.summary });
+      const verdicts = (jr.verdict?.criteria ?? []).map((v) => ({ name: v.name, verdict: v.verdict, reason: v.reason }));
+      if (jr.ok && jr.verdict) {
+        const vmap = new Map(jr.verdict.criteria.map((v) => [v.name.toLowerCase(), v]));
+        for (const crit of criteria) {
+          const v = vmap.get(crit.name.toLowerCase());
+          const got = v ? (v.verdict.trim().toLowerCase() === 'pass' ? 'pass' : 'fail') : undefined;
+          checks.push({ name: `reasoning ${crit.name}: expect pass`, pass: got === 'pass', detail: v ? `judge=${got} — ${v.reason}` : 'omitted' });
+        }
+      }
+      nl = { field: 'edge reasoning', output: primary.reasoning, verdicts };
+    }
+  }
+  const passed = checks.filter((ck) => ck.pass).length;
+
   return {
     name: c.name,
     kind: 'edge',
@@ -85,11 +113,12 @@ async function runEdgeCase(c: EdgeCase, transport: LlmTransport, settings: Retur
     parse: result.parse,
     edges: result.edges,
     derivedClaims,
-    checks: scored.checks,
+    ...(nl ? { nl } : {}),
+    checks,
     parseOk: scored.parseOk,
     schemaOk: scored.schemaOk,
-    passed: scored.passed,
-    total: scored.total,
+    passed,
+    total: checks.length,
     expectedPrimary: scored.expectedPrimary,
     predictedPrimary: scored.predictedPrimary,
   };

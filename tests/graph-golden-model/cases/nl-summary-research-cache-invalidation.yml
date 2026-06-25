@@ -1,0 +1,8 @@
+kind: nl
+field: chunk_summary
+description: "Longer passage (research-cache-invalidation) — summary should be grounded, representative, and concise."
+input: |
+  We benchmarked three cache-invalidation strategies under a read-heavy workload. Time-to-live expiration was simplest but served stale data up to the TTL window, which averaged 90 seconds in our test. Write-through invalidation eliminated staleness but increased write latency by 18%. An event-driven approach that invalidated on change kept staleness near zero while adding only 5% write latency, at the cost of a message-queue dependency. The event-driven approach also failed open: if the queue was down, entries fell back to TTL. We recommend event-driven invalidation for correctness-sensitive data.
+criteria: [grounded, representative, concise]
+must_capture:
+  - "event-driven cache invalidation gave near-zero staleness for only 5% more write latency, and is recommended"

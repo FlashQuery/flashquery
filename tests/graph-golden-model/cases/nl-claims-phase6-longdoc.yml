@@ -1,0 +1,44 @@
+kind: nl
+field: key_claims
+description: Phase 6 scale / position bias — a long multi-paragraph doc with facts spread throughout; late-paragraph facts must NOT be dropped.
+input: |
+  ## Q2 Engineering Review
+
+  This quarter the team shipped three major features and made progress on reliability, cost,
+  and hiring. Overall execution was strong, though a few risks emerged late in the quarter.
+
+  Offline mode reached general availability in May. Within two weeks it was adopted by 22% of
+  active users, exceeding the 15% target we set at the start of the quarter.
+
+  Enterprise SSO shipped in June. Sales attributes five new enterprise contracts directly to
+  the availability of SAML-based single sign-on.
+
+  On reliability, monthly uptime came in at 99.97%. There was a single SEV2 incident — the
+  payments outage in March — and median time to recovery across all incidents was 35 minutes.
+
+  Performance improved after the caching rollout: p95 latency dropped 18% quarter over quarter,
+  with no measurable change in error rates.
+
+  On cost, infrastructure spend fell 12% after a rightsizing pass. However, data egress charges
+  rose 30%, partly offsetting those savings.
+
+  Hiring added four engineers this quarter, and two open roles remain. One team lead departed in
+  June, and backfilling that role is now a priority.
+
+  On security, the company passed its SOC 2 Type II audit with no major findings. One high-severity
+  vulnerability in the file-upload service was patched in release 3.4.1.
+
+  Looking to Q3, the roadmap prioritizes the billing revamp; the analytics dashboard has been
+  deferred to Q4 to make room.
+
+  Two risks emerged late in the quarter. The PostgreSQL migration is now two weeks behind schedule,
+  and weekend on-call coverage is understaffed. Finally, the team will revisit the hiring freeze in Q4.
+criteria: [grounded, complete]
+min_claims: 8
+must_capture:
+  - "the team shipped three major features in Q2"
+  - "offline mode reached GA and 22% adoption within two weeks"
+  - "monthly uptime was 99.97% with a single SEV2 incident"
+  - "infrastructure spend fell 12% while data egress rose 30%"
+  - "the PostgreSQL migration is two weeks behind schedule"
+  - "the team will revisit the hiring freeze in Q4"

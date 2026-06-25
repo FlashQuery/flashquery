@@ -1,0 +1,8 @@
+kind: nl
+field: key_claims
+description: Phase 3 precision — claim-free input (greeting + question + invitation, no facts); the model must NOT fabricate factual claims.
+input: |
+  Hi there! Thanks for stopping by. Have you had a chance to try the new dashboard yet?
+  We'd really love to hear what you think — your feedback shapes our roadmap.
+criteria: [grounded]
+max_claims: 2

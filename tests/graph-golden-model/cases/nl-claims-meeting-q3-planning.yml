@@ -1,0 +1,11 @@
+kind: nl
+field: key_claims
+description: "Longer passage (meeting-q3-planning) — claims should be grounded, atomic, and complete, capturing the key facts."
+input: |
+  In the Q3 planning meeting the team agreed to prioritize the billing revamp over the analytics dashboard, because three enterprise renewals depend on usage-based billing. Maria will own the billing project and deliver a design by the end of April. The analytics dashboard is not cancelled but is pushed to Q4. The team decided not to hire a second designer this quarter, revisiting that in Q4. A question about whether to migrate billing to the new payments provider was raised but left undecided pending a cost estimate.
+criteria: [grounded, atomic, complete]
+must_capture:
+  - "the team prioritized the billing revamp over the analytics dashboard"
+  - "three enterprise renewals depend on usage-based billing"
+  - "Maria will own billing and deliver a design by the end of April"
+  - "the analytics dashboard is pushed to Q4"

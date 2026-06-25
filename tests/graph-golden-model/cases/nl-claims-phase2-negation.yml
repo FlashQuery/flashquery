@@ -1,0 +1,13 @@
+kind: nl
+field: key_claims
+description: Phase 2 faithfulness — explicit negations must be preserved (not dropped or flipped).
+input: |
+  The on-call engineer confirmed that the database did not run out of connections during the
+  incident. The alarm did not fire because the threshold was never crossed. Customer data was
+  not affected, and no rollback was required.
+criteria: [grounded, atomic, complete, faithful]
+must_capture:
+  - "the database did not run out of connections during the incident"
+  - "the alarm did not fire"
+  - "customer data was not affected"
+  - "no rollback was required"

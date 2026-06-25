@@ -1,0 +1,8 @@
+kind: nl
+field: chunk_summary
+description: "Longer passage (release-notes-4-2) — summary should be grounded, representative, and concise."
+input: |
+  Release 4.2 adds streaming exports for reports larger than 100k rows, which previously timed out. It also introduces SAML SSO for enterprise workspaces and a redesigned audit log with per-field change history. Two breaking changes ship in this release: the v1 webhook signature scheme is removed in favor of HMAC-SHA256, and the deprecated /reports/legacy endpoint is deleted. Customers on annual plans get the new usage dashboard a week before monthly plans. The mobile app is unaffected by these changes.
+criteria: [grounded, representative, concise]
+must_capture:
+  - "release 4.2 adds streaming exports and SAML SSO and removes the v1 webhook scheme and legacy reports endpoint"

@@ -1,0 +1,11 @@
+kind: nl
+field: key_claims
+description: "Longer passage (api-changelog-v3) — claims should be grounded, atomic, and complete, capturing the key facts."
+input: |
+  API v3 changes pagination from offset-based to cursor-based, which fixes inconsistent results when records are inserted during iteration. Rate limits are now per-token rather than per-account, and the limit is published in a response header. The error format is standardized to include a machine-readable code and a human message. Offset pagination remains available on v2 until v2 is retired at the end of the year. Clients should treat cursors as opaque and not parse them.
+criteria: [grounded, atomic, complete]
+must_capture:
+  - "API v3 switches pagination from offset-based to cursor-based"
+  - "rate limits are now per-token rather than per-account"
+  - "the error format now includes a machine-readable code and a human message"
+  - "offset pagination remains on v2 until v2 is retired at year end"

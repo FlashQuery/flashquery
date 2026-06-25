@@ -16,15 +16,26 @@ export const CRITERIA: Record<string, string> = {
   grounded:
     'Every part of the output is directly supported by the source text; nothing is invented, added, or overstated.',
   atomic:
-    'Each item states exactly one fact; no item bundles multiple independent facts together.',
+    'Each item states one fact and does not bundle multiple INDEPENDENT facts. A single ' +
+    'comparative result (e.g. "X is 9% better than Y") or a fact paired with its own ' +
+    'consequence/deadline (e.g. "kept 13 months, then deleted") counts as ONE fact, not several. ' +
+    'Only mark fail when genuinely unrelated facts are crammed into one item.',
   complete:
-    "The output captures the source's main factual points; no major point is omitted.",
+    "The output captures the source's main FACTUAL points (ignore marketing, opinion, and " +
+    'filler — those are not facts). Before marking fail, re-read the output items; only fail ' +
+    'if a clearly factual point is genuinely missing from them. Name the missing fact if you fail.',
   faithful:
     'The output does not distort, exaggerate, or misrepresent the source.',
   representative:
     'The summary conveys the single main point of the source.',
   concise:
     'The summary is brief (one or two sentences) and is not a verbatim copy of the source.',
+  consistent:
+    'The output asserts nothing that the reference text does not support — no fact or claim beyond what the reference contains.',
+  justifies:
+    'The reasoning gives a plausible explanation for why the chosen relation holds between the ' +
+    'source and target, referring to their content. It need NOT describe a causal mechanism; a ' +
+    'sound rationale that fits the claims is enough. Fail only if it is generic filler or off-topic.',
 };
 
 export const DEFAULT_CRITERIA: Record<string, string[]> = {

@@ -1,0 +1,11 @@
+kind: nl
+field: key_claims
+description: "Longer passage (adr-monolith-split) — claims should be grounded, atomic, and complete, capturing the key facts."
+input: |
+  We decided to split the monolith into three services: catalog, orders, and identity. The primary driver is that the orders team and the catalog team now deploy on conflicting schedules, and a shared codebase forces lockstep releases. We considered keeping the monolith with stronger module boundaries, but past attempts at internal boundaries eroded within two releases. We also considered a full microservices breakup, but rejected it as too costly for the current team size. The chosen split lets each service deploy independently while keeping the blast radius small. A known consequence is that cross-service transactions in checkout will need a saga pattern, which adds complexity.
+criteria: [grounded, atomic, complete]
+must_capture:
+  - "the monolith will be split into three services: catalog, orders, and identity"
+  - "the main driver is conflicting deploy schedules forcing lockstep releases"
+  - "a full microservices breakup was rejected as too costly for the team size"
+  - "checkout cross-service transactions will need a saga pattern"

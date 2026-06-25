@@ -1,0 +1,8 @@
+kind: nl
+field: chunk_summary
+description: "Longer passage (research-rag-latency) — summary should be grounded, representative, and concise."
+input: |
+  Our study evaluated three retrieval strategies on a 50,000-document corpus. Hybrid BM25-plus-vector retrieval improved answer accuracy by 9 percentage points over pure vector search, while adding only 40 milliseconds of median latency. Pure graph traversal was the most accurate on multi-hop questions but was four times slower and degraded on single-fact lookups. We found that reranking the top 50 candidates contributed most of the accuracy gain, and that beyond 50 candidates returns diminished sharply. All experiments used the same 7-billion-parameter model and were repeated across five seeds.
+criteria: [grounded, representative, concise]
+must_capture:
+  - "hybrid retrieval beat pure vector search on accuracy with little latency cost, mostly from reranking the top 50 candidates"

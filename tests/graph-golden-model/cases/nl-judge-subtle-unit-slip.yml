@@ -1,0 +1,9 @@
+kind: nl
+field: key_claims
+description: Phase 1 subtle control — a unit/scale slip (milliseconds reported as seconds) must be caught as not grounded.
+given:
+  - "The job added only 40 seconds of median latency"
+input: |
+  In our benchmark the job added only 40 milliseconds of median latency.
+criteria: [grounded]
+expect_fail: [grounded]

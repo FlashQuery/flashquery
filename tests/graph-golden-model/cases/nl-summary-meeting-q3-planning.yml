@@ -1,0 +1,8 @@
+kind: nl
+field: chunk_summary
+description: "Longer passage (meeting-q3-planning) — summary should be grounded, representative, and concise."
+input: |
+  In the Q3 planning meeting the team agreed to prioritize the billing revamp over the analytics dashboard, because three enterprise renewals depend on usage-based billing. Maria will own the billing project and deliver a design by the end of April. The analytics dashboard is not cancelled but is pushed to Q4. The team decided not to hire a second designer this quarter, revisiting that in Q4. A question about whether to migrate billing to the new payments provider was raised but left undecided pending a cost estimate.
+criteria: [grounded, representative, concise]
+must_capture:
+  - "the team prioritized the billing revamp over analytics for Q3, with Maria owning a design by end of April"

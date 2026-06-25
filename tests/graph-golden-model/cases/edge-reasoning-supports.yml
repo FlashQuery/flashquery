@@ -1,0 +1,15 @@
+kind: edge
+description: Phase 4 — supports relation whose natural-language reasoning must be grounded in the claims and actually justify the relation.
+source:
+  chunk_id: bench
+  key_claims:
+    - "After enabling the read-through cache, p95 latency dropped from 800ms to 480ms in the benchmark"
+target:
+  chunk_id: claim
+  key_claims:
+    - "The read-through cache improves API latency"
+expect:
+  primary_relation: supports
+  expect_relations: [supports]
+  min_edges: 1
+  judge_reasoning: [consistent, justifies]

@@ -1,0 +1,9 @@
+kind: nl
+field: key_claims
+description: Phase 1 subtle control — a fluent paraphrase that drops a condition and overstates (meaning-changing) must be caught as not faithful.
+given:
+  - "The cache always improves latency"
+input: |
+  The cache improves latency only when the working set fits in memory; if it exceeds memory, latency gets worse.
+criteria: [faithful]
+expect_fail: [faithful]

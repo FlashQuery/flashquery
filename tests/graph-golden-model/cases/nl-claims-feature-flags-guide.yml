@@ -1,0 +1,11 @@
+kind: nl
+field: key_claims
+description: "Longer passage (feature-flags-guide) — claims should be grounded, atomic, and complete, capturing the key facts."
+input: |
+  Feature flags in our platform have four lifecycle stages: created, rolled out, fully enabled, and archived. A flag should be archived within 30 days of reaching full enablement to avoid accumulating dead conditionals. Flags are evaluated client-side for UI toggles and server-side for anything that affects data. Targeting rules can key off plan, region, or a percentage rollout. Stale flags are flagged automatically by a weekly job that lists any flag unchanged for 60 days. Archiving a flag removes its conditionals in the next cleanup pass.
+criteria: [grounded, atomic, complete]
+must_capture:
+  - "feature flags have four lifecycle stages: created, rolled out, fully enabled, and archived"
+  - "a flag should be archived within 30 days of full enablement"
+  - "flags are evaluated client-side for UI and server-side for data-affecting changes"
+  - "a weekly job lists flags unchanged for 60 days"

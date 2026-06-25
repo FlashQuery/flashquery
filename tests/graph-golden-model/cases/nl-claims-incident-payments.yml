@@ -1,0 +1,11 @@
+kind: nl
+field: key_claims
+description: "Longer passage (incident-payments) — claims should be grounded, atomic, and complete, capturing the key facts."
+input: |
+  On 14 March the payments API returned elevated 5xx errors for 47 minutes during peak traffic. The root cause was a database connection pool that was exhausted after a deploy raised the per-request query count. A secondary factor was that autoscaling never triggered because the alarm threshold had been set too high. Customer impact was limited to checkout, where roughly 12% of transactions failed and were automatically retried. The team has since lowered the alarm threshold, capped per-request queries, and added a connection-pool saturation dashboard. A follow-up review of all peak-traffic alarms is scheduled for next quarter.
+criteria: [grounded, atomic, complete]
+must_capture:
+  - "the payments API returned elevated 5xx errors for 47 minutes"
+  - "the root cause was database connection pool exhaustion after a deploy"
+  - "about 12% of checkout transactions failed"
+  - "the team lowered the alarm threshold and capped per-request queries"

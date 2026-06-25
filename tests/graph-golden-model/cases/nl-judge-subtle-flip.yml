@@ -1,0 +1,9 @@
+kind: nl
+field: key_claims
+description: Phase 1 subtle control — a flipped direction/magnitude (latency raised vs lowered, numbers reversed) must be caught as not faithful.
+given:
+  - "Enabling the cache raised p95 latency from 480ms to 800ms"
+input: |
+  Enabling the read-through cache lowered p95 latency from 800ms to 480ms in our benchmark.
+criteria: [faithful]
+expect_fail: [faithful]

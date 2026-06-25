@@ -1,0 +1,8 @@
+kind: nl
+field: chunk_summary
+description: "Longer passage (api-changelog-v3) — summary should be grounded, representative, and concise."
+input: |
+  API v3 changes pagination from offset-based to cursor-based, which fixes inconsistent results when records are inserted during iteration. Rate limits are now per-token rather than per-account, and the limit is published in a response header. The error format is standardized to include a machine-readable code and a human message. Offset pagination remains available on v2 until v2 is retired at the end of the year. Clients should treat cursors as opaque and not parse them.
+criteria: [grounded, representative, concise]
+must_capture:
+  - "API v3 moves to cursor pagination and per-token rate limits with a standardized error format"

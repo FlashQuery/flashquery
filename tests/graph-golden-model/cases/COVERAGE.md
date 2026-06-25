@@ -106,8 +106,24 @@ End-to-end (extract → judge) cases: `nl-claims-deprecation`, `nl-summary-depre
 response cache makes them resumable across runs, so they complete even under the shell's
 per-call time cap.
 
-NL TODO: add edge-`reasoning` judging cases; broaden claim/summary inputs (multi-topic,
-adversarial, long).
+**Longer-passage NL cases (15 passages × claims+summary = 30 cases, `nl-claims-*` /
+`nl-summary-*`).** Stress extraction completeness on multi-fact prose across domains
+(incident, ADR, release notes, research, policy, spec, meeting, SLA, security, migration,
+API changelog, org, pricing, feature flags, cache research). Findings from the first runs,
+each fixed via the loop:
+- long input made the model over-generate `key_claims` (empty strings / nested arrays →
+  strict-parse failure) → flat/consolidated constraint added to the node template.
+- the model under-captured (dropped the consequence half of compound facts) → completeness
+  nudge added; validated incident/policy/research at 9/9.
+- the judge over-split comparatives as non-atomic → `atomic` criterion sharpened (a single
+  comparison or fact+consequence is one fact); non-atomic negative control still fails.
+- lesson: `must_capture` facts must themselves be atomic, or they conflict with the atomic
+  criterion (fixed the one bundled must_capture).
+Validated passages so far: incident-payments, policy-data-retention, research-rag-latency
+(9/9). The remaining ~12 passages are authored and run via the same loop (cache-resumable).
+
+NL TODO: finish running the remaining long-passage cases on gemma4; add edge-`reasoning`
+judging cases; add adversarial inputs (contradictory facts, heavy distractors).
 
 ## Framework gaps to close (so the axes above are assertable)
 

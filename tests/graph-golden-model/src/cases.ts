@@ -71,6 +71,9 @@ export interface EdgeExpect {
   require_qualifier?: 'temporal' | 'conditional' | 'uncertainty';
   /** The primary (highest-confidence valid) edge's confidence must be >= this. */
   confidence_min?: number;
+  /** Judge the primary edge's natural-language `reasoning` against these criteria
+   *  (e.g. [grounded, justifies]) using the source/target claims as the reference. */
+  judge_reasoning?: string[];
 }
 
 export interface CaseSide {
@@ -115,6 +118,12 @@ export interface NlCase {
   given?: unknown;
   /** Criteria expected to FAIL (negative controls). Empty/absent ⇒ all expected to pass. */
   expect_fail?: string[];
+  /** Precision bounds on extracted key_claims count (over/under-extraction control). */
+  max_claims?: number;
+  min_claims?: number;
+  /** What the judge treats as the reference: the source text (default) or the model's own
+   *  extracted key_claims (for cross-output consistency — e.g. summary vs claims). */
+  against?: 'source' | 'key_claims';
 }
 
 export type GraphCase = NodeCase | EdgeCase | NlCase;
@@ -150,6 +159,9 @@ export function loadCases(only?: string): GraphCase[] {
         must_capture: raw.must_capture as string[] | undefined,
         given: raw.given,
         expect_fail: raw.expect_fail as string[] | undefined,
+        max_claims: raw.max_claims as number | undefined,
+        min_claims: raw.min_claims as number | undefined,
+        against: raw.against as 'source' | 'key_claims' | undefined,
       });
     } else {
       throw new Error(`Case ${file}: missing or unknown 'kind' (expected node|edge|nl)`);

@@ -1,0 +1,8 @@
+kind: nl
+field: chunk_summary
+description: "Longer passage (migration-postgres) — summary should be grounded, representative, and concise."
+input: |
+  We are migrating the primary store from MySQL to PostgreSQL to gain native JSONB indexing and stronger constraint support. The migration runs in three phases: dual-write to both databases, backfill historical rows, then cut reads over to Postgres. Each phase is guarded by a feature flag and can be rolled back independently. The riskiest step is the backfill, which must run during low traffic and is estimated at eight hours. Schema differences in date handling require a one-time normalization that the backfill applies. The cutover is targeted for the last weekend of May.
+criteria: [grounded, representative, concise]
+must_capture:
+  - "the database is migrating MySQL to PostgreSQL in three flag-guarded phases, with backfill the riskiest step"

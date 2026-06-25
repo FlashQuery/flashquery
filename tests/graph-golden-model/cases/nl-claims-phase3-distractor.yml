@@ -1,0 +1,14 @@
+kind: nl
+field: key_claims
+description: Phase 3 precision — a passage padded with marketing fluff; extract only the real facts, not the fluff.
+input: |
+  Welcome to Acme Cloud, the platform teams absolutely love! Our mission is to delight
+  developers everywhere, and we are passionate about reliability — we think you'll agree we're
+  simply the best. Now the specifics: the free tier includes 5 projects and 10 GB of storage.
+  Paid plans start at $20 per seat per month. Support is available 24/7 for paid plans.
+criteria: [grounded, atomic, complete]
+must_capture:
+  - "the free tier includes 5 projects and 10 GB of storage"
+  - "paid plans start at $20 per seat per month"
+  - "24/7 support is available for paid plans"
+max_claims: 5

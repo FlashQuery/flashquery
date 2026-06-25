@@ -183,6 +183,15 @@ export function scoreNl(c: NlCase, result: NlOpResult): Scored {
     });
   }
 
+  // Precision bounds on extracted claim count (over/under-extraction control).
+  if (Array.isArray(result.output)) {
+    const count = result.output.length;
+    if (c.max_claims !== undefined)
+      checks.push({ name: `<= ${c.max_claims} claims`, pass: count <= c.max_claims, detail: `got ${count}` });
+    if (c.min_claims !== undefined)
+      checks.push({ name: `>= ${c.min_claims} claims`, pass: count >= c.min_claims, detail: `got ${count}` });
+  }
+
   const judgeOk = result.judge.ok && !!result.judge.verdict;
   checks.push({ name: 'judge returned valid JSON', pass: judgeOk, detail: judgeOk ? undefined : result.judge.summary });
 

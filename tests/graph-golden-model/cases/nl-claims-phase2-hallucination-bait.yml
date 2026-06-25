@@ -1,0 +1,11 @@
+kind: nl
+field: key_claims
+description: Phase 2 precision — the model must NOT add well-known but unstated details (grounded catches additions).
+input: |
+  Our API uses HTTP/2 for transport. Requests are authenticated with a bearer token in the
+  Authorization header. Responses are returned as JSON.
+criteria: [grounded, atomic, complete, faithful]
+must_capture:
+  - "the API uses HTTP/2 for transport"
+  - "requests are authenticated with a bearer token in the Authorization header"
+  - "responses are returned as JSON"

@@ -1,0 +1,11 @@
+kind: nl
+field: key_claims
+description: "Longer passage (migration-postgres) — claims should be grounded, atomic, and complete, capturing the key facts."
+input: |
+  We are migrating the primary store from MySQL to PostgreSQL to gain native JSONB indexing and stronger constraint support. The migration runs in three phases: dual-write to both databases, backfill historical rows, then cut reads over to Postgres. Each phase is guarded by a feature flag and can be rolled back independently. The riskiest step is the backfill, which must run during low traffic and is estimated at eight hours. Schema differences in date handling require a one-time normalization that the backfill applies. The cutover is targeted for the last weekend of May.
+criteria: [grounded, atomic, complete]
+must_capture:
+  - "the primary store is migrating from MySQL to PostgreSQL"
+  - "the migration runs in three phases: dual-write, backfill, then cut reads over"
+  - "each phase is guarded by a feature flag and can be rolled back independently"
+  - "the backfill is the riskiest step and is estimated at eight hours"

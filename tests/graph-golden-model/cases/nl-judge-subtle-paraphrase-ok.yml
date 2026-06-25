@@ -1,0 +1,8 @@
+kind: nl
+field: key_claims
+description: Phase 1 positive control — a faithful paraphrase that does NOT change meaning must pass (guards against over-rejection).
+given:
+  - "The cache reduced p95 latency from 800ms to 480ms"
+input: |
+  Enabling the read-through cache lowered p95 latency from 800ms to 480ms in our benchmark.
+criteria: [grounded, faithful]

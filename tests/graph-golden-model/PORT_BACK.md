@@ -49,6 +49,10 @@ Where the staged changes live in the workbench:
 | 2026-06-25 | prompt | `certainty_level` medium vs low: replaced the vague definition with content-independent cue-word criteria (medium = "likely/probably/strongly suggests/preliminary"; low = no basis/speculation/idea). Flipped node-certainty-medium low→medium with no test change — criteria, not hope. | prompts/graph-prompts.yml `analyze_node` | STAGED local |
 | 2026-06-25 | prompt | `provenance_basis` = external-only wording ("name the external source; null when self-contained; never cite the text") — node-durable-no-refs 6/7 → 7/7 on gemma4. | prompts/graph-prompts.yml `analyze_node` | STAGED local |
 
+| 2026-06-25 | prompt | `key_claims` extraction on LONG passages: model over-generated (~27 claims, empty strings, nested arrays → strict-parse failure) and under-captured (dropped the consequence half of compound facts). Fixed in the node template: key_claims must be a FLAT array of non-empty strings, consolidated to distinct facts (3-10), but must NOT drop consequences/deadlines/conditions/comparatives. Validated on long incident/policy/research passages (9/9). | prompts/graph-prompts.yml `analyze_node` → node-analysis.ts | STAGED local |
+
+| 2026-06-25 | prompt | JSON well-formedness on number-dense passages: gemma4 emitted a stray empty-string element and let a later field bleed into an unclosed `key_claims` array. Node template now requires "exactly ONE well-formed JSON object: close every array/string, no empty-string element, no field bleeding into another's array." Fixed numeric-fidelity case 0→11/11. (Expected to be a non-issue on larger models; harmless to them.) | prompts/graph-prompts.yml `analyze_node` | STAGED local |
+
 ## Natural-language evaluation (no production change)
 
 The LLM-as-judge for NL outputs (key_claims, chunk_summary, edge reasoning) is a **workbench
