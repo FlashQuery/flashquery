@@ -48,7 +48,7 @@ locally:
 
 - prompt text → `prompts/graph-prompts.yml` (local copy of the prod file)
 - relation vocabulary/descriptions → `prompts/edge-types.yml` (local copy of the prod file)
-- schema/logic deltas → `src/local-schemas.ts` (the workbench parses against this)
+- schema/logic deltas → `local-overrides/src/graph/schemas.ts` (the workbench parses against this)
 
 The workbench imports the real *unchanged* helpers (the json-repair corrector, edge validation, the
 YAML loaders) but sources prompts/schema from the local copies above. When the suite is green, push
@@ -82,7 +82,7 @@ deliberate push.
 | prompt + vocab loaders | real (`src/graph/prompts.ts`, `vocabulary.ts`) | real rendering of `{{graph:classified_types}}` |
 | prompt templates | local (`prompts/graph-prompts.yml`) | the refinement surface |
 | relation vocabulary | local (`prompts/edge-types.yml`) | descriptions are injected; sharpening them is a lever |
-| node schema deltas | local (`src/local-schemas.ts`) | proposed schema changes, parsed via the real corrector |
+| node schema deltas | local (`local-overrides/src/graph/schemas.ts`) | proposed schema changes, parsed via the real corrector |
 | transport | local thin client | mirrors the prod request shape; adds cache/mock |
 
 ### 3.4 Response cache and resumability
@@ -99,9 +99,20 @@ with no model server (`npm run selftest`). It is wiring-only — negative contro
 diverge under mock.
 
 ### 3.6 The non-persisted `reasoning` field
-The node schema (`src/local-schemas.ts`) adds an optional `reasoning` field so the model can do
+The node schema (`local-overrides/src/graph/schemas.ts`) adds an optional `reasoning` field so the model can do
 chain-of-thought *inside* the JSON (the corrector cannot extract prose-then-JSON). It improves
 judgment fields and is not stored. This is distinct from a "reasoning model" (§8).
+
+### 3.7 Resolution policy — production-first, local-override
+For any production source the workbench depends on (TS logic and config), the rule is: **use the
+real production file by default; create a local override only when our testing requires a change;
+prefer the local override if present, else fall back to production.** This keeps us on real
+production code for maximum fidelity, avoids stale duplicates, and still lets us stage a fix locally
+the instant testing finds a bug — then push it back (§10.5) without ever editing production
+mid-stream (§2). Today the only active TS override is the node schema (`local-overrides/src/graph/schemas.ts`),
+present only because we have a staged schema change; prompts/vocabulary are local YAML copies we
+actively refine. Rationale and implementation options are in `PORT_BACK.md` §5.1; the (now
+deprioritized) alternative of making production source its defaults from the YAML is noted there.
 
 ---
 
@@ -128,7 +139,9 @@ src/
   report.ts           writes results/<timestamp>/report.{json,md} + console + confusion matrix.
   aggregate.ts        stitches batched runs into one scorecard + matrix (ignores mock runs).
   probe.ts            send a freeform prompt to the model (investigation only — never source answers from it).
-  local-schemas.ts    schema deltas proposed for prod but staged here.
+  local-schemas.ts    DEPRECATED shim → re-exports the override below (safe to delete).
+local-overrides/      production source overrides; mirror the prod path. See local-overrides/README.md.
+  src/graph/schemas.ts  the one active override — staged node-schema deltas (production export names).
 results/              generated reports (gitignored).
 .cache/               response cache (gitignored).
 .env / .env.example   GRAPH_GOLDEN_BASE_URL + GRAPH_GOLDEN_MODEL.
@@ -161,10 +174,19 @@ Flags: `--model a,b` (one or several), `--base-url`, `--api-key`, `--only <subst
 <none|low|medium|high>` (default `none`, §8), `--extra-body '<json>'`, `--no-cache`, `--clear-cache`,
 `--mock`.
 
-### 5.3 Resumability and batching
+### 5.3 Resumability, batching, and the NL cost model
 Because of §3.4, slow suites are run in batches (e.g. `--only "edge-a,edge-b"`) or simply re-run —
-each invocation advances the cache. An `nl` extract→judge case is 2 model calls; expect long
-wall-clock time on weak local models.
+each invocation advances the cache. The runner prints **live per-case progress**
+(`[i/N] kind name … PASS/FAIL`) so a long run never looks hung.
+
+Cost model for the NL suite (so the wall-clock is not surprising): a `kind: nl` case with `given`
+is **1 model call** (judge only); an extracted `nl` case is **2 calls** (`analyze_node` then judge).
+So the full NL set is ~2× its case count in calls (≈100 for ~57 cases). On the local gemma4,
+the judge call is fast (~9s) but `analyze_node` is slow (~30–45s) — not because of thinking (that's
+off, §8) but because it generates a large payload (reasoning paragraph + ~10 fields + claims). A
+full *uncached* NL run is therefore tens of minutes. Practical guidance: rely on the cache (run
+again to resume; completed calls replay instantly), run NL in `--only` batches, and watch the live
+progress. Calls are sequential by design — the local server is not set up for concurrency.
 
 ### 5.4 Aggregation
 `npx tsx src/aggregate.ts --model <m>` stitches the latest result per case across all (non-mock)
@@ -186,7 +208,7 @@ model author the expected answer (a model-derived test is guaranteed to pass and
 `probe.ts` is for investigation only. Diagnose any failure in this order (§9 shows worked examples):
 1. **Bad/ambiguous test** → fix or relax it.
 2. **Prompt gap** → refine `prompts/graph-prompts.yml` or `prompts/edge-types.yml`.
-3. **Logic/schema bug** → fix in `src/local-schemas.ts`; log in `PORT_BACK.md`.
+3. **Logic/schema bug** → fix in `local-overrides/src/graph/schemas.ts`; log in `PORT_BACK.md`.
 
 YAML note: keep `description` colon-free or quote it (an unquoted `:` breaks the file and the loader
 reads the whole directory, so one bad file breaks every run).
@@ -389,6 +411,22 @@ definitions for certainty/staleness/question_status/provenance (external-only); 
 `edge-types.yml`; and the schema deltas (optional `reasoning`, relaxed `analyzed_content_hash`).
 **Deferred (do not push):** `low_confidence_flag` in `classify_edge` (§9.6, §12.4).
 
+### 9.11 Call structure and batching opportunities
+**Observation:** production makes one `analyze_node` call per *chunk* (returning the entire node
+payload — all indicators — in a single response) and one `classify_edge` call per candidate *pair*.
+It does NOT call per-indicator. The workbench mirrors this 1:1; the only extra call is the test-only
+**judge** on `nl` cases (extract → judge = 2 calls). The cache also collapses duplicate extractions:
+a passage's `nl-claims-*` and `nl-summary-*` cases share one `analyze_node` call (both fields come
+from it), so the apparent call count of an uncached run overstates the real work.
+**Reasoning:** so the per-call output is already wide (one call → all node fields); the remaining
+lever to cut call *count* is batching multiple chunks (or multiple candidate pairs) into one call,
+returning an array.
+**Conclusion (candidate, UNTESTED):** multi-chunk / multi-pair batching could cut calls ~N× for both
+production and the harness, but it multiplies a single call's output, and we have already seen weak
+models degrade as output grows (JSON well-formedness §9.2; over-generation/bundling §9.3). So it is
+only viable if a harness experiment proves quality holds, and it is likely model-dependent. Treat as
+a perf optimization to validate here before proposing to the dev/arch agent — do not assume it.
+
 ---
 
 ## 10. Maintaining the docs & the feedback → push-back lifecycle
@@ -396,7 +434,7 @@ definitions for certainty/staleness/question_status/provenance (external-only); 
 1. **Run → record.** After each run update `cases/COVERAGE.md` (status, case, model, findings) per
    its own "How to maintain" section, and `cases/NL-TESTPLAN.md`'s learnings log for NL work.
 2. **Feed changes into the editable sources only** (§2): prompt YAML, `edge-types.yml`, or
-   `local-schemas.ts`. Every change gets a `PORT_BACK.md` row (what, why, where it lands).
+   `local-overrides/src/graph/schemas.ts`. Every change gets a `PORT_BACK.md` row (what, why, where it lands).
 3. **Re-run and re-confirm** shared-prompt consumers (§9.9); update `COVERAGE.md`. A green not
    re-verified after a shared-prompt edit is not green.
 4. **Decide.** Iterate to green on the target model(s); use `--baseline` to quantify the gain and a
@@ -415,23 +453,120 @@ A skill (e.g. `flashquery-graph-testgen`) is planned to let an agent operate thi
 should be **thin orchestration over the docs in this repo** — inline the guardrails and step order,
 reference the docs for schemas/commands so it doesn't drift. Triggers: "create/refine a graph test",
 "cover `<axis/relation>`", "fill a coverage gap", "test analyze_node / classify_edge", "run the
-graph golden-model". Workflows and actions:
+graph golden-model". Each workflow below is specified as **Purpose / Uses (reads) / Touches (writes) / Produces /
+Behavior** so a skill can be built from it. They compose: a typical loop is 11.1 → 11.2 → (11.3 and,
+for NL, 11.4) → repeat → 11.5 → 11.6 → eventually 11.7.
 
-1. **Author** — read `COVERAGE.md` → pick a gap → choose kind → write the expectation a priori →
-   create `cases/*.yml` → update the `COVERAGE.md` row.
-2. **Run & diagnose** — run (`reasoning_effort=none`, cache resumable) → read the report → classify
-   the miss (bad-test → prompt → logic).
-3. **Refine & feed back** — fix one editable source (never `src/graph`) → log `PORT_BACK.md` →
-   re-run → re-confirm shared-prompt consumers → update `COVERAGE.md`.
-4. **Validate the judge** — `given`-mode positive + negative controls before trusting a criterion.
-5. **Compare & stress** — `--baseline`; second `--model`; `aggregate.ts`.
-6. **Maintain docs** — keep `COVERAGE.md` and `NL-TESTPLAN.md` current; record findings and
-   DEFERRED items honestly.
-7. **Push back** — consolidated one-shot to `src/graph` excluding DEFERRED; re-run on the instance.
+### 11.1 Author a test
+- **Purpose:** turn an uncovered/under-covered axis (or a target the user names) into a runnable,
+  hypothesis-first case.
+- **Uses:** `cases/COVERAGE.md` (pick a ◻/⚠/◐ gap); README §6 (case schemas) and `cases/README.md`
+  (design discipline); the valid value sets — relation names from `prompts/edge-types.yml`, enum
+  values from the schema — so expectations use legal values.
+- **Touches:** creates one `cases/<kind>-<name>.yml`; updates the matching `cases/COVERAGE.md` row in
+  the same change. Touches nothing in `src/` or `prompts/`.
+- **Produces:** a runnable case plus a coverage row (status pending until run).
+- **Behavior:** choose the kind from the axis (node = indicator/enum; edge = relation/metadata; nl =
+  natural-language). Write the expected output **a priori from human judgment** — never derive it
+  from a model (`src/probe.ts` is investigation-only and its output never becomes an expectation).
+  Keep `description` colon-free or quoted; make `must_capture` facts atomic; reserve `*_in`
+  tolerance for genuinely ambiguous axes. Does **not** call the model — authoring only.
 
-Non-negotiables to enforce regardless of what's read: don't touch `src/graph`; `must_capture` facts
-must be atomic; validate the judge with controls; re-run calibration after any criterion edit; the
-production push is a separate, reviewed step.
+### 11.2 Run & diagnose
+- **Purpose:** execute case(s) and classify any failure.
+- **Uses:** `src/run.ts` via `npm run` / `tsx` (mode + `--only` + `--model`); `.env`; the `.cache/`.
+- **Touches:** writes `results/<timestamp>/report.{json,md}` and `.cache/` only — read-only w.r.t.
+  prompts, schema, and `src/graph`.
+- **Produces:** a report (per-case pass/fail, the exact prompt sent, raw output, parsed result,
+  judge verdicts, and an edge confusion matrix) and a **diagnosis** for each miss.
+- **Behavior:** run with `reasoning_effort=none`; the run is resumable — if it is interrupted or a
+  2-call NL case exceeds a window, just run again (cache replays completed calls). Read `report.md`,
+  inspect the raw output / judge reasons for a miss, and classify it in the fixed order: bad/ambiguous
+  test → prompt gap → logic/schema bug (README §6.1). Diagnosis only — no fixes here.
+
+### 11.3 Refine & feed back
+- **Purpose:** apply the smallest fix for a diagnosed miss and re-verify without regressions.
+- **Uses:** the diagnosis from 11.2 and the known patterns/levers in README §9.
+- **Touches:** exactly **one** editable source — `prompts/graph-prompts.yml`,
+  `prompts/edge-types.yml`, or a local TS override (`local-overrides/src/graph/schemas.ts` today; for any other
+  production TS bug, create a local override per the production-first policy §3.7, never edit
+  `src/graph`) — plus a new `PORT_BACK.md` row, then re-runs (reports/cache) and updates
+  `cases/COVERAGE.md`.
+- **Produces:** a staged change, its `PORT_BACK.md` manifest entry, and an updated matrix.
+- **Behavior:** make the minimal change that addresses the diagnosis. After editing a **shared**
+  prompt (`analyze_node` or `classify_edge`), re-confirm the whole node/edge suite — a fix for one
+  field/relation can regress a sibling (README §9.9), and `classify_edge` is near the model's
+  complexity ceiling (§9.6). If a change regresses something, revert or rethink rather than stacking
+  patches. Stop when the target is green with no new regressions.
+
+### 11.4 Validate the judge (NL only)
+- **Purpose:** prove a new or changed judge criterion actually discriminates before trusting it.
+- **Uses:** `src/judge.ts` (criteria library); `given`-mode `nl-judge-*` control cases.
+- **Touches:** the control cases and, if refining, the criterion definition in `src/judge.ts`
+  (workbench-only — never a production change).
+- **Produces:** a positive control that passes and a negative control that is caught (`expect_fail`)
+  for the criterion.
+- **Behavior:** a criterion is trusted only when a known-good output passes AND a known-bad output
+  fails. Re-run **both** controls after any criterion edit. The judge is an LLM, so never let a model
+  author the expected verdict; calibrate it the same way you'd calibrate a test instrument.
+
+### 11.5 Compare & stress
+- **Purpose:** quantify a refinement's value and test robustness across models.
+- **Uses:** `--baseline` (renders the unmodified production prompts for A/B); `--model a,b` (run
+  several models into one report); `src/aggregate.ts`.
+- **Touches:** writes reports and cache only — no source/prompt edits.
+- **Produces:** (a) an A/B delta of refined-vs-as-wired prompts, (b) a per-model scorecard + edge
+  confusion matrix. These inform the production-model choice and separate prompt issues from
+  model-capability issues.
+- **Behavior:** `--baseline` answers "did our change beat the current production prompt?"; the
+  multi-model run answers "does it hold on a weaker/stronger model?" (e.g. granite4 fails the
+  staleness ordinal while gemma4 clears it, §9.8). `aggregate.ts` stitches batched runs (ignoring
+  `--mock`) into one view for transcription into `COVERAGE.md`. Read-only w.r.t. prompts/schema.
+
+### 11.6 Maintain docs
+- **Purpose:** keep the record honest and current so it can feed the requirements step.
+- **Uses:** `aggregate.ts` numbers and the run reports.
+- **Touches:** `cases/COVERAGE.md` (status banner + rows, per its own "How to maintain" section),
+  `cases/NL-TESTPLAN.md` (learnings log), `PORT_BACK.md` (manifest), and README §12 (append a new
+  **product-behavior** Open Question when one surfaces).
+- **Produces:** an up-to-date matrix, manifest, and learnings log; resolved questions folded into
+  topic sections with the §12 entry left as a reference.
+- **Behavior:** record findings, not just pass/fail; mark model-ceiling items ⚠/DEFERRED with the
+  trade-off (never as ✓); every new case gets a matrix row; route product-behavior decisions to §12
+  and leave architecture/implementation questions for the dev/arch agent.
+
+### 11.7 Push back to production
+- **Purpose:** land the validated refinements in `src/graph` in one deliberate, reviewed change.
+- **Uses:** the `PORT_BACK.md` manifest — **§1.1–§1.4** (the content deltas), **§1.5** (the exact
+  production file map), **§2** (deferred, exclude) — and the README §10.5 procedure.
+- **Touches (exact files, per `PORT_BACK.md` §1.5):** prompt text → `src/graph/prompts.ts`
+  (`FALLBACK_GRAPH_PROMPTS`) **and** `src/graph/defaults/graph-prompts.yml`; relation descriptions →
+  `src/graph/vocabulary.ts` (`FALLBACK_GRAPH_RELATIONS`) **and** `src/graph/defaults/edge-types.yml`;
+  schema → `src/graph/schemas.ts`. Each in-code-fallback/packaged-YAML pair MUST be edited together
+  (parity tests T-U-076, T-U-052). No prompt *wiring* is needed — production already renders via
+  `prompt-renderer.ts`. Update the affected tests (`PORT_BACK.md` §1.5 lists them). This is the
+  **only** workflow that writes to `src/graph`.
+- **Produces:** a single reviewed change, followed by a run of this suite against the real instance
+  confirming no drift, plus updated/passing graph unit+integration tests.
+- **Behavior:** gated on green on the target model(s) **and** human review of `PORT_BACK.md`. One-shot,
+  not incremental (avoids the uncontrolled mid-stream changes the safety policy forbids, §2). Exclude
+  §2 DEFERRED items. Existing instances' `.fqc/*.yml` sidecars are a separate migration concern (not
+  this source push). If the on-instance run drifts, treat it as a fresh 11.2 → 11.3 cycle. This is the
+  only sanctioned route to production.
+- **Caveat — "content-only" holds for the *current* refinements.** They all fit the existing
+  template variables (`{{chunk_content}}`/`{{source_chunk}}`/`{{target_chunk}}`/`{{graph:classified_types}}`)
+  and the existing renderer, so the push is content + parity + schema, no wiring. A *future*
+  refinement that needs something the template/renderer doesn't support — e.g. a per-call
+  `response_format`/structured-output, a NEW `{{variable}}`, a system+user split, or any change to how
+  messages are assembled — would require a wiring/architecture change in `src/graph`
+  (`prompt-renderer.ts` and/or the analysis ops), which is a dev/arch decision, not a copy. **At push
+  time, re-check that every staged delta fits the current template+renderer; if one doesn't, route it
+  to the dev/arch agent as a wiring change.**
+
+Non-negotiables the skill must enforce regardless of what's read: don't touch `src/graph` during
+refinement (only 11.7 touches it, deliberately); `must_capture` facts must be atomic; validate the
+judge with positive+negative controls and re-run them after any criterion edit; re-confirm the whole
+suite after a shared-prompt edit; the production push is a separate, reviewed, one-shot step.
 
 ---
 

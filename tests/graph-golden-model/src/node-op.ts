@@ -2,10 +2,11 @@
 // the result through the REAL parser/schema imported from src/graph. Mirrors
 // analyzeGraphNode() minus the Supabase write.
 
-// Parse with the REAL corrector (parseLlmJson = jsonrepair + zod) but against our
-// LOCAL proposed schema, so production src/graph stays unmodified until a one-shot push.
+// Parse with the REAL corrector (parseLlmJson = jsonrepair + zod). The node schema is taken from a
+// LOCAL OVERRIDE (production-first policy, README §3.7) because we have a staged schema change; the
+// override mirrors the production path + export names. Production src/graph stays unmodified.
 import { parseLlmJson } from '../../../src/llm/json-repair.js';
-import { LocalGraphNodeAnalysisPayloadSchema, type LocalGraphNodeAnalysisPayload } from './local-schemas.ts';
+import { GraphNodeAnalysisPayloadSchema, type GraphNodeAnalysisPayload } from '../local-overrides/src/graph/schemas.ts';
 import type { Settings } from './config.ts';
 import type { ChatMessage, LlmTransport } from './llm-client.ts';
 import { buildNodeMessages, type NodeInput } from './prompts.ts';
@@ -25,7 +26,7 @@ export interface NodeOpResult {
   mocked: boolean;
   latencyMs: number;
   parse: ParseInfo;
-  payload?: LocalGraphNodeAnalysisPayload;
+  payload?: GraphNodeAnalysisPayload;
 }
 
 export async function runNodeOp(
@@ -35,7 +36,7 @@ export async function runNodeOp(
 ): Promise<NodeOpResult> {
   const messages = buildNodeMessages(input, settings);
   const completion = await transport.complete(messages);
-  const parsed = parseLlmJson(completion.text, LocalGraphNodeAnalysisPayloadSchema);
+  const parsed = parseLlmJson(completion.text, GraphNodeAnalysisPayloadSchema);
   const base = {
     messages,
     raw: completion.text,

@@ -172,10 +172,24 @@ async function main(): Promise<void> {
   for (const model of settings.models) {
     const transport = makeTransport(settings, model);
     const details: CaseDetail[] = [];
+    console.log(`\n========== model: ${model} ==========`);
+    let i = 0;
     for (const c of cases) {
-      if (c.kind === 'node') details.push(await runNodeCase(c, transport, settings));
-      else if (c.kind === 'edge') details.push(await runEdgeCase(c, transport, settings));
-      else details.push(await runNlCase(c, transport, settings, model));
+      i++;
+      // Live progress: print before the (possibly slow) model call, then the result. NL extract
+      // cases are ~2 model calls and slow on weak local models, so this prevents "looks hung".
+      process.stdout.write(`  [${i}/${cases.length}] ${c.kind} ${c.name} … `);
+      const detail =
+        c.kind === 'node'
+          ? await runNodeCase(c, transport, settings)
+          : c.kind === 'edge'
+            ? await runEdgeCase(c, transport, settings)
+            : await runNlCase(c, transport, settings, model);
+      details.push(detail);
+      console.log(`${detail.passed === detail.total ? 'PASS' : 'FAIL'} (${detail.passed}/${detail.total})`);
+      for (const ck of detail.checks) {
+        if (!ck.pass) console.log(`        · MISS ${ck.name}${ck.detail ? `  [${ck.detail}]` : ''}`);
+      }
     }
     const run: ModelRun = { model, cases: details, summary: summarize(details) };
     runs.push(run);

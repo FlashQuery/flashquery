@@ -44,7 +44,7 @@ The loop is hypothesis-first (see README §6.1, §10):
    - *Prompt gap?* The expectation is sound but the prompt under-specifies → refine
      `prompts/graph-prompts.yml` or `prompts/edge-types.yml`, log in `PORT_BACK.md`.
    - *Logic/schema bug?* The model produced the right content but the TS rejected/mishandled it →
-     fix in `src/local-schemas.ts` (staged), log in `PORT_BACK.md`. **Never edit `src/graph`**
+     fix in `local-overrides/src/graph/schemas.ts` (staged), log in `PORT_BACK.md`. **Never edit `src/graph`**
      during refinement (README §2).
 
 After any shared-prompt edit (`analyze_node` / `classify_edge`), re-confirm the whole node/edge

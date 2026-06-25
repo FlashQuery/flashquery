@@ -8,7 +8,7 @@
 import * as fs from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { LocalGraphNodeAnalysisPayload } from './local-schemas.ts';
+import type { GraphNodeAnalysisPayload } from '../local-overrides/src/graph/schemas.ts';
 import type { Settings } from './config.ts';
 import type { ChatMessage } from './llm-client.ts';
 import type { ParseInfo } from './node-op.ts';
@@ -28,7 +28,7 @@ export interface CaseDetail {
   messages: ChatMessage[];
   raw: string;
   parse: ParseInfo;
-  payload?: LocalGraphNodeAnalysisPayload;
+  payload?: GraphNodeAnalysisPayload;
   edges?: ValidatedEdge[];
   nl?: {
     field: string;
@@ -69,14 +69,7 @@ export function summarize(cases: CaseDetail[]): ModelRun['summary'] {
 
 // ── Console ─────────────────────────────────────────────────────────────────
 export function printModelRun(run: ModelRun): void {
-  console.log(`\n========== model: ${run.model} ==========`);
-  for (const c of run.cases) {
-    const ok = c.passed === c.total;
-    console.log(`[${ok ? 'PASS' : 'FAIL'}] (${c.kind}) ${c.name}  (${c.passed}/${c.total})${c.description ? ` — ${c.description}` : ''}`);
-    if (!c.parseOk) console.log('       · parse FAILED (no valid JSON)');
-    else if (!c.schemaOk) console.log('       · schema FAILED (parsed but violated strict schema)');
-    for (const ck of c.checks) if (!ck.pass) console.log(`       · MISS ${ck.name}${ck.detail ? `  [${ck.detail}]` : ''}`);
-  }
+  // Per-case lines are streamed live by the runner (run.ts); here we print only the roll-up.
   printConfusionMatrix(run.cases);
   const s = run.summary;
   console.log(`\n  ${run.model}: fixtures ${s.fixturesPassing}/${s.fixturesTotal}, checks ${s.checksPassed}/${s.checksTotal}`);
