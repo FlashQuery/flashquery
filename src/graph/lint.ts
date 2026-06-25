@@ -785,10 +785,19 @@ async function matchResolutionChunks(
   }
 ): Promise<Array<{ chunk_id: string; similarity: number }>> {
   const rpcName = pg.escapeIdentifier(`match_chunks_${input.embeddingName}`);
+  // Use named-argument invocation (matching the Supabase `.rpc()` convention in
+  // src/graph/candidates.ts) so this call stays resilient to RPC signature
+  // reordering/additions; trailing params (filter_tags, filter_tag_match,
+  // include_archived) keep their function defaults.
   const result = await client.query<{ chunk_id: string; similarity: number }>(
     `
     SELECT chunk_id::text AS chunk_id, similarity::float AS similarity
-    FROM ${rpcName}($1::vector, $2::double precision, $3::integer, $4::text, NULL::text[], 'any'::text, false)
+    FROM ${rpcName}(
+      query_embedding => $1::vector,
+      match_threshold => $2::double precision,
+      match_count => $3::integer,
+      filter_instance_id => $4::text
+    )
     `,
     [vectorRpcArgument(input.queryVector), input.threshold, input.matchCount, input.instanceId]
   );
