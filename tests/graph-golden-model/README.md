@@ -224,12 +224,16 @@ expect:         # assert only what matters; enums exact, *_in accepts a set (§6
   staleness_risk: high             # or staleness_risk_in: [...]
   question_status: open            # open|deferred|resolved|null ; or question_status_in: [...]
   question_resolution_present: false   # true = non-null, false = null
+  question_resolution_contains: ["chosen option"]  # case-insensitive substrings when resolved
   reasoning_present: true
+  reasoning_max_sentences: 2
   key_claims_min: 2
   key_claims_contains: ["RFC-0042"]    # case-insensitive substring in some claim
   temporal_markers_min: 1
   external_refs_contains: ["RFC-0042"]
+  provenance_basis_contains: ["RFC-0042"]
   external_refs_empty: true            # also: temporal_markers_empty / chunk_summary_nonempty / provenance_present
+  chunk_summary_max_sentences: 1
 ```
 
 ### 6.3 edge cases
@@ -249,6 +253,7 @@ expect:
   llm_assessment_in: [strong, moderate]
   require_qualifier: temporal          # temporal | conditional | uncertainty
   confidence_min: 0.6
+  reasoning_max_sentences: 2
   judge_reasoning: [consistent, justifies]   # LLM-judge the edge's reasoning text (§7)
 ```
 The 10 classified relations: supports, contradicts, supersedes, duplicates, depends_on, elaborates,

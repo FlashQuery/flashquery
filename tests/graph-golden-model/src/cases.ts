@@ -47,14 +47,19 @@ export interface NodeExpect {
   external_refs_contains?: string[];
   // Additional axes (close the coverage matrix).
   chunk_summary_nonempty?: boolean;
+  chunk_summary_max_sentences?: number;
   /** true = provenance_basis must be non-null; false = must be null. */
   provenance_present?: boolean;
+  provenance_basis?: string | null;
+  provenance_basis_contains?: string[];
   /** true = question_resolution must be non-null; false = must be null. */
   question_resolution_present?: boolean;
+  question_resolution_contains?: string[];
   external_refs_empty?: boolean;
   temporal_markers_empty?: boolean;
   /** true = the model must have emitted a non-empty reasoning field (use with --reasoning). */
   reasoning_present?: boolean;
+  reasoning_max_sentences?: number;
 }
 
 export interface EdgeExpect {
@@ -76,6 +81,8 @@ export interface EdgeExpect {
   /** Judge the primary edge's natural-language `reasoning` against these criteria
    *  (e.g. [grounded, justifies]) using the source/target claims as the reference. */
   judge_reasoning?: string[];
+  /** The primary edge's natural-language reasoning should stay brief. */
+  reasoning_max_sentences?: number;
 }
 
 export interface CaseSide {

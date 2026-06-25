@@ -35,6 +35,17 @@ function includesCI(haystack: string[], needle: string): boolean {
   return haystack.some((h) => h.toLowerCase().includes(n));
 }
 
+function includesTextCI(haystack: string | null | undefined, needle: string): boolean {
+  return String(haystack ?? '').toLowerCase().includes(needle.toLowerCase());
+}
+
+function sentenceCount(text: string | null | undefined): number {
+  const normalized = String(text ?? '').trim();
+  if (!normalized) return 0;
+  const matches = normalized.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g) ?? [];
+  return matches.map((s) => s.trim()).filter(Boolean).length;
+}
+
 export function scoreNode(testCase: NodeCase, result: NodeOpResult): Scored {
   const parseOk = result.parse.ok || result.parse.failure === 'schema';
   const schemaOk = result.parse.ok;
@@ -71,16 +82,32 @@ export function scoreNode(testCase: NodeCase, result: NodeOpResult): Scored {
       });
     if (a.chunk_summary_nonempty)
       checks.push({ name: 'chunk_summary non-empty', pass: p.chunk_summary.trim().length > 0 });
+    if (a.chunk_summary_max_sentences !== undefined)
+      checks.push(max('chunk_summary sentence count', sentenceCount(p.chunk_summary), a.chunk_summary_max_sentences));
     if (a.provenance_present !== undefined)
       checks.push({
         name: `provenance_basis ${a.provenance_present ? 'present' : 'null'}`,
         pass: (p.provenance_basis !== null) === a.provenance_present,
         detail: `got ${JSON.stringify(p.provenance_basis)}`,
       });
+    if (a.provenance_basis !== undefined)
+      checks.push(eq('provenance_basis', p.provenance_basis, a.provenance_basis));
+    for (const needle of a.provenance_basis_contains ?? [])
+      checks.push({
+        name: `provenance_basis contains "${needle}"`,
+        pass: includesTextCI(p.provenance_basis, needle),
+        detail: `got ${JSON.stringify(p.provenance_basis)}`,
+      });
     if (a.question_resolution_present !== undefined)
       checks.push({
         name: `question_resolution ${a.question_resolution_present ? 'present' : 'null'}`,
         pass: (p.question_resolution !== null) === a.question_resolution_present,
+        detail: `got ${JSON.stringify(p.question_resolution)}`,
+      });
+    for (const needle of a.question_resolution_contains ?? [])
+      checks.push({
+        name: `question_resolution contains "${needle}"`,
+        pass: includesTextCI(p.question_resolution, needle),
         detail: `got ${JSON.stringify(p.question_resolution)}`,
       });
     if (a.external_refs_empty)
@@ -100,6 +127,8 @@ export function scoreNode(testCase: NodeCase, result: NodeOpResult): Scored {
         name: 'reasoning present',
         pass: typeof p.reasoning === 'string' && p.reasoning.trim().length > 0,
       });
+    if (a.reasoning_max_sentences !== undefined)
+      checks.push(max('reasoning sentence count', sentenceCount(p.reasoning), a.reasoning_max_sentences));
   }
 
   return finalize(testCase.name, testCase.description, parseOk, schemaOk, checks);
@@ -161,6 +190,12 @@ export function scoreEdge(testCase: EdgeCase, result: EdgeOpResult): ScoredEdge 
         name: `primary confidence >= ${e.confidence_min}`,
         pass: (primaryEdge?.confidenceScore ?? 0) >= e.confidence_min,
         detail: `got ${primaryEdge?.confidenceScore}`,
+      });
+    if (e.reasoning_max_sentences !== undefined)
+      checks.push({
+        name: `primary reasoning sentence count <= ${e.reasoning_max_sentences}`,
+        pass: primaryEdge ? sentenceCount(primaryEdge.reasoning) <= e.reasoning_max_sentences : false,
+        detail: primaryEdge ? `got ${sentenceCount(primaryEdge.reasoning)}` : 'no primary edge',
       });
   }
 
@@ -241,6 +276,10 @@ function oneOf(name: string, actual: unknown, accepted: string[]): Check {
 
 function min(name: string, actual: number, expected: number): Check {
   return { name: `${name} >= ${expected}`, pass: actual >= expected, detail: `got ${actual}` };
+}
+
+function max(name: string, actual: number, expected: number): Check {
+  return { name: `${name} <= ${expected}`, pass: actual <= expected, detail: `got ${actual}` };
 }
 
 function finalize(

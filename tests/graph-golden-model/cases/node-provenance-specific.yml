@@ -1,0 +1,15 @@
+kind: node
+description: Cited dataset provenance should name the source identifier rather than a generic narrative.
+input: |
+  ## Enterprise retention update
+
+  According to the Customer Analytics Dataset Q2-2026, enterprise churn fell from 4.2%
+  to 3.1% after the new onboarding sequence launched. The same dataset shows expansion
+  revenue rose 11% among accounts that completed onboarding.
+expect:
+  provenance_present: true
+  provenance_basis_contains:
+    - "Customer Analytics Dataset Q2-2026"
+  key_claims_min: 2
+  chunk_summary_nonempty: true
+  chunk_summary_max_sentences: 1

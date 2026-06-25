@@ -25,6 +25,9 @@ Where each change is staged in the workbench:
 | 8 | `external_refs` = extract every cited identifier, incl. parentheticals like "(see RFC-0042)" | §9.9 | staged |
 | 9 | Reasoning-first (`reasoning` field written before the others) | §3.6 | staged |
 | 10 | A format-only few-shot example (neutral domain) to stabilize wobbly fields | §9.9 | staged |
+| 16 | `chunk_summary` preserves key details/constraints/numbers/dates/deadlines/exceptions/risk and safety qualifiers, causal/attribution details, and other uniqueness-defining details | §9.9 | staged |
+| 17 | Free-form node strings are constrained: `reasoning` is 1-2 sentences, `provenance_basis` is a cited source ID/name or null, and `question_resolution` states the actual answer/decision with key conditions/deadlines | §9.9 | staged |
+| 19 | `certainty_level` scores confidence in extracted claims/source; unlabeled, unclear, or ambiguous source/data should not be marked high merely because uncertainty is explicitly stated | §9.5 | staged |
 
 ### 1.2 `classify_edge` prompt → production edge-classification path
 | # | change | rationale | status |

@@ -1,0 +1,19 @@
+kind: node
+description: Resolved question should include the actual chosen answer and important condition.
+input: |
+  ## SSO rollout decision
+
+  Open question: should SAML SSO ship in the first enterprise rollout? Decision: yes,
+  but only for customers on the Enterprise plan until SCIM provisioning is ready in Q4.
+  The product team considers this question resolved.
+expect:
+  question_status: resolved
+  question_resolution_present: true
+  question_resolution_contains:
+    - "SAML SSO"
+    - "Enterprise"
+    - "SCIM"
+    - "Q4"
+  key_claims_min: 1
+  chunk_summary_nonempty: true
+  chunk_summary_max_sentences: 1

@@ -30,8 +30,11 @@ current as you work:
 Use `npx tsx src/aggregate.ts --model <m>` to get the current pass counts + confusion matrix to
 transcribe into the Status banner and rows.
 
-**Status (2026-06-25):** **full suite 60/60 on gemma4.** Enum suites re-confirmed after the NL
-prompt edits, NL test plan complete (NL-TESTPLAN.md), and the matrix gaps filled:
+**Status (2026-06-25):** node suite **13/13, 82/82** and edge suite **19/19, 68/68** on
+gemma4 after the latest free-form-string prompt edits. Targeted NL summary regressions were
+re-confirmed green after the `chunk_summary` specificity refinements; full NL re-run remains the
+next broad confirmation step. Earlier enum/NL suites were re-confirmed after the NL prompt edits,
+NL test plan complete (NL-TESTPLAN.md), and the matrix gaps filled:
 - certainty/staleness `unknown`: gemma4 COMMITS to a definite bucket — it effectively never emits
   "unknown" (cases accept the committed value; documented as a model behavior, not a harness gap).
 - qualifiers `temporal` & `uncertainty`: ✓ recorded (edge-temporal-qualifier, edge-uncertainty-qualifier).
@@ -50,15 +53,15 @@ workbench-only): `complete` (ignore fluff, re-read before failing), `atomic` (li
 
 The lower-frequency axes are now covered: certainty/staleness `unknown` (◐ — model commits, §12.1),
 temporal & uncertainty qualifiers (✓), `low_confidence_flag` (⚠ DEFERRED, §12.4). granite4 still
-fails the staleness ordinal (model capability, README §9.8). The only ◻ rows left are minor
-(`chunk_summary` non-empty assertion, `key_claims` empty-chunk) — see the table footnotes.
+fails the staleness ordinal (model capability, README §9.8). The only ◻ row left is the minor
+empty/short chunk `key_claims` case — see the table footnotes.
 
 > **TODO — remaining (the matrix axes are now covered; these are robustness/breadth):**
 > - Robustness: run the full suite on `nemotron3:33b`; re-check granite4 staleness with the refined
 >   cue-word criteria; decide the production target model.
 > - Revisit `low_confidence_flag` (§12.4) on a stronger model or via a separate pass.
 > - Breadth: more edge-`reasoning` judging cases; adversarial NL inputs (contradictions, heavy
->   distractors); minor node gaps (`chunk_summary` non-empty assertion, empty-chunk `key_claims`).
+>   distractors); minor node gap (empty-chunk `key_claims`).
 > - Resolve the product Open Questions in README §12 (they gate some "tolerant"/◐ rows).
 
 ## Node analysis — `GraphNodeAnalysisPayload`
@@ -68,14 +71,16 @@ fails the staleness ordinal (model capability, README §9.8). The only ◻ rows 
 | `key_claims` | extracts ≥N atomic claims | all node cases | ✓ |
 | `key_claims` | substring recall of specific claims | node-deprecation-deadline | ✓ |
 | `key_claims` | empty/short chunk → few/no claims | — | ◻ |
-| `chunk_summary` | non-empty, single sentence | (schema only) | ◻ assert |
+| `chunk_summary` | non-empty, single sentence | node-provenance-specific, node-question-resolution-specific | ✓ gemma4 |
 | `provenance_basis` | present (grounded) | node-deprecation-deadline (RFC) | ✓ |
+| `provenance_basis` | specific cited source identifier/name | node-provenance-specific, node-reasoning-brief | ✓ gemma4 |
 | `provenance_basis` | null (self-contained) | node-durable-no-refs | ✓ gemma4 |
 | `question_status` | open | node-deprecation-deadline | ✓ |
 | `question_status` | resolved (+ resolution) | node-question-resolved | ✓ |
 | `question_status` | deferred (fuzzy: accept deferred\|resolved) | node-question-deferred | ✓ (tolerant — judgment call) |
 | `question_status` | null (no question) | node-definition-timeless | ✓ |
 | `question_resolution` | non-null when resolved / null otherwise | node-question-resolved, node-deprecation-deadline | ✓ |
+| `question_resolution` | resolved text includes chosen answer and key condition/deadline | node-question-resolution-specific | ✓ gemma4 |
 | `certainty_level` | high | node-deprecation, node-definition | ✓ |
 | `certainty_level` | low | node-speculative-idea | ✓ |
 | `certainty_level` | medium | node-certainty-medium | ✓ gemma4 |
@@ -90,6 +95,7 @@ fails the staleness ordinal (model capability, README §9.8). The only ◻ rows 
 | `temporal_markers` | empty when none present | node-durable-no-refs | ✓ gemma4 |
 | `provenance_basis` | null when self-contained | node-durable-no-refs | ✓ gemma4 (external-only wording) |
 | `reasoning` (CoT) | present (reasoning-first, baked into the node prompt) | node-deprecation-deadline | ✓ gemma4 |
+| `reasoning` (CoT) | brief 1-2 sentences | node-reasoning-brief | ✓ gemma4 |
 
 ## Edge classification — `GraphEdgeClassificationPayload`
 
@@ -109,6 +115,7 @@ fails the staleness ordinal (model capability, README §9.8). The only ◻ rows 
 | confounders | supports vs elaborates; duplicates vs summarizes | edge-confounder-* | ✓ (tolerant) |
 | directionality | symmetric relation both directions | edge-duplicates(+reverse) | ✓ gemma4 |
 | `reasoning` | non-empty per edge | (validator) | ✓ |
+| `reasoning` | brief 1-2 sentences | edge-reasoning-supports | ✓ gemma4 (asserted without adding edge-prompt complexity) |
 | `confidence_score` | primary confidence band | edge-contradicts-endpoint | ✓ gemma4 |
 | `source/target_claims_referenced` | valid indices; required for claim-support relations | (validator) | ✓ |
 | `metadata.qualifiers` | conditional captured | edge-supports-conditional | ✓ gemma4 (array + trigger-word instruction) |
@@ -170,12 +177,14 @@ distractors); a cross-output consistency negative beyond the current one.
 The case `expect:` schema + scorer (`src/cases.ts`, `src/score.ts`) now support all the axes the
 matrix needs:
 
-- node: `chunk_summary_nonempty`, `provenance_present`, `question_resolution_present`,
-  `external_refs_empty`, `temporal_markers_empty`, `reasoning_present`, and `*_in` tolerances for
+- node: `chunk_summary_nonempty`, `chunk_summary_max_sentences`, `provenance_present`,
+  `provenance_basis`, `provenance_basis_contains`, `question_resolution_present`,
+  `question_resolution_contains`, `external_refs_empty`, `temporal_markers_empty`,
+  `reasoning_present`, `reasoning_max_sentences`, and `*_in` tolerances for
   certainty/staleness/question_status.
 - edge: `confidence_min`, `require_qualifier` (temporal|conditional|uncertainty),
-  `require_low_confidence_flag`, `llm_assessment_in`, `primary_relation_in`, `judge_reasoning`;
-  symmetric direction is exercised by paired cases (A→B and B→A).
+  `require_low_confidence_flag`, `llm_assessment_in`, `primary_relation_in`, `judge_reasoning`,
+  `reasoning_max_sentences`; symmetric direction is exercised by paired cases (A→B and B→A).
 - nl: `criteria`, `must_capture`, `given`/`expect_fail` (judge calibration), `against` (cross-output
   consistency), `min_claims`/`max_claims`.
 

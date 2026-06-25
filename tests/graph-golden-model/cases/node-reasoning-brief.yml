@@ -1,0 +1,19 @@
+kind: node
+description: Node reasoning should stay brief while justifying certainty and staleness.
+input: |
+  ## Billing API cutoff
+
+  The legacy billing export API will be disabled on 2026-09-30. This cutoff was approved
+  by the billing platform steering group in ADR-118, and all customers must migrate to
+  the v3 export endpoint before that date.
+expect:
+  certainty_level: high
+  staleness_risk: high
+  reasoning_present: true
+  reasoning_max_sentences: 2
+  temporal_markers_min: 1
+  external_refs_contains:
+    - ADR-118
+  provenance_basis_contains:
+    - ADR-118
+  key_claims_min: 2

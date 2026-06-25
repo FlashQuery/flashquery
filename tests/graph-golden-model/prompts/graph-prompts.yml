@@ -18,11 +18,11 @@ prompts:
       well-formed JSON object: close every array and string, never emit an empty-string
       element in key_claims, and never let one field's value appear inside another's array.
 
-      First fill "reasoning" with a short step-by-step evaluation (justify certainty_level
+      First fill "reasoning" with a brief 1-2 sentence evaluation (justify certainty_level
       and staleness_risk against the definitions). Complete it BEFORE the other fields.
 
       Schema (keys, in this order):
-      - reasoning: string            (your brief evaluation, written first)
+      - reasoning: string            (your brief 1-2 sentence evaluation, written first)
       - key_claims: a FLAT JSON array of NON-EMPTY strings, in order. Each entry is ONE
           atomic fact. Do not nest arrays; do not emit empty strings. Consolidate to the
           distinct key facts (typically 3-10 for a chunk), not every sub-clause. But do NOT
@@ -31,19 +31,27 @@ prompts:
           then deleted"), keep BOTH halves rather than only the first. SPLIT lists and
           enumerations: if the text enumerates items (first/second/third, or a/b/c), make
           EACH item its own claim rather than one claim listing them all.
-      - chunk_summary: string        (one sentence)
+      - chunk_summary: string        (one sentence; include all mentioned key details or constraints, numbers, dates, thresholds, deadlines, exceptions, risk qualifiers, causal or attribution details, important negative or safety qualifiers, key evidence, and similar kinds of details that describe the uniqueness of the text.)
       - provenance_basis: string|null
-          Name the EXTERNAL source that grounds the claims (a doc, RFC, system, dataset).
+          Name the cited EXTERNAL source ID/name that grounds the claims (a doc, RFC, system,
+          dataset, URL, ticket, or named report). Return only the source identifier/name, not a
+          narrative sentence. If an RFC, ADR, ticket, report, dataset, or named system is cited as
+          approving, ratifying, measuring, or otherwise supporting the claim, use that citation.
           Use null when the chunk is self-contained — never cite "the text" itself.
       - question_status: "open"|"deferred"|"resolved"|null
           null UNLESS the chunk itself poses a question. Do not invent one.
           open = asked, unanswered; deferred = explicitly postponed; resolved = answered here.
       - question_resolution: string|null
+          If question_status is resolved, state the actual answer/decision/resolution in one concise
+          sentence, including the option chosen and any important condition/deadline. Otherwise null.
       - certainty_level: "high"|"medium"|"low"|"unknown"
+          Score confidence in the extracted factual claims/source, not confidence that the text
+          literally contains uncertainty words.
           high = stated as settled/decided/ratified/factual.
           medium = leaning one way WITH some basis but not yet confirmed — cue words like
                    "likely", "probably", "strongly suggests", "appears", "preliminary".
           low = little or no basis: pure speculation, a bare possibility, or just an idea/proposal.
+                Also use low when the chunk says the source/data is unlabeled, unclear, or ambiguous.
           unknown = not determinable.
       - staleness_risk: "low"|"medium"|"high"|"unknown"
           high = pinned to an expiring anchor (deadline, cutoff, version cutover, dated
