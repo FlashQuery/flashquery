@@ -46,6 +46,22 @@ Where the staged changes live in the workbench:
 | 2026-06-25 | prompt/vocab | The supports→elaborates→extends gradient collapses upward (gemma4 called elaborates→supports, extends→elaborates). Adding a 3-line disambiguation block after the vocabulary fixed BOTH — all 10 relations then classify correctly (clean diagonal confusion matrix). Port the disambiguation into the `edge-types.yml` descriptions or the edge prompt. | edge-types.yml descriptions / edge-analysis.ts | proposed (validated on gemma4) |
 | 2026-06-25 | prompt | `metadata.qualifiers.conditional`: solved. gemma4 now extracts the condition once the edge template (a) lists trigger words (when/if/only/...) and marks conditional REQUIRED, and (b) stresses each qualifier is an ARRAY not a bare string. Validated edge-supports-conditional 6/6. | prompts/graph-prompts.yml `classify_edge` | STAGED local |
 | 2026-06-25 | prompt-tool | Few-shot: a format-only example embedded in the node template (neutral domain, "do not copy content") stabilized `external_refs` extraction (node-deprecation 9/10 → 10/10). Keep one-shot examples as a refinement lever for any wobbly field. | prompts/graph-prompts.yml | STAGED local |
+| 2026-06-25 | prompt | `certainty_level` medium vs low: replaced the vague definition with content-independent cue-word criteria (medium = "likely/probably/strongly suggests/preliminary"; low = no basis/speculation/idea). Flipped node-certainty-medium low→medium with no test change — criteria, not hope. | prompts/graph-prompts.yml `analyze_node` | STAGED local |
+| 2026-06-25 | prompt | `provenance_basis` = external-only wording ("name the external source; null when self-contained; never cite the text") — node-durable-no-refs 6/7 → 7/7 on gemma4. | prompts/graph-prompts.yml `analyze_node` | STAGED local |
+
+## Natural-language evaluation (no production change)
+
+The LLM-as-judge for NL outputs (key_claims, chunk_summary, edge reasoning) is a **workbench
+testing tool** — nothing to push to production. It validated that the refined extraction
+prompts produce grounded/atomic/complete claims and faithful/concise summaries, and the judge
+itself is calibrated with positive/negative controls. No new production deltas from this work.
+
+## Full-suite status
+
+2026-06-25: **23/23 cases pass on gemma4** (reasoning off) via the local refined prompts —
+clean diagonal edge confusion matrix, all node indicators green. This is the candidate
+state to push to production in one shot (prompts/*.yml → src/graph/defaults, local-schemas
+deltas → schemas.ts, plus wiring node-analysis/edge-analysis to actually use the YAML).
 
 ## Edge results on gemma4 (reasoning_effort=none, --inject-schema --inject-vocabulary)
 

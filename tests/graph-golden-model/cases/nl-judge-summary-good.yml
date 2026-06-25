@@ -1,0 +1,10 @@
+kind: nl
+field: chunk_summary
+description: Judge calibration (positive control) — a faithful, concise one-liner should pass grounded, representative, and concise.
+given: "A read-through cache reduced p95 latency from 800ms to 480ms without affecting error rates."
+input: |
+  ## Caching
+
+  Enabling the read-through cache lowered p95 latency from 800ms to 480ms in our
+  benchmark. Error rates were unchanged during the test.
+criteria: [grounded, representative, concise]

@@ -1,0 +1,12 @@
+kind: nl
+field: key_claims
+description: Judge calibration (negative control) — a hallucinated claim not supported by the source must be marked NOT grounded. Validates the judge catches fabrication.
+given:
+  - "The caching layer was rewritten in Rust in 2024"
+input: |
+  ## Caching
+
+  Enabling the read-through cache lowered p95 latency from 800ms to 480ms in our
+  benchmark. Error rates were unchanged during the test.
+criteria: [grounded]
+expect_fail: [grounded]

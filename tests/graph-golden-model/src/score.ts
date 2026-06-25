@@ -3,9 +3,10 @@
 // separate is what makes a failing run diagnosable — "the model can't produce
 // our JSON shape" is a different problem from "it picked the wrong relation".
 
-import type { EdgeCase, NodeCase } from './cases.ts';
+import type { EdgeCase, NlCase, NodeCase } from './cases.ts';
 import type { EdgeOpResult } from './edge-op.ts';
 import type { NodeOpResult } from './node-op.ts';
+import type { NlOpResult } from './nl-op.ts';
 
 export interface Check {
   name: string;
@@ -162,6 +163,52 @@ export function scoreEdge(testCase: EdgeCase, result: EdgeOpResult): ScoredEdge 
     ...finalize(testCase.name, testCase.description, parseOk, schemaOk, checks),
     expectedPrimary: e.primary_relation,
     predictedPrimary,
+  };
+}
+
+export function scoreNl(c: NlCase, result: NlOpResult): Scored {
+  const checks: Check[] = [];
+  const expectFail = new Set((c.expect_fail ?? []).map((s) => s.toLowerCase()));
+
+  if (result.extracted) {
+    const extractionOk = result.extractParse?.ok === true && result.output !== undefined;
+    checks.push({
+      name: 'extraction produced the field',
+      pass: extractionOk,
+      detail: !extractionOk
+        ? result.extractParse && !result.extractParse.ok
+          ? result.extractParse.summary
+          : 'field missing from payload'
+        : undefined,
+    });
+  }
+
+  const judgeOk = result.judge.ok && !!result.judge.verdict;
+  checks.push({ name: 'judge returned valid JSON', pass: judgeOk, detail: judgeOk ? undefined : result.judge.summary });
+
+  if (judgeOk) {
+    const verdicts = new Map(result.judge.verdict!.criteria.map((v) => [v.name.toLowerCase(), v]));
+    for (const crit of result.criteria) {
+      const v = verdicts.get(crit.name.toLowerCase());
+      const expected = expectFail.has(crit.name.toLowerCase()) ? 'fail' : 'pass';
+      // Normalize: anything that isn't exactly "pass" counts as fail (skeptical default).
+      const got = v ? (v.verdict.trim().toLowerCase() === 'pass' ? 'pass' : 'fail') : undefined;
+      checks.push({
+        name: `${crit.name}: expect ${expected}`,
+        pass: got === expected,
+        detail: v ? `judge=${got} (${v.verdict})${v.reason ? ` — ${v.reason}` : ''}` : 'judge omitted this criterion',
+      });
+    }
+  }
+
+  return {
+    name: c.name,
+    description: c.description,
+    parseOk: true, // NL uses explicit checks above rather than the node/edge parse-layer markers
+    schemaOk: true,
+    checks,
+    passed: checks.filter((ck) => ck.pass).length,
+    total: checks.length,
   };
 }
 

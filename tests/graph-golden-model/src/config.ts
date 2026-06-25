@@ -31,6 +31,12 @@ export interface Settings {
   /** Load the unmodified production prompt YAML (as-wired) instead of the local refined
    *  copies — for A/B comparison. */
   baseline: boolean;
+  /** Cache model responses on disk keyed by request hash — makes slow multi-call runs
+   *  resumable across separate invocations (works around the shell's per-call time cap)
+   *  and speeds iteration. Default on; disable with --no-cache. */
+  cache: boolean;
+  /** Delete the response cache before running (--clear-cache). */
+  clearCache: boolean;
   /** Use canned LLM responses instead of hitting the server (offline self-test). */
   mock: boolean;
   /** Only run cases whose name includes this substring. */
@@ -92,6 +98,8 @@ export function resolveSettings(argv: string[]): Settings {
     temperature: Number(flag(argv, 'temperature') ?? '0'),
     reasoningEffort: resolveReasoningEffort(flag(argv, 'reasoning-effort') ?? env.GRAPH_GOLDEN_REASONING_EFFORT),
     extraBody: parseJsonObject(flag(argv, 'extra-body') ?? env.GRAPH_GOLDEN_EXTRA_BODY),
+    cache: !boolFlag(argv, 'no-cache'),
+    clearCache: boolFlag(argv, 'clear-cache'),
   };
 }
 

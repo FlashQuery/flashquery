@@ -8,7 +8,18 @@
 // tracking. The graph *logic* (schemas, vocabulary, validation) is imported
 // real; only this network pipe is local.
 
+import { createHash } from 'node:crypto';
+import * as fs from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Settings } from './config.ts';
+
+const CACHE_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '.cache');
+
+/** Delete the on-disk response cache. */
+export function clearCache(): void {
+  if (fs.existsSync(CACHE_DIR)) fs.rmSync(CACHE_DIR, { recursive: true, force: true });
+}
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -21,6 +32,8 @@ export interface CompletionResult {
   latencyMs: number;
   /** true when served by the offline mock rather than a real model. */
   mocked: boolean;
+  /** true when replayed from the on-disk cache. */
+  cached?: boolean;
 }
 
 export interface LlmTransport {
@@ -37,6 +50,29 @@ class HttpTransport implements LlmTransport {
     const { baseUrl, apiKey, temperature } = this.settings;
     const model = this.model;
     const url = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
+
+    // Response cache (keyed by the exact request) — makes slow multi-call runs resumable
+    // across separate invocations and skips unchanged calls on re-runs.
+    const cacheFile = join(
+      CACHE_DIR,
+      createHash('sha256')
+        .update(
+          JSON.stringify({
+            url,
+            model,
+            temperature,
+            reasoning_effort: this.settings.reasoningEffort,
+            extraBody: this.settings.extraBody,
+            messages,
+          })
+        )
+        .digest('hex') + '.json'
+    );
+    if (this.settings.cache && fs.existsSync(cacheFile)) {
+      const text = JSON.parse(fs.readFileSync(cacheFile, 'utf-8')).text as string;
+      return { text, model, latencyMs: 0, mocked: false, cached: true };
+    }
+
     const start = performance.now();
     let response: Response;
     try {
@@ -69,6 +105,10 @@ class HttpTransport implements LlmTransport {
       choices?: Array<{ message?: { content?: string } }>;
     };
     const text = json.choices?.[0]?.message?.content ?? '';
+    if (this.settings.cache) {
+      fs.mkdirSync(CACHE_DIR, { recursive: true });
+      fs.writeFileSync(cacheFile, JSON.stringify({ model, text }));
+    }
     return { text, model, latencyMs: performance.now() - start, mocked: false };
   }
 }
@@ -83,8 +123,9 @@ class MockTransport implements LlmTransport {
 
   async complete(messages: ChatMessage[]): Promise<CompletionResult> {
     const user = messages.find((m) => m.role === 'user')?.content ?? '';
+    const isJudge = user.includes('STRICT evaluator');
     const isEdge = user.includes('Classified relation types') || user.includes('"edges"');
-    const text = isEdge ? mockEdgeResponse(user) : MOCK_NODE_JSON;
+    const text = isJudge ? mockJudgeResponse(user) : isEdge ? mockEdgeResponse(user) : MOCK_NODE_JSON;
     return { text, model: this.model, latencyMs: 0, mocked: true };
   }
 }
@@ -95,6 +136,14 @@ class MockTransport implements LlmTransport {
  * still recommends; otherwise emit no edges. This is just enough to exercise the
  * scorer/confusion-matrix path offline — it is NOT a model.
  */
+// Offline judge: marks every listed criterion "pass" (wiring sanity only — it does NOT
+// actually evaluate, so negative-control cases will diverge under --mock, as expected).
+function mockJudgeResponse(userText: string): string {
+  const names = [...userText.matchAll(/\n- ([^:\n]+):/g)].map((m) => m[1].trim());
+  const criteria = names.map((name) => ({ name, verdict: 'pass', reason: 'mock' }));
+  return JSON.stringify({ criteria, overall: 'pass' });
+}
+
 function mockEdgeResponse(userText: string): string {
   // Operate on the whole rendered prompt (which embeds the source/target claims).
   const t = userText.toLowerCase();

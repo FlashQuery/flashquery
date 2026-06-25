@@ -1,0 +1,14 @@
+kind: nl
+field: key_claims
+description: Claims extracted from a deprecation notice should be grounded, atomic, and complete, and must capture the key facts.
+input: |
+  ## v2 API — Search endpoint deprecation
+
+  The legacy `/search` endpoint is deprecated as of v2 and will be removed. All callers
+  must migrate to `/query` before the Q3 2026 cutoff; after that date the old endpoint
+  returns 410 Gone. This decision was ratified by the platform team (see RFC-0042).
+criteria: [grounded, atomic, complete]
+must_capture:
+  - "the /search endpoint is deprecated"
+  - "callers must migrate to /query before Q3 2026"
+  - "the decision was ratified by the platform team (RFC-0042)"

@@ -65,7 +65,18 @@ npx tsx src/run.ts all --model granite4,llama3.1:8b   # several models, one repo
 
 Useful flags: `--only <substr[,substr...]>` (subset of cases), `--baseline` (use the
 unmodified production prompts instead of the local refined copies — A/B), `--model a,b`
-(several models, one report), `--temperature`.
+(several models, one report), `--temperature`, `--no-cache` / `--clear-cache`.
+
+### Resumable runs (response cache)
+
+Model responses are cached on disk (`.cache/`, gitignored) keyed by a hash of the exact
+request (model + params + messages). This makes slow multi-call cases — notably end-to-end
+`nl` cases that do extract **then** judge — **resumable across separate runs**: if a run is
+interrupted, completed calls replay instantly on the next run and only the unfinished call
+hits the model. It also speeds iteration (unchanged calls never re-run; editing a prompt
+changes the hash and correctly re-runs). Disable with `--no-cache`; wipe with `--clear-cache`.
+This exists because each shell invocation here is wall-clock limited; the cache lets a run
+that needs more total time finish over multiple invocations.
 
 **Reasoning models vs. our `--reasoning` lever — don't conflate them.** A reasoning
 *model* (e.g. gemma4) runs a slow internal thinking pass before answering, which the
@@ -91,6 +102,24 @@ The local prompts started as verbatim copies of what the code sends today; the a
 versions are still reachable with `--baseline`. The headline early finding was that the
 as-wired prompts showed the model neither the JSON schema nor the relation vocabulary —
 both now in the refined local prompts.
+
+## Natural-language outputs (LLM-as-judge)
+
+Enum axes (certainty, relation, …) have exact answers. Natural-language outputs —
+`key_claims`, `chunk_summary`, edge `reasoning` — don't, so `kind: nl` cases evaluate them
+with an **LLM judge** (gemma4): the source text + the extracted output + a rubric of
+content-independent criteria (`grounded`, `atomic`, `complete`, `faithful`, `representative`,
+`concise`, plus per-fact `captures: X`) go back to the model, which returns a per-criterion
+pass/fail verdict. The judge is a testing tool, not a production prompt.
+
+Because the judge is itself an LLM, it's validated with `given`-mode calibration cases that
+feed known-good / known-bad output and assert the verdict (e.g. a hallucinated claim must be
+`grounded: fail`). See `cases/COVERAGE.md` → *Natural-language extraction*. An end-to-end
+`nl` case makes 2 model calls (extract + judge); run those where there's no per-call timeout.
+
+```
+npm run nl                                   # natural-language cases
+```
 
 ## Aggregating batched runs
 

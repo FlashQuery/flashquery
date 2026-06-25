@@ -1,0 +1,12 @@
+kind: nl
+field: key_claims
+description: Judge calibration (positive control) — well-formed claims for the source should pass grounded, atomic, AND complete. Confirms the judge does not over-reject good output.
+given:
+  - "Enabling the read-through cache lowered p95 latency from 800ms to 480ms"
+  - "Error rates were unchanged during the test"
+input: |
+  ## Caching
+
+  Enabling the read-through cache lowered p95 latency from 800ms to 480ms in our
+  benchmark. Error rates were unchanged during the test.
+criteria: [grounded, atomic, complete]

@@ -1,0 +1,12 @@
+kind: nl
+field: key_claims
+description: Judge calibration (negative control) — claims that omit the source's main facts must be marked NOT complete.
+given:
+  - "The cache was tested"
+input: |
+  ## Caching
+
+  Enabling the read-through cache lowered p95 latency from 800ms to 480ms in our
+  benchmark. Error rates were unchanged during the test.
+criteria: [complete]
+expect_fail: [complete]

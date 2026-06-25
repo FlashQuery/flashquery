@@ -98,7 +98,26 @@ export interface EdgeCase {
   expect: EdgeExpect;
 }
 
-export type GraphCase = NodeCase | EdgeCase;
+export interface NlCase {
+  kind: 'nl';
+  name: string;
+  file: string;
+  description?: string;
+  /** The source text the NL output is derived from. */
+  input: string;
+  /** Which NL output to judge. Extracted from node analysis unless `given` is set. */
+  field: 'key_claims' | 'chunk_summary' | string;
+  /** Named rubric criteria (default per field if omitted). */
+  criteria?: string[];
+  /** Specific facts the output must include/represent (judged). */
+  must_capture?: string[];
+  /** Judge a provided output instead of extracting — for negative controls / judge calibration. */
+  given?: unknown;
+  /** Criteria expected to FAIL (negative controls). Empty/absent ⇒ all expected to pass. */
+  expect_fail?: string[];
+}
+
+export type GraphCase = NodeCase | EdgeCase | NlCase;
 
 export function loadCases(only?: string): GraphCase[] {
   if (!fs.existsSync(CASES_DIR)) return [];
@@ -119,8 +138,21 @@ export function loadCases(only?: string): GraphCase[] {
       cases.push({ kind: 'node', name, file, description: raw.description as string, input: String(raw.input ?? ''), expect: (raw.expect ?? {}) as NodeExpect });
     } else if (kind === 'edge') {
       cases.push({ kind: 'edge', name, file, description: raw.description as string, source: raw.source as CaseSide, target: raw.target as CaseSide, expect: (raw.expect ?? {}) as EdgeExpect });
+    } else if (kind === 'nl') {
+      cases.push({
+        kind: 'nl',
+        name,
+        file,
+        description: raw.description as string,
+        input: String(raw.input ?? ''),
+        field: (raw.field as string) ?? 'key_claims',
+        criteria: raw.criteria as string[] | undefined,
+        must_capture: raw.must_capture as string[] | undefined,
+        given: raw.given,
+        expect_fail: raw.expect_fail as string[] | undefined,
+      });
     } else {
-      throw new Error(`Case ${file}: missing or unknown 'kind' (expected node|edge)`);
+      throw new Error(`Case ${file}: missing or unknown 'kind' (expected node|edge|nl)`);
     }
   }
   return cases;

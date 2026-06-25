@@ -1,0 +1,11 @@
+kind: nl
+field: chunk_summary
+description: Judge calibration (negative control) — a "summary" that is a verbatim copy of the source must be marked NOT concise.
+given: "Enabling the read-through cache lowered p95 latency from 800ms to 480ms in our benchmark. Error rates were unchanged during the test."
+input: |
+  ## Caching
+
+  Enabling the read-through cache lowered p95 latency from 800ms to 480ms in our
+  benchmark. Error rates were unchanged during the test.
+criteria: [concise]
+expect_fail: [concise]

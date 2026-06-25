@@ -20,7 +20,7 @@ const RESULTS = join(HERE, '..', 'results');
 
 export interface CaseDetail {
   name: string;
-  kind: 'node' | 'edge';
+  kind: 'node' | 'edge' | 'nl';
   description?: string;
   model: string;
   mocked: boolean;
@@ -30,6 +30,11 @@ export interface CaseDetail {
   parse: ParseInfo;
   payload?: LocalGraphNodeAnalysisPayload;
   edges?: ValidatedEdge[];
+  nl?: {
+    field: string;
+    output: unknown;
+    verdicts: { name: string; verdict: string; reason: string }[];
+  };
   derivedClaims?: { source?: string[]; target?: string[] };
   checks: Check[];
   parseOk: boolean;
@@ -161,6 +166,11 @@ function toMarkdown(report: Report): string {
         if (!c.parseOk) L.push(`- parse FAILED: ${c.parse.summary ?? 'no valid JSON returned'}`);
         else if (!c.schemaOk) L.push(`- schema FAILED: ${c.parse.summary ?? 'violated strict schema'}`);
         for (const ck of c.checks) if (!ck.pass) L.push(`- MISS: ${ck.name}${ck.detail ? ` — ${ck.detail}` : ''}`);
+        if (c.nl) {
+          L.push('');
+          L.push(`Judged ${c.nl.field}: \`${JSON.stringify(c.nl.output)}\``);
+          for (const v of c.nl.verdicts) L.push(`- judge ${v.name}: **${v.verdict}** — ${v.reason}`);
+        }
         L.push('');
         L.push(`<details><summary>prompt sent</summary>`);
         L.push('');

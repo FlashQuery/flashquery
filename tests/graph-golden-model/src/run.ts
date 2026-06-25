@@ -9,11 +9,12 @@
 // Every invocation writes a full report under results/<timestamp>/.
 
 import { resolveSettings } from './config.ts';
-import { makeTransport, type LlmTransport } from './llm-client.ts';
-import { loadCases, type CaseSide, type EdgeCase, type GraphCase, type NodeCase } from './cases.ts';
+import { clearCache, makeTransport, type LlmTransport } from './llm-client.ts';
+import { loadCases, type CaseSide, type EdgeCase, type GraphCase, type NlCase, type NodeCase } from './cases.ts';
 import { runNodeOp } from './node-op.ts';
 import { runEdgeOp } from './edge-op.ts';
-import { scoreEdge, scoreNode } from './score.ts';
+import { runNlOp } from './nl-op.ts';
+import { scoreEdge, scoreNode, scoreNl } from './score.ts';
 import {
   printCrossModel,
   printModelRun,
@@ -94,10 +95,34 @@ async function runEdgeCase(c: EdgeCase, transport: LlmTransport, settings: Retur
   };
 }
 
+async function runNlCase(c: NlCase, transport: LlmTransport, settings: ReturnType<typeof resolveSettings>, model: string): Promise<CaseDetail> {
+  const result = await runNlOp(c, transport, settings);
+  const scored = scoreNl(c, result);
+  const verdicts = (result.judge.verdict?.criteria ?? []).map((v) => ({ name: v.name, verdict: v.verdict, reason: v.reason }));
+  return {
+    name: c.name,
+    kind: 'nl',
+    description: c.description,
+    model,
+    mocked: settings.mock,
+    latencyMs: result.latencyMs,
+    messages: [{ role: 'user', content: result.judge.prompt }],
+    raw: result.judge.raw,
+    parse: { ok: result.judge.ok, repaired: false, ...(result.judge.failure ? { failure: result.judge.failure } : {}), ...(result.judge.summary ? { summary: result.judge.summary } : {}) },
+    nl: { field: result.field, output: result.output, verdicts },
+    checks: scored.checks,
+    parseOk: scored.parseOk,
+    schemaOk: scored.schemaOk,
+    passed: scored.passed,
+    total: scored.total,
+  };
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  const mode = (argv[0] && !argv[0].startsWith('--') ? argv[0] : 'all') as 'node' | 'edge' | 'all';
+  const mode = (argv[0] && !argv[0].startsWith('--') ? argv[0] : 'all') as 'node' | 'edge' | 'nl' | 'all';
   const settings = resolveSettings(argv);
+  if (settings.clearCache) clearCache();
 
   const all = loadCases(settings.only);
   const cases: GraphCase[] = all.filter((c) => mode === 'all' || c.kind === mode);
@@ -106,7 +131,7 @@ async function main(): Promise<void> {
   console.log(
     `mode=${mode}  models=${settings.models.join(', ')}  base=${settings.mock ? '(mock)' : settings.baseUrl}  ` +
       `prompts=${settings.baseline ? 'production-baseline' : 'local-refined'}  temp=${settings.temperature}  ` +
-      `reasoning_effort=${settings.reasoningEffort ?? '(unset)'}`
+      `reasoning_effort=${settings.reasoningEffort ?? '(unset)'}  cache=${settings.cache ? 'on' : 'off'}`
   );
   console.log(`cases: ${cases.length}`);
   if (cases.length === 0) {
@@ -119,7 +144,9 @@ async function main(): Promise<void> {
     const transport = makeTransport(settings, model);
     const details: CaseDetail[] = [];
     for (const c of cases) {
-      details.push(c.kind === 'node' ? await runNodeCase(c, transport, settings) : await runEdgeCase(c, transport, settings));
+      if (c.kind === 'node') details.push(await runNodeCase(c, transport, settings));
+      else if (c.kind === 'edge') details.push(await runEdgeCase(c, transport, settings));
+      else details.push(await runNlCase(c, transport, settings, model));
     }
     const run: ModelRun = { model, cases: details, summary: summarize(details) };
     runs.push(run);

@@ -7,6 +7,7 @@
   "scripts": {
     "node": "tsx src/run.ts node",
     "edge": "tsx src/run.ts edge",
+    "nl": "tsx src/run.ts nl",
     "all": "tsx src/run.ts all",
     "selftest": "tsx src/run.ts all --mock"
   },

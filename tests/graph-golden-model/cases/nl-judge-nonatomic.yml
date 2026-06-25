@@ -1,0 +1,12 @@
+kind: nl
+field: key_claims
+description: Judge calibration (negative control) — a single claim bundling several independent facts must be marked NOT atomic.
+given:
+  - "Enabling the cache lowered p95 from 800ms to 480ms and error rates were unchanged and the benchmark was run internally"
+input: |
+  ## Caching
+
+  Enabling the read-through cache lowered p95 latency from 800ms to 480ms in our
+  benchmark. Error rates were unchanged during the test.
+criteria: [atomic]
+expect_fail: [atomic]

@@ -31,8 +31,11 @@ prompts:
           open = asked, unanswered; deferred = explicitly postponed; resolved = answered here.
       - question_resolution: string|null
       - certainty_level: "high"|"medium"|"low"|"unknown"
-          high = stated as settled/decided/ratified; medium = probable but unconfirmed;
-          low = hedged/speculative/proposed; unknown = not determinable.
+          high = stated as settled/decided/ratified/factual.
+          medium = leaning one way WITH some basis but not yet confirmed — cue words like
+                   "likely", "probably", "strongly suggests", "appears", "preliminary".
+          low = little or no basis: pure speculation, a bare possibility, or just an idea/proposal.
+          unknown = not determinable.
       - staleness_risk: "low"|"medium"|"high"|"unknown"
           high = pinned to an expiring anchor (deadline, cutoff, version cutover, dated
                  decision); score high even before that date arrives.
