@@ -279,28 +279,35 @@ export function mergeGraphContextProperty(
   right: Pick<SearchResultItem, 'graph_context'>
 ): { graph_context?: SearchGraphContext } {
   if (!left.graph_context && !right.graph_context) return {};
-  return {
-    graph_context: {
-      ...(left.graph_context ?? {}),
-      ...(right.graph_context ?? {}),
-      ...(left.graph_context?.community || right.graph_context?.community
-        ? {
-            community: {
-              ...(left.graph_context?.community ?? {}),
-              ...(right.graph_context?.community ?? {}),
-            },
-          }
-        : {}),
-      ...(left.graph_context?.path_to || right.graph_context?.path_to
-        ? {
-            path_to: {
-              ...(left.graph_context?.path_to ?? {}),
-              ...(right.graph_context?.path_to ?? {}),
-            },
-          }
-        : {}),
-    },
+  const graphContext: SearchGraphContext = {
+    ...(left.graph_context ?? {}),
+    ...(right.graph_context ?? {}),
   };
+  const community = mergeGraphCommunity(left.graph_context?.community, right.graph_context?.community);
+  const pathTo = mergeGraphPathTo(left.graph_context?.path_to, right.graph_context?.path_to);
+  if (community) graphContext.community = community;
+  if (pathTo) graphContext.path_to = pathTo;
+  return {
+    graph_context: graphContext,
+  };
+}
+
+function mergeGraphCommunity(
+  left: SearchGraphContext['community'],
+  right: SearchGraphContext['community']
+): SearchGraphContext['community'] {
+  if (!left) return right;
+  if (!right) return left;
+  return { ...left, ...right };
+}
+
+function mergeGraphPathTo(
+  left: SearchGraphContext['path_to'],
+  right: SearchGraphContext['path_to']
+): SearchGraphContext['path_to'] {
+  if (!left) return right;
+  if (!right) return left;
+  return { ...left, ...right };
 }
 
 function mergeMatchedChunks(
