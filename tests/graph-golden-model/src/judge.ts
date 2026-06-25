@@ -82,8 +82,10 @@ export function resolveCriteria(
     definition: CRITERIA[n] ?? `(custom) ${n}`,
   }));
   for (const fact of mustCapture ?? []) {
+    // Colon-free name: the prompt lists criteria as "name: definition", so a colon in the
+    // name would collide and the model truncates/garbles it. Brackets keep the name clean.
     criteria.push({
-      name: `captures: ${fact}`,
+      name: `captures[${fact}]`,
       definition: `The output includes or clearly represents this specific fact: "${fact}".`,
     });
   }
@@ -105,7 +107,7 @@ function buildJudgePrompt(input: string, field: string, output: unknown, criteri
     `EXTRACTED OUTPUT (${field}):`,
     JSON.stringify(output),
     '',
-    'CRITERIA (judge each independently):',
+    'CRITERIA (judge each independently). Use each criterion name verbatim as the "name":',
     criteriaBlock,
     '',
     'Return exactly:',

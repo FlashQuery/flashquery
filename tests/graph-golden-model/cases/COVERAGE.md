@@ -101,9 +101,10 @@ known-bad output, assert the verdict). All passing on gemma4:
 (The calibration even caught an over-stating summary I wrote — proof the judge is appropriately
 strict, not rubber-stamping.)
 
-End-to-end (extract → judge) cases: `nl-claims-deprecation`, `nl-summary-deprecation`. Each
-makes 2 model calls (extract + judge), which exceeds the sandbox's 45s/call ceiling — run them
-where there's no per-call limit (extraction quality alone is already green via the node cases).
+End-to-end (extract → judge) cases: `nl-claims-deprecation`, `nl-summary-deprecation` — both
+**pass on gemma4 (full NL suite 8/8, 30/30 checks)**. Each makes 2 model calls; the on-disk
+response cache makes them resumable across runs, so they complete even under the shell's
+per-call time cap.
 
 NL TODO: add edge-`reasoning` judging cases; broaden claim/summary inputs (multi-topic,
 adversarial, long).
