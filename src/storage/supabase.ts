@@ -551,14 +551,11 @@ BEGIN
     ADD COLUMN IF NOT EXISTS max_attempts INTEGER NOT NULL DEFAULT 3,
     ADD COLUMN IF NOT EXISTS result JSONB;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conname = 'fqc_pending_edges_status_check'
-  ) THEN
-    ALTER TABLE fqc_pending_edges
-      ADD CONSTRAINT fqc_pending_edges_status_check
-      CHECK (status IN ('pending', 'processing', 'complete', 'failed', 'dependency_failed', 'dead_letter'));
-  END IF;
+  ALTER TABLE fqc_pending_edges
+    DROP CONSTRAINT IF EXISTS fqc_pending_edges_status_check;
+  ALTER TABLE fqc_pending_edges
+    ADD CONSTRAINT fqc_pending_edges_status_check
+    CHECK (status IN ('pending', 'processing', 'complete', 'failed', 'dependency_failed', 'dead_letter'));
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'fqc_pending_edges_instance_source_target_key'
