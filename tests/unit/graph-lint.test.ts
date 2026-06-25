@@ -70,6 +70,7 @@ describe('graph lint category builders', () => {
     expect(Object.keys(source)).toEqual([
       'stableFindingId',
       'questionFindings',
+      'buildProvenanceChains',
       'provenanceFindings',
       'contradictionFindings',
       'duplicateFindings',
@@ -77,6 +78,38 @@ describe('graph lint category builders', () => {
       'integrityFindings',
       'promptStalenessFindings',
     ]);
+  });
+
+  it('builds multi-hop provenance chains with alternating chunk and edge entries', () => {
+    const nodes = [
+      { chunk_id: 'claim', document_id: 'doc-claim', document_path: '/claim.md', document_status: 'active', heading_path: 'Claim', content: 'Claim', chunk_updated_at: null, provenance_basis: null, question_status: null, question_resolution: null, community_id: null, community_label: null, community_summary: null, analyzed_at: null, analyzed_by_model: null },
+      { chunk_id: 'mid', document_id: 'doc-mid', document_path: '/mid.md', document_status: 'active', heading_path: 'Mid', content: 'Middle', chunk_updated_at: null, provenance_basis: 'model:summary', question_status: null, question_resolution: null, community_id: null, community_label: null, community_summary: null, analyzed_at: null, analyzed_by_model: null },
+      { chunk_id: 'source', document_id: 'doc-source', document_path: '/source.md', document_status: 'active', heading_path: 'Source', content: 'Source', chunk_updated_at: null, provenance_basis: null, question_status: null, question_resolution: null, community_id: null, community_label: null, community_summary: null, analyzed_at: null, analyzed_by_model: null },
+    ];
+    const edges = [
+      { id: 'edge-1', source_chunk_id: 'claim', target_chunk_id: 'mid', relation: 'supports', confidence: 'INFERRED', confidence_score: 0.92, reasoning: null, status: 'active', metadata: null, source_status: 'active', target_status: 'active' },
+      { id: 'edge-2', source_chunk_id: 'mid', target_chunk_id: 'source', relation: 'supports', confidence: 'INFERRED', confidence_score: 0.42, reasoning: null, status: 'active', metadata: null, source_status: 'active', target_status: 'active' },
+    ];
+
+    const chains = lintTesting.buildProvenanceChains(nodes, edges, 0.7);
+
+    expect(chains.weakChains[0]).toMatchObject({
+      chain_depth: 2,
+      weakest_edge: 'edge-2',
+      weakest_confidence_score: 0.42,
+      chain: [
+        { kind: 'chunk', chunk_id: 'claim' },
+        { kind: 'edge', edge_id: 'edge-1' },
+        { kind: 'chunk', chunk_id: 'mid' },
+        { kind: 'edge', edge_id: 'edge-2' },
+        { kind: 'chunk', chunk_id: 'source' },
+      ],
+    });
+    expect(chains.shallowChains[0]).toMatchObject({
+      chain_depth: 2,
+      terminus_chunk_id: 'source',
+      terminus_classified: false,
+    });
   });
 
   it('T-U-065 organizes payload categories into typed summary and items shapes', () => {

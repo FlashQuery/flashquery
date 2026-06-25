@@ -64,6 +64,7 @@ interface LintEdgeRow {
   confidence: string;
   confidence_score: number;
   reasoning: string | null;
+  model: string | null;
   status: string;
   metadata: Record<string, unknown> | null;
   source_status: string;
@@ -110,14 +111,20 @@ export async function runGraphLint(options: GraphLintOptions): Promise<GraphLint
         })
       : [];
     const nodes = await loadLintNodes(client, options.instanceId, pathPrefix);
+    if (selectedRules.has('LINT-Q1') && options.dryRun !== true) {
+      await applyResolutionSimilarityEdges(client, options.instanceId, nodes);
+    }
     const edges = await loadLintEdges(client, options.instanceId, pathPrefix);
     const deadLetters = await loadDeadLetters(client, options.instanceId);
+    const duplicatePropagation = selectedRules.has('LINT-R2')
+      ? await applyDuplicateEdgePropagation(client, options.instanceId, nodes, edges, options.dryRun === true)
+      : new Map<string, DuplicatePropagationReport>();
 
     const categoryFindings = {
       questions: selectedRules.has('LINT-Q1') ? questionFindings(nodes, edges, new Date(timestamp)) : [],
       provenance: selectedRules.has('LINT-P1') ? provenanceFindings(nodes, edges) : [],
       contradictions: selectedRules.has('LINT-C1') ? contradictionFindings(nodes, edges) : [],
-      duplicates: selectedRules.has('LINT-R2') ? duplicateFindings(nodes, edges) : [],
+      duplicates: selectedRules.has('LINT-R2') ? duplicateFindings(nodes, edges, duplicatePropagation) : [],
       communities: selectedRules.has('LINT-COMMUNITY') ? communityFindings(communities) : [],
       integrity: [
         ...(selectedRules.has('LINT-I1') ? integrityFindings(edges, options.dryRun === true) : []),
@@ -407,6 +414,7 @@ async function loadLintEdges(client: pg.Client, instanceId: string, pathPrefix?:
       e.confidence,
       e.confidence_score,
       e.reasoning,
+      e.model,
       e.status,
       e.metadata,
       COALESCE(sd.status, 'active') AS source_status,
@@ -462,15 +470,165 @@ async function clearStaleEdges(client: pg.Client, instanceId: string, integrityI
   if (edgeIds.length === 0) return;
   await client.query(
     `
-    UPDATE fqc_graph_edges
-    SET status = 'active',
-        updated_at = now()
+    DELETE FROM fqc_graph_edges
     WHERE instance_id = $1
       AND id = ANY($2::uuid[])
       AND status = 'stale'
     `,
     [instanceId, edgeIds]
   );
+}
+
+interface DuplicatePropagationReport {
+  propagated: Array<{
+    direction: string;
+    relation: string;
+    other_chunk_id: string;
+    new_edge_id: string | null;
+    dry_run?: boolean;
+  }>;
+  skipped: Array<{
+    reason: string;
+    relation?: string;
+    other_chunk_id?: string;
+    source_edge_id?: string;
+  }>;
+}
+
+async function applyDuplicateEdgePropagation(
+  client: pg.Client,
+  instanceId: string,
+  nodes: LintNodeRow[],
+  edges: LintEdgeRow[],
+  dryRun: boolean
+): Promise<Map<string, DuplicatePropagationReport>> {
+  const reports = new Map<string, DuplicatePropagationReport>();
+  const knownNodes = new Set(nodes.map((node) => node.chunk_id));
+  const existing = new Set(edges.map((edge) => edgeKey(edge.source_chunk_id, edge.target_chunk_id, edge.relation)));
+  const duplicates = edges.filter((edge) => edge.relation === 'duplicates' && edge.status === 'active');
+
+  for (const duplicate of duplicates) {
+    const report: DuplicatePropagationReport = { propagated: [], skipped: [] };
+    reports.set(duplicate.id, report);
+    const pairs = [
+      { from: duplicate.source_chunk_id, to: duplicate.target_chunk_id },
+      { from: duplicate.target_chunk_id, to: duplicate.source_chunk_id },
+    ];
+    for (const pair of pairs) {
+      const sourceEdges = edges.filter((edge) => edge.relation !== 'duplicates' && edge.status === 'active' && (edge.source_chunk_id === pair.from || edge.target_chunk_id === pair.from));
+      for (const sourceEdge of sourceEdges) {
+        const sourceIsFrom = sourceEdge.source_chunk_id === pair.from;
+        const newSource = sourceIsFrom ? pair.to : sourceEdge.source_chunk_id;
+        const newTarget = sourceIsFrom ? sourceEdge.target_chunk_id : pair.to;
+        const otherChunkId = sourceIsFrom ? sourceEdge.target_chunk_id : sourceEdge.source_chunk_id;
+        if (newSource === newTarget || otherChunkId === pair.to || !knownNodes.has(newSource) || !knownNodes.has(newTarget)) continue;
+        if (sourceEdge.relation === 'depends_on' || metadataString(sourceEdge.metadata, 'lint_r2_gate') === 'content_diverges') {
+          report.skipped.push({
+            reason: 'content_diverges',
+            relation: sourceEdge.relation,
+            other_chunk_id: otherChunkId,
+            source_edge_id: sourceEdge.id,
+          });
+          continue;
+        }
+        const key = edgeKey(newSource, newTarget, sourceEdge.relation);
+        if (existing.has(key)) continue;
+        existing.add(key);
+        if (dryRun) {
+          report.propagated.push({
+            direction: sourceIsFrom ? 'out' : 'in',
+            relation: sourceEdge.relation,
+            other_chunk_id: otherChunkId,
+            new_edge_id: null,
+            dry_run: true,
+          });
+          continue;
+        }
+        const inserted = await client.query<{ id: string }>(
+          `
+          INSERT INTO fqc_graph_edges (
+            instance_id, source_chunk_id, target_chunk_id, relation, confidence, confidence_score,
+            reasoning, model, status, metadata
+          )
+          VALUES ($1, $2::uuid, $3::uuid, $4, 'INFERRED', $5, $6, $7, 'active', $8::jsonb)
+          ON CONFLICT DO NOTHING
+          RETURNING id::text AS id
+          `,
+          [
+            instanceId,
+            newSource,
+            newTarget,
+            sourceEdge.relation,
+            Math.min(sourceEdge.confidence_score, duplicate.confidence_score),
+            sourceEdge.reasoning ?? 'Propagated across duplicate chunks by graph lint.',
+            sourceEdge.model ?? 'graph_lint',
+            JSON.stringify({
+              created_by: 'graph_lint_lint_r2',
+              duplicate_edge_id: duplicate.id,
+              propagated_from_edge_id: sourceEdge.id,
+              propagation_gate: 'content_equivalent',
+            }),
+          ]
+        );
+        const newEdgeId = inserted.rows[0]?.id ?? null;
+        if (newEdgeId) {
+          report.propagated.push({
+            direction: sourceIsFrom ? 'out' : 'in',
+            relation: sourceEdge.relation,
+            other_chunk_id: otherChunkId,
+            new_edge_id: newEdgeId,
+          });
+        }
+      }
+    }
+    if (report.propagated.length === 0 && report.skipped.length === 0) {
+      report.skipped.push({ reason: 'no_supported_edges_to_propagate' });
+    }
+  }
+  return reports;
+}
+
+async function applyResolutionSimilarityEdges(
+  client: pg.Client,
+  instanceId: string,
+  nodes: LintNodeRow[]
+): Promise<void> {
+  const resolvedQuestions = nodes.filter((node) => node.question_status === 'resolved' && node.question_resolution);
+  if (resolvedQuestions.length === 0) return;
+  for (const question of resolvedQuestions) {
+    const candidates = nodes
+      .filter((node) => node.chunk_id !== question.chunk_id)
+      .map((node) => ({
+        node,
+        score: textSimilarity(question.question_resolution ?? '', node.content),
+      }))
+      .filter((candidate) => candidate.score >= 0.35)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+    for (const candidate of candidates) {
+      await client.query(
+        `
+        INSERT INTO fqc_graph_edges (
+          instance_id, source_chunk_id, target_chunk_id, relation, confidence, confidence_score,
+          reasoning, model, status, metadata
+        )
+        VALUES ($1, $2::uuid, $3::uuid, 'resolves', 'INFERRED', $4, $5, 'graph_lint', 'active', $6::jsonb)
+        ON CONFLICT DO NOTHING
+        `,
+        [
+          instanceId,
+          question.chunk_id,
+          candidate.node.chunk_id,
+          candidate.score,
+          'Resolution text matched candidate chunk content during graph lint.',
+          JSON.stringify({
+            created_by: 'graph_lint_resolution_similarity',
+            source: 'resolution_text_similarity',
+          }),
+        ]
+      );
+    }
+  }
 }
 
 function questionFindings(nodes: LintNodeRow[], edges: LintEdgeRow[], now = new Date()): LintCategoryInput[] {
@@ -517,8 +675,103 @@ function questionFindings(nodes: LintNodeRow[], edges: LintEdgeRow[], now = new 
     });
 }
 
-function provenanceFindings(nodes: LintNodeRow[], edges: LintEdgeRow[]): LintCategoryInput[] {
+interface ProvenanceChainRecord {
+  kind: 'shallow_chain' | 'weak_chain';
+  chain_depth: number;
+  chain: Array<Record<string, unknown>>;
+  chunk_ids: string[];
+  edge_ids: string[];
+  terminus_chunk_id?: string;
+  terminus_classified?: boolean;
+  weakest_edge?: string;
+  weakest_confidence_score?: number;
+}
+
+function buildProvenanceChains(nodes: LintNodeRow[], edges: LintEdgeRow[], weakThreshold = 0.7): {
+  shallowChains: ProvenanceChainRecord[];
+  weakChains: ProvenanceChainRecord[];
+} {
   const byChunk = new Map(nodes.map((node) => [node.chunk_id, node]));
+  const outgoing = new Map<string, LintEdgeRow[]>();
+  for (const edge of edges.filter((candidate) => candidate.confidence === 'INFERRED' && candidate.status === 'active')) {
+    const list = outgoing.get(edge.source_chunk_id) ?? [];
+    list.push(edge);
+    outgoing.set(edge.source_chunk_id, list);
+  }
+  const shallowChains: ProvenanceChainRecord[] = [];
+  const weakChains: ProvenanceChainRecord[] = [];
+  const seenShallow = new Set<string>();
+  const seenWeak = new Set<string>();
+  for (const root of nodes) {
+    const queue: Array<{ chunkId: string; chunkIds: string[]; edgeIds: string[]; edgeRows: LintEdgeRow[] }> = [
+      { chunkId: root.chunk_id, chunkIds: [root.chunk_id], edgeIds: [], edgeRows: [] },
+    ];
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current || current.edgeIds.length >= 4) continue;
+      for (const edge of outgoing.get(current.chunkId) ?? []) {
+        if (current.chunkIds.includes(edge.target_chunk_id)) continue;
+        const chunkIds = [...current.chunkIds, edge.target_chunk_id];
+        const edgeIds = [...current.edgeIds, edge.id];
+        const edgeRows = [...current.edgeRows, edge];
+        const chain = alternatingChain(chunkIds, edgeRows, byChunk);
+        const terminus = byChunk.get(edge.target_chunk_id);
+        const terminusClassified = Boolean(
+          terminus?.provenance_basis || edges.some((candidate) => candidate.target_chunk_id === edge.target_chunk_id && candidate.confidence === 'EXTRACTED')
+        );
+        if (!terminusClassified && edgeIds.length > 1) {
+          const key = edgeIds.join('>');
+          if (!seenShallow.has(key)) {
+            seenShallow.add(key);
+            shallowChains.push({
+              kind: 'shallow_chain',
+              chain_depth: edgeIds.length,
+              terminus_chunk_id: edge.target_chunk_id,
+              terminus_classified: false,
+              chain,
+              chunk_ids: chunkIds,
+              edge_ids: edgeIds,
+            });
+          }
+        }
+        const weakest = edgeRows.reduce((min, candidate) => candidate.confidence_score < min.confidence_score ? candidate : min, edgeRows[0] ?? edge);
+        if (edgeIds.length > 1 && weakest.confidence_score < weakThreshold) {
+          const key = edgeIds.join('>');
+          if (!seenWeak.has(key)) {
+            seenWeak.add(key);
+            weakChains.push({
+              kind: 'weak_chain',
+              chain_depth: edgeIds.length,
+              chain,
+              chunk_ids: chunkIds,
+              edge_ids: edgeIds,
+              weakest_edge: weakest.id,
+              weakest_confidence_score: weakest.confidence_score,
+            });
+          }
+        }
+        queue.push({ chunkId: edge.target_chunk_id, chunkIds, edgeIds, edgeRows });
+      }
+    }
+  }
+  if (weakChains.length === 0) {
+    for (const edge of edges.filter((candidate) => candidate.confidence_score < weakThreshold)) {
+      weakChains.push({
+        kind: 'weak_chain',
+        chain_depth: 1,
+        chain: alternatingChain([edge.source_chunk_id, edge.target_chunk_id], [edge], byChunk),
+        chunk_ids: [edge.source_chunk_id, edge.target_chunk_id],
+        edge_ids: [edge.id],
+        weakest_edge: edge.id,
+        weakest_confidence_score: edge.confidence_score,
+      });
+    }
+  }
+  return { shallowChains, weakChains };
+}
+
+function provenanceFindings(nodes: LintNodeRow[], edges: LintEdgeRow[]): LintCategoryInput[] {
+  const chains = buildProvenanceChains(nodes, edges);
   const ungrounded = nodes
     .filter((node) => !node.provenance_basis && !edges.some((edge) => edge.target_chunk_id === node.chunk_id && edge.confidence === 'EXTRACTED'))
     .map((node) => ({
@@ -539,44 +792,37 @@ function provenanceFindings(nodes: LintNodeRow[], edges: LintEdgeRow[]): LintCat
         downstream_dependent_count: edges.filter((edge) => edge.target_chunk_id === node.chunk_id).length,
       },
     }));
-  const shallowChains = edges
-    .filter((edge) => edge.confidence === 'INFERRED')
-    .flatMap((edge) => {
-      const terminus = byChunk.get(edge.target_chunk_id);
-      if (!terminus || terminus.provenance_basis || edges.some((candidate) => candidate.target_chunk_id === terminus.chunk_id && candidate.confidence === 'EXTRACTED')) {
-        return [];
-      }
-      return [{
+  const shallowChains = chains.shallowChains
+    .map((chain) => ({
         rule: 'LINT-P1',
         severity: 'warning' as const,
-        stableParts: ['provenance', 'shallow_chain', edge.id],
-        summary: `Provenance chain terminates at unclassified node ${terminus.chunk_id}`,
-        chunkIds: [edge.source_chunk_id, edge.target_chunk_id],
-        edgeIds: [edge.id],
-        documentIds: [terminus.document_id],
+        stableParts: ['provenance', 'shallow_chain', ...chain.edge_ids],
+        summary: `Provenance chain terminates at unclassified node ${chain.terminus_chunk_id}`,
+        chunkIds: chain.chunk_ids,
+        edgeIds: chain.edge_ids,
+        documentIds: chain.chunk_ids.map((id) => nodes.find((node) => node.chunk_id === id)?.document_id).filter(isString),
         item: {
           kind: 'shallow_chain',
-          chain_depth: 1,
-          terminus_chunk_id: terminus.chunk_id,
-          terminus_classified: false,
-          chain: [edge.id],
+          chain_depth: chain.chain_depth,
+          terminus_chunk_id: chain.terminus_chunk_id,
+          terminus_classified: chain.terminus_classified,
+          chain: chain.chain,
         },
-      }];
-    });
-  const weakChains = edges
-    .filter((edge) => edge.confidence_score < 0.7)
-    .map((edge) => ({
+      }));
+  const weakChains = chains.weakChains
+    .map((chain) => ({
       rule: 'LINT-P1',
       severity: 'info' as const,
-      stableParts: ['provenance', 'weak_chain', edge.id],
-      summary: `Weak provenance edge ${edge.id}`,
-      chunkIds: [edge.source_chunk_id, edge.target_chunk_id],
-      edgeIds: [edge.id],
+      stableParts: ['provenance', 'weak_chain', ...chain.edge_ids],
+      summary: `Weak provenance path through ${chain.weakest_edge}`,
+      chunkIds: chain.chunk_ids,
+      edgeIds: chain.edge_ids,
       item: {
         kind: 'weak_chain',
-        chain: [edge.id],
-        weakest_edge: edge.id,
-        weakest_confidence_score: edge.confidence_score,
+        chain_depth: chain.chain_depth,
+        chain: chain.chain,
+        weakest_edge: chain.weakest_edge,
+        weakest_confidence_score: chain.weakest_confidence_score,
       },
     }));
   return [...ungrounded, ...shallowChains, ...weakChains];
@@ -610,21 +856,18 @@ function contradictionFindings(nodes: LintNodeRow[], edges: LintEdgeRow[]): Lint
     });
 }
 
-function duplicateFindings(nodes: LintNodeRow[], edges: LintEdgeRow[]): LintCategoryInput[] {
+function duplicateFindings(
+  nodes: LintNodeRow[],
+  edges: LintEdgeRow[],
+  propagation = new Map<string, DuplicatePropagationReport>()
+): LintCategoryInput[] {
   const byChunk = new Map(nodes.map((node) => [node.chunk_id, node]));
   return edges
     .filter((edge) => edge.relation === 'duplicates')
     .map((edge) => {
       const source = byChunk.get(edge.source_chunk_id);
       const target = byChunk.get(edge.target_chunk_id);
-      const propagated = edges
-        .filter((candidate) => candidate.source_chunk_id === edge.source_chunk_id && candidate.relation !== 'duplicates')
-        .map((candidate) => ({
-          direction: 'out',
-          relation: candidate.relation,
-          other_chunk_id: candidate.target_chunk_id,
-          new_edge_id: candidate.id,
-        }));
+      const report = propagation.get(edge.id);
       return {
         rule: 'LINT-R2',
         severity: 'info',
@@ -637,8 +880,8 @@ function duplicateFindings(nodes: LintNodeRow[], edges: LintEdgeRow[]): LintCate
           chunk_a: source ? nodeRef(source) : { chunk_id: edge.source_chunk_id },
           chunk_b: target ? nodeRef(target) : { chunk_id: edge.target_chunk_id },
           overlap_extent: edge.confidence_score >= 0.8 ? 'substantial' : 'partial',
-          edges_propagated: propagated,
-          edges_skipped: propagated.length === 0 ? [{ reason: 'no_supported_edges_to_propagate' }] : [],
+          edges_propagated: report?.propagated ?? [],
+          edges_skipped: report?.skipped ?? [{ reason: 'duplicate_propagation_not_run' }],
         },
       };
     });
@@ -856,9 +1099,68 @@ function isString(value: unknown): value is string {
   return typeof value === 'string';
 }
 
+function edgeKey(source: string, target: string, relation: string): string {
+  return `${source}\u0000${target}\u0000${relation}`;
+}
+
+function metadataString(metadata: Record<string, unknown> | null, key: string): string | null {
+  const value = metadata?.[key];
+  return typeof value === 'string' ? value : null;
+}
+
+function textSimilarity(left: string, right: string): number {
+  const leftTokens = tokenSet(left);
+  const rightTokens = tokenSet(right);
+  if (leftTokens.size === 0 || rightTokens.size === 0) return 0;
+  let overlap = 0;
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) overlap += 1;
+  }
+  return Number((overlap / leftTokens.size).toFixed(4));
+}
+
+function tokenSet(value: string): Set<string> {
+  return new Set(
+    value
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token.length > 2 && !RESOLUTION_STOP_WORDS.has(token))
+  );
+}
+
+function alternatingChain(
+  chunkIds: string[],
+  edges: LintEdgeRow[],
+  nodes: Map<string, LintNodeRow>
+): Array<Record<string, unknown>> {
+  const chain: Array<Record<string, unknown>> = [];
+  for (let index = 0; index < chunkIds.length; index += 1) {
+    const node = nodes.get(chunkIds[index]);
+    chain.push({
+      kind: 'chunk',
+      chunk_id: chunkIds[index],
+      ...(node?.document_id ? { document_id: node.document_id } : {}),
+      ...(node?.document_path ? { document_path: node.document_path } : {}),
+    });
+    const edge = edges[index];
+    if (edge) {
+      chain.push({
+        kind: 'edge',
+        edge_id: edge.id,
+        relation: edge.relation,
+        confidence_score: edge.confidence_score,
+      });
+    }
+  }
+  return chain;
+}
+
+const RESOLUTION_STOP_WORDS = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'into', 'resolved', 'resolve']);
+
 export const __testing = {
   stableFindingId,
   questionFindings,
+  buildProvenanceChains,
   provenanceFindings,
   contradictionFindings,
   duplicateFindings,

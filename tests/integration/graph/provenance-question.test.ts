@@ -174,9 +174,19 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph provenance and question reads',
     ]);
   });
 
-  it('T-I-028 graph lint flags resolved question dependents for follow-up', async () => {
+  it('T-I-028 graph lint flags resolved question dependents and creates resolution-similarity resolves edges', async () => {
     const question = await insertChunk(client, { path: '/question.md', heading: 'Question' });
     const dependent = await insertChunk(client, { path: '/dependent.md', heading: 'Dependent' });
+    const resolution = await insertChunk(client, { path: '/resolution.md', heading: 'Resolution' });
+    await client.query(
+      `
+      UPDATE fqc_chunks
+      SET content = 'The cache invalidation bug is resolved by rotating the token salt.',
+          content_hash = md5('The cache invalidation bug is resolved by rotating the token salt.')
+      WHERE instance_id = $1 AND id = $2
+      `,
+      [TEST_INSTANCE_ID, resolution]
+    );
 
     await client.query(
       `
@@ -184,10 +194,11 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph provenance and question reads',
         chunk_id, instance_id, provenance_basis, question_status, question_resolution
       )
       VALUES
-        ($1, $3, NULL, 'resolved', 'Resolved by dependent.'),
-        ($2, $3, NULL, NULL, NULL)
+        ($1, $4, NULL, 'resolved', 'Resolved by rotating the token salt.'),
+        ($2, $4, NULL, NULL, NULL),
+        ($3, $4, NULL, NULL, NULL)
       `,
-      [question, dependent, TEST_INSTANCE_ID]
+      [question, dependent, resolution, TEST_INSTANCE_ID]
     );
     await client.query(
       `
@@ -207,8 +218,23 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph provenance and question reads',
     expect(payload?.questions.items[0]).toMatchObject({
       chunk_id: question,
       question_status: 'resolved',
-      downstream_impact_count: 1,
-      unfolded_dependents: [dependent],
+      downstream_impact_count: 2,
+      unfolded_dependents: expect.arrayContaining([dependent, resolution]),
+    });
+    const edge = await client.query<{ id: string; metadata: Record<string, unknown> }>(
+      `
+      SELECT id::text, metadata
+      FROM fqc_graph_edges
+      WHERE instance_id = $1
+        AND source_chunk_id = $2
+        AND target_chunk_id = $3
+        AND relation = 'resolves'
+      `,
+      [TEST_INSTANCE_ID, question, resolution]
+    );
+    expect(edge.rows[0]).toMatchObject({
+      id: expect.any(String),
+      metadata: expect.objectContaining({ created_by: 'graph_lint_resolution_similarity' }),
     });
   });
 });

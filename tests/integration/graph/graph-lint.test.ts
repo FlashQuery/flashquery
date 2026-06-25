@@ -63,6 +63,7 @@ async function seedGraph(client: pg.Client): Promise<{ chunks: string[] }> {
   const a = await insertChunk(client, { path: '/lint/a.md', heading: 'A', content: 'Question: should this be resolved?' });
   const b = await insertChunk(client, { path: '/lint/b.md', heading: 'B', content: 'Source evidence.' });
   const c = await insertChunk(client, { path: '/lint/c.md', heading: 'C', content: 'Duplicate evidence.' });
+  const d = await insertChunk(client, { path: '/lint/d.md', heading: 'D', content: 'Divergent evidence.' });
   await client.query(
     `
     UPDATE fqc_graph_nodes
@@ -79,11 +80,12 @@ async function seedGraph(client: pg.Client): Promise<{ chunks: string[] }> {
     VALUES
       ($1, $2, $3, 'references', 'EXTRACTED', 1.0, NULL, NULL, 'active'),
       ($1, $3, $4, 'supports', 'INFERRED', 0.88, 'support', 'mock', 'active'),
+      ($1, $2, $5, 'depends_on', 'INFERRED', 0.77, 'divergent dependency', 'mock', 'active'),
       ($1, $2, $4, 'duplicates', 'INFERRED', 0.92, 'overlap', 'mock', 'active')
     `,
-    [TEST_INSTANCE_ID, a, b, c]
+    [TEST_INSTANCE_ID, a, b, c, d]
   );
-  return { chunks: [a, b, c] };
+  return { chunks: [a, b, c, d] };
 }
 
 describe.skipIf(!HAS_SUPABASE).sequential('graph lint maintenance actions', () => {
@@ -131,7 +133,16 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph lint maintenance actions', () =
   });
 
   it('T-I-034 reports duplicate edge propagation details', async () => {
-    await seedGraph(client);
+    const { chunks } = await seedGraph(client);
+    const before = await client.query<{ id: string }>(
+      `
+      SELECT id::text
+      FROM fqc_graph_edges
+      WHERE instance_id = $1
+      `,
+      [TEST_INSTANCE_ID]
+    );
+    const beforeIds = new Set(before.rows.map((row) => row.id));
 
     const result = await maintainVault(config, { action: 'graph_lint', rules: ['LINT-R2'] });
 
@@ -143,6 +154,57 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph lint maintenance actions', () =
       edges_propagated: expect.any(Array),
       edges_skipped: expect.any(Array),
     });
+    const propagated = payload?.duplicates.items[0]?.edges_propagated ?? [];
+    expect(propagated.some((edge) => edge.new_edge_id && !beforeIds.has(edge.new_edge_id))).toBe(true);
+    expect(payload?.duplicates.items[0]?.edges_skipped).toEqual([
+      expect.objectContaining({
+        reason: 'content_diverges',
+        other_chunk_id: chunks[3],
+      }),
+    ]);
+    const created = await client.query<{ count: string }>(
+      `
+      SELECT count(*)::text AS count
+      FROM fqc_graph_edges
+      WHERE instance_id = $1
+        AND source_chunk_id = $2
+        AND target_chunk_id = $3
+        AND relation = 'references'
+        AND metadata->>'created_by' = 'graph_lint_lint_r2'
+      `,
+      [TEST_INSTANCE_ID, chunks[2], chunks[1]]
+    );
+    expect(Number(created.rows[0]?.count ?? 0)).toBe(1);
+  });
+
+  it('deletes stale edges in non-dry-run lint and leaves them untouched during dry-run', async () => {
+    const { chunks } = await seedGraph(client);
+    const stale = await client.query<{ id: string }>(
+      `
+      INSERT INTO fqc_graph_edges (
+        instance_id, source_chunk_id, target_chunk_id, relation, confidence, confidence_score, reasoning, model, status
+      )
+      VALUES ($1, $2, $3, 'elaborates', 'INFERRED', 0.51, 'stale', 'mock', 'stale')
+      RETURNING id::text AS id
+      `,
+      [TEST_INSTANCE_ID, chunks[0], chunks[1]]
+    );
+
+    const dryRun = await maintainVault(config, { action: 'graph_lint', rules: ['LINT-I1'], dry_run: true });
+    expect(dryRun.ok).toBe(true);
+    const afterDryRun = await client.query<{ status: string }>(
+      'SELECT status FROM fqc_graph_edges WHERE instance_id = $1 AND id = $2',
+      [TEST_INSTANCE_ID, stale.rows[0].id]
+    );
+    expect(afterDryRun.rows[0]?.status).toBe('stale');
+
+    const applied = await maintainVault(config, { action: 'graph_lint', rules: ['LINT-I1'] });
+    expect(applied.ok).toBe(true);
+    const afterApplied = await client.query<{ status: string }>(
+      'SELECT status FROM fqc_graph_edges WHERE instance_id = $1 AND id = $2',
+      [TEST_INSTANCE_ID, stale.rows[0].id]
+    );
+    expect(afterApplied.rows).toHaveLength(0);
   });
 
   it('T-I-035 returns stored semantic categories by latest and run_id without rerunning lint', async () => {
