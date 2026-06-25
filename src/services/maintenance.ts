@@ -178,6 +178,7 @@ export async function maintainVault(
   if (input.action === 'graph_lint_status') {
     const validation = validateGraphLintStatusParameters(input);
     if (!validation.ok) return validation;
+    if (config.graph?.enabled !== true) return graphUnsupported('graph_lint_status');
     if (input.job_id) return getMaintenanceJobStatus(input.job_id);
     return await dispatchGraphLintStatus(config, input);
   }
@@ -185,6 +186,7 @@ export async function maintainVault(
   if (input.action === 'graph_lint_prune') {
     const validation = validateGraphLintPruneParameters(input);
     if (!validation.ok) return validation;
+    if (config.graph?.enabled !== true) return graphUnsupported('graph_lint_prune');
     return await dispatchGraphLintPrune(config, input);
   }
 
@@ -214,6 +216,10 @@ export async function maintainVault(
   const validation = validateModeOptions(normalized.payload, input);
   if (!validation.ok) {
     return validation;
+  }
+
+  if (normalized.payload.includes('graph_lint') && config.graph?.enabled !== true) {
+    return graphUnsupported('graph_lint');
   }
 
   if (getIsShuttingDown()) {
@@ -980,6 +986,18 @@ function invalidInput(
       message,
       identifier,
       details,
+    },
+  };
+}
+
+function graphUnsupported(action: MaintenanceGraphLintAction): MaintenanceResult<never> {
+  return {
+    ok: false,
+    error: {
+      error: 'unsupported',
+      message: 'Graph intelligence is disabled. Set graph.enabled: true to use graph maintenance actions.',
+      identifier: action,
+      details: { code: 'graph_disabled', action },
     },
   };
 }

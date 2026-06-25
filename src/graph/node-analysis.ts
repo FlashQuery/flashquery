@@ -7,6 +7,7 @@ import {
   resolveGraphLlmCompletion,
   type GraphLlmCompletionSuccess,
 } from './llm-analysis.js';
+import { renderGraphPrompt } from './prompt-renderer.js';
 import type { GraphNodeAnalysisPayload } from './schemas.js';
 import type { LlmClient } from '../llm/runtime-types.js';
 import type { ErrorEnvelope } from '../mcp/utils/response-formats.js';
@@ -59,6 +60,13 @@ export async function analyzeGraphNode(options: {
   analyzedAt?: Date;
 }): Promise<AnalyzeGraphNodeResult> {
   const traceId = graphNodeTraceId(options.chunk.id);
+  const renderedPrompt = renderGraphPrompt({
+    graphConfig: options.graphConfig,
+    promptId: 'analyze_node',
+    variables: {
+      chunk_content: options.chunk.content,
+    },
+  });
   const llm = await resolveGraphLlmCompletion({
     llmClient: options.llmClient,
     graphConfig: options.graphConfig,
@@ -66,12 +74,7 @@ export async function analyzeGraphNode(options: {
     messages: [
       {
         role: 'system',
-        content:
-          'Analyze one graph chunk. Return only JSON matching the graph node analysis schema.',
-      },
-      {
-        role: 'user',
-        content: options.chunk.content,
+        content: renderedPrompt.content,
       },
     ],
   });

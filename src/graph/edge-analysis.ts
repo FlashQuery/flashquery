@@ -8,6 +8,7 @@ import {
   resolveGraphLlmCompletion,
   type GraphLlmCompletionSuccess,
 } from './llm-analysis.js';
+import { renderGraphPrompt } from './prompt-renderer.js';
 import type { GraphEdgeClassificationDraft } from './schemas.js';
 import type { GraphRelationDefinition } from './vocabulary.js';
 import type { LlmClient } from '../llm/runtime-types.js';
@@ -103,6 +104,30 @@ export async function classifyGraphEdgeCandidate(options: {
   }
 
   const traceId = graphEdgeTraceId(options.sourceChunkId, options.targetChunkId);
+  const sourceChunk = JSON.stringify(
+    {
+      chunk_id: options.sourceChunkId,
+      key_claims: options.sourceNode!.key_claims,
+    },
+    null,
+    2
+  );
+  const targetChunk = JSON.stringify(
+    {
+      chunk_id: options.targetChunkId,
+      key_claims: options.targetNode!.key_claims,
+    },
+    null,
+    2
+  );
+  const renderedPrompt = renderGraphPrompt({
+    graphConfig: options.graphConfig,
+    promptId: 'classify_edge',
+    variables: {
+      source_chunk: sourceChunk,
+      target_chunk: targetChunk,
+    },
+  });
   const llm = await resolveGraphLlmCompletion({
     llmClient: options.llmClient,
     graphConfig: options.graphConfig,
@@ -110,17 +135,7 @@ export async function classifyGraphEdgeCandidate(options: {
     messages: [
       {
         role: 'system',
-        content:
-          'Classify candidate graph relationships. Return only JSON matching the graph edge classification schema.',
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          source_chunk_id: options.sourceChunkId,
-          target_chunk_id: options.targetChunkId,
-          source_key_claims: options.sourceNode!.key_claims,
-          target_key_claims: options.targetNode!.key_claims,
-        }),
+        content: renderedPrompt.content,
       },
     ],
   });

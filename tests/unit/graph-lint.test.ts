@@ -65,6 +65,26 @@ describe('graph lint category builders', () => {
     });
   });
 
+  it('T-U-002 returns unsupported graph maintenance results when graph is disabled', async () => {
+    resetMaintenanceStateForTests();
+    const config = configForValidation();
+    config.graph = { enabled: false };
+
+    const lint = await maintainVault(config, { action: 'graph_lint' });
+    const status = await maintainVault(config, { action: 'graph_lint_status', limit: 1 });
+    const prune = await maintainVault(config, { action: 'graph_lint_prune', keep_last: 1 });
+
+    for (const result of [lint, status, prune]) {
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          error: 'unsupported',
+          details: { code: 'graph_disabled' },
+        },
+      });
+    }
+  });
+
   it('T-U-063 preserves lint execution order in source', () => {
     const source = lintTesting;
     expect(Object.keys(source)).toEqual([

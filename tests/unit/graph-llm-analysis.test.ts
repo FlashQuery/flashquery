@@ -9,6 +9,7 @@ import {
 import { analyzeGraphNode } from '../../src/graph/node-analysis.js';
 import { classifyGraphEdgeCandidate } from '../../src/graph/edge-analysis.js';
 import { DEFAULT_GRAPH_RELATIONS } from '../../src/graph/vocabulary.js';
+import type { GraphRelationDefinition } from '../../src/graph/vocabulary.js';
 import type { LlmClient, LlmCompletionResult } from '../../src/llm/runtime-types.js';
 
 const completion = (text: string, modelName = 'graph-model'): LlmCompletionResult => ({
@@ -69,6 +70,14 @@ function edgePayload(overrides: Record<string, unknown> = {}): string {
     ...overrides,
   });
 }
+
+const CUSTOM_RELATION: GraphRelationDefinition = {
+  name: 'custom_resonates_with',
+  category: 'classified',
+  directionality: 'directed',
+  detectionMethod: 'classified',
+  description: 'The source resonates with a custom operator relation.',
+};
 
 describe('graph LLM parsing', () => {
   it('T-U-039 repairs malformed node JSON through parseLlmJson', () => {
@@ -191,6 +200,46 @@ describe('graph node analysis', () => {
     expect(result.status).toBe('analyzed');
     if (result.status !== 'analyzed') throw new Error('expected analyzed');
     expect(result.node.analyzed_by_model).toBe('purpose-graph-model@prompt-2026-06');
+  });
+
+  it('renders the loaded node prompt template before calling the graph LLM', async () => {
+    const llm = mockLlm(nodePayload());
+    const supabase = {
+      from: vi.fn(() => ({
+        upsert: vi.fn((row: unknown) => ({
+          select: vi.fn(() => ({ single: vi.fn(async () => ({ data: row, error: null })) })),
+        })),
+      })),
+    };
+
+    const result = await analyzeGraphNode({
+      supabase,
+      instanceId: 'inst',
+      chunk: { id: 'chunk-1', content: 'Custom chunk body', contentHash: 'hash-1' },
+      llmClient: llm,
+      graphConfig: {
+        enabled: true,
+        classificationPurpose: 'graph-classifier',
+        resolvedRelations: [...DEFAULT_GRAPH_RELATIONS, CUSTOM_RELATION],
+        resolvedPrompts: [
+          {
+            id: 'analyze_node',
+            version: 'node-custom',
+            template:
+              'Custom node sidecar prompt.\nTypes:\n{{graph:classified_types}}\nChunk:\n{{chunk_content}}',
+            requiredVariables: ['graph:classified_types', 'chunk_content'],
+            overridable: true,
+          },
+        ],
+      },
+      promptVersion: 'node-custom',
+    });
+
+    expect(result.status).toBe('analyzed');
+    const messages = vi.mocked(llm.completeByPurpose).mock.calls[0]?.[1];
+    expect(messages?.[0]?.content).toContain('Custom node sidecar prompt.');
+    expect(messages?.[0]?.content).toContain('Custom chunk body');
+    expect(messages?.[0]?.content).toContain('custom_resonates_with');
   });
 });
 
@@ -424,6 +473,64 @@ describe('graph edge analysis', () => {
       expect.any(Object),
       'graph-edge-classification:source:target'
     );
+  });
+
+  it('renders the loaded edge prompt template and classified vocabulary before calling the graph LLM', async () => {
+    const llm = mockLlm(
+      edgePayload({
+        edges: [
+          {
+            relation: 'custom_resonates_with',
+            reasoning: 'The source uses the custom relation.',
+            source_claims_referenced: [0],
+            target_claims_referenced: [0],
+            confidence_score: 0.81,
+            metadata: { llm_assessment: 'moderate', low_confidence_flag: false },
+          },
+        ],
+      })
+    );
+
+    const result = await classifyGraphEdgeCandidate({
+      instanceId: 'inst',
+      sourceChunkId: 'source',
+      targetChunkId: 'target',
+      sourceNode: {
+        chunk_id: 'source',
+        key_claims: ['Source custom claim'],
+        analyzed_at: '2026-06-24T00:00:00.000Z',
+      },
+      targetNode: {
+        chunk_id: 'target',
+        key_claims: ['Target custom claim'],
+        analyzed_at: '2026-06-24T00:00:00.000Z',
+      },
+      llmClient: llm,
+      graphConfig: {
+        enabled: true,
+        classificationPurpose: 'graph-classifier',
+        resolvedRelations: [...DEFAULT_GRAPH_RELATIONS, CUSTOM_RELATION],
+        resolvedPrompts: [
+          {
+            id: 'classify_edge',
+            version: 'edge-custom',
+            template:
+              'Custom edge sidecar prompt.\nTypes:\n{{graph:classified_types}}\nSource:\n{{source_chunk}}\nTarget:\n{{target_chunk}}',
+            requiredVariables: ['graph:classified_types', 'source_chunk', 'target_chunk'],
+            overridable: true,
+          },
+        ],
+      },
+      relations: [...DEFAULT_GRAPH_RELATIONS, CUSTOM_RELATION],
+      promptVersion: 'edge-custom',
+    });
+
+    expect(result.status).toBe('classified');
+    const messages = vi.mocked(llm.completeByPurpose).mock.calls[0]?.[1];
+    expect(messages?.[0]?.content).toContain('Custom edge sidecar prompt.');
+    expect(messages?.[0]?.content).toContain('custom_resonates_with');
+    expect(messages?.[0]?.content).toContain('Source custom claim');
+    expect(messages?.[0]?.content).toContain('Target custom claim');
   });
 
   it('routes direct model graph calls with a graph trace id', async () => {

@@ -43,6 +43,33 @@ steps:
       expect_contains: "Graph disabled no-op content remains visible"
       expect_not_contains: "\"graph_summary\""
 
+  - label: "Disabled graph get_document omits requested graph summary"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${noop_doc.fq_id}"
+        include: [body, graph_summary]
+      expect_contains: "Graph disabled no-op content remains visible"
+      expect_not_contains: "\"graph_summary\""
+
+  - label: "Disabled graph lint is unsupported"
+    assert:
+      op: maintain_vault
+      args:
+        action: graph_lint
+      expect_json_equals:
+        path: "error"
+        value: unsupported
+
+  - label: "Disabled graph lint reports graph_disabled detail"
+    assert:
+      op: maintain_vault
+      args:
+        action: graph_lint
+      expect_json_equals:
+        path: "details.code"
+        value: graph_disabled
+
   - label: "Disabled graph query surface is discoverable but unsupported"
     assert:
       op: query_graph
