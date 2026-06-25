@@ -6,7 +6,9 @@ import { dirname, resolve } from 'node:path';
 
 import { loadConfig, type FlashQueryConfig } from '../../../src/config/loader.js';
 import { registerGraphTools } from '../../../src/mcp/tools/graph.js';
+import { processPendingGraphEdges } from '../../../src/graph/pending-worker.js';
 import { initLogger } from '../../../src/logging/logger.js';
+import { maintainVault, resetMaintenanceStateForTests } from '../../../src/services/maintenance.js';
 import { initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
 import { setupTestSupabase } from '../../helpers/supabase.js';
 import { HAS_SUPABASE } from '../../helpers/test-env.js';
@@ -241,14 +243,119 @@ describe.skipIf(!HAS_SUPABASE).sequential('query_graph public MCP integration', 
   }, 90_000);
 
   beforeEach(async () => {
+    resetMaintenanceStateForTests();
+    await client.query('DELETE FROM fqc_graph_lint_runs WHERE instance_id = $1', [TEST_INSTANCE_ID]);
     await client.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]);
   });
 
   afterAll(async () => {
+    await client?.query('DELETE FROM fqc_graph_lint_runs WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.end().catch(() => undefined);
     await supabaseManager?.close();
   });
+
+  it('T-I-029/T-I-030/GR-024B reads worker-produced classified edges through public graph surfaces', async () => {
+    const source = await insertChunk(client, {
+      path: 'Produced Source.md',
+      title: 'Produced Source',
+      heading: 'Produced Source',
+      provenanceBasis: 'source:produced',
+    });
+    const target = await insertChunk(client, {
+      path: 'Produced Target.md',
+      title: 'Produced Target',
+      heading: 'Produced Target',
+      provenanceBasis: null,
+    });
+    await client.query(
+      `
+      UPDATE fqc_graph_nodes
+      SET key_claims = $3::jsonb,
+          analyzed_at = now(),
+          analyzed_by_model = 'mock-node@v1'
+      WHERE instance_id = $1 AND chunk_id = ANY($2::uuid[])
+      `,
+      [TEST_INSTANCE_ID, [source, target], JSON.stringify(['migration status'])]
+    );
+    await client.query(
+      `
+      INSERT INTO fqc_pending_edges (
+        id, instance_id, source_chunk_id, target_chunk_id, status, attempt_count, max_attempts
+      )
+      VALUES (gen_random_uuid(), $1, $2, $3, 'pending', 0, 3)
+      `,
+      [TEST_INSTANCE_ID, source, target]
+    );
+
+    const worker = await processPendingGraphEdges({
+      supabase: supabaseManager.getClient(),
+      instanceId: TEST_INSTANCE_ID,
+      classifyCandidate: async (row) => ({
+        status: 'classified',
+        written: 0,
+        edges: [
+          {
+            sourceChunkId: row.source_chunk_id,
+            targetChunkId: row.target_chunk_id,
+            relation: 'contradicts',
+            reasoning: 'Worker-produced edge says the source and target conflict.',
+            confidenceScore: 0.91,
+            sourceClaimsReferenced: [0],
+            targetClaimsReferenced: [0],
+            model: 'mock-graph-model',
+            metadata: { produced_by: 'pending_worker_test' },
+          },
+        ],
+      }),
+    });
+
+    expect(worker).toMatchObject({ selected: 1, processed: 1, succeeded: 1 });
+    const stored = await client.query<{ count: string }>(
+      `
+      SELECT count(*)::text AS count
+      FROM fqc_graph_edges
+      WHERE instance_id = $1 AND source_chunk_id = $2 AND target_chunk_id = $3 AND relation = 'contradicts'
+      `,
+      [TEST_INSTANCE_ID, source, target]
+    );
+    expect(Number(stored.rows[0]?.count ?? 0)).toBe(1);
+
+    const contradictions = parseToolJson<{ data: { edges: Array<{ relation: string; reasoning: string | null }> } }>(
+      await graph.queryGraph({ action: 'contradictions' })
+    );
+    expect(contradictions.data.edges).toEqual([
+      expect.objectContaining({
+        relation: 'contradicts',
+        reasoning: 'Worker-produced edge says the source and target conflict.',
+      }),
+    ]);
+
+    const weakPaths = parseToolJson<{ data: { edges: Array<{ relation: string; confidence_score: number }> } }>(
+      await graph.queryGraph({ action: 'weak_paths', confidence_threshold: 0.95 })
+    );
+    expect(weakPaths.data.edges).toEqual([
+      expect.objectContaining({ relation: 'contradicts', confidence_score: 0.91 }),
+    ]);
+
+    const ungrounded = parseToolJson<{ data: { edges: Array<{ target: { chunk_id: string } }> } }>(
+      await graph.queryGraph({ action: 'ungrounded_edges', relations: ['contradicts'] })
+    );
+    expect(ungrounded.data.edges).toEqual([
+      expect.objectContaining({ target: expect.objectContaining({ chunk_id: target }) }),
+    ]);
+
+    const lint = await maintainVault(configForTest(true), { action: 'graph_lint', rules: ['LINT-P1', 'LINT-C1'] });
+    expect(lint.ok).toBe(true);
+    if (!lint.ok || !('actions' in lint.payload)) return;
+    const payload = lint.payload.actions[0]?.action === 'graph_lint' ? lint.payload.actions[0].payload : null;
+    expect(payload?.contradictions.items).toEqual([
+      expect.objectContaining({ edge_id: expect.any(String), reasoning: 'Worker-produced edge says the source and target conflict.' }),
+    ]);
+    expect(payload?.provenance.ungrounded).toEqual([
+      expect.objectContaining({ chunk_id: target }),
+    ]);
+  }, 120_000);
 
   it('T-I-008/T-I-026/T-I-029/T-I-030/T-I-036/T-I-037/T-I-042 returns bounded primitive and compound graph reads', async () => {
     const seeded = await seedGraph(client);
