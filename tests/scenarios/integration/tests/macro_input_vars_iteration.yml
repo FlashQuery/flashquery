@@ -15,12 +15,12 @@ steps:
         source: |
           items = input_var "items"
           seen = 0
-          last = null
+          last_item = null
           for item in $items do
             seen = add $seen 1
-            last = $item
+            last_item = $item
           done
-          exit { seen: $seen, last: $last }
+          exit { seen: $seen, last: $last_item }
       expect_json_equals:
         path: result.seen
         value: 3

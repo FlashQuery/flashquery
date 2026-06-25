@@ -2,7 +2,7 @@ name: graph_search_expansion
 description: >
   T-Y-002 / IG-02: write linked markdown docs, scan with graph enabled,
   search a semantic seed, and verify graph-expanded search returns the
-  connected document with graph attribution.
+  connected document with graph attribution and preserved graph_context.
 coverage: [IG-02]
 deps: [embeddings]
 server_modes: [managed]
@@ -55,5 +55,13 @@ steps:
         graph_expand: true
         graph_max_depth: 2
         graph_relations: [references, supports]
-      expect_contains: "\"graph_context\""
+      expect_contains: "\"match_source\":[\"semantic\",\"graph\"]"
+      expect_json_path:
+        - results[0].graph_context
+        - results[0].graph_context.seed_chunk_id
+        - results[0].graph_context.edge_id
+        - results[0].graph_context.relation
+      expect_json_contains:
+        path: results[0].match_source
+        value: graph
       expect_path: "_integration/graph-search/connected.md"

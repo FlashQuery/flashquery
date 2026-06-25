@@ -731,7 +731,7 @@ Use `search` with `include_archived: true` to include archived memories and `wri
 
 **Behavior**
 
-`search` unifies document and memory search. `mode: "filesystem"` uses document title/path/tags and memory content/tags. `mode: "semantic"` uses embeddings and returns `unsupported` if semantic search is unavailable. `mode: "mixed"` combines semantic and filesystem results and falls back with warnings when embeddings are unavailable. When the embedding catalog has multiple active entries, semantic results are fused with reciprocal rank fusion and document hits can include matched chunk metadata. Empty query requires filters or `list_all: true`; filtered list-mode also requires explicit `entity_types` so the target domains are unambiguous. Archived entities are excluded unless `include_archived` is true.
+`search` unifies document and memory search. `mode: "filesystem"` uses document title/path/tags and memory content/tags. `mode: "semantic"` uses embeddings and returns `unsupported` if semantic search is unavailable. `mode: "mixed"` combines semantic and filesystem results and falls back with warnings when embeddings are unavailable. When the embedding catalog has multiple active entries, semantic results are fused with reciprocal rank fusion and document hits can include matched chunk metadata. When graph intelligence is enabled, `graph_expand: true` expands from semantic seed chunks through stored graph edges; graph-contributed document results include `"graph"` in `match_source` and preserve `graph_context` explanation metadata even if the same document is also found semantically. Empty query requires filters or `list_all: true`; filtered list-mode also requires explicit `entity_types` so the target domains are unambiguous. Archived entities are excluded unless `include_archived` is true.
 
 **Inputs**
 
@@ -748,11 +748,18 @@ Use `search` with `include_archived: true` to include archived memories and `wri
 | `path_filter` | `string` | no | none | Document path substring filter for filesystem/list searches. |
 | `embedding_names` | `string[]` | no | active catalog entries | Embedding catalog entries to query for semantic/mixed search. Empty arrays are invalid; unknown or deactivated names return expected error envelopes. Ignored with `embedding_names_ignored` in filesystem mode. |
 | `include_archived` | `boolean` | no | `false` | Include archived documents and memories. |
+| `graph_expand` | `boolean` | no | `false` | Expand semantic document seed chunks through graph edges when graph is enabled. |
+| `graph_relations` | `string[]` | no | all configured relations | Restrict graph expansion to specific relation names; also opts into graph expansion. |
+| `graph_max_depth` | integer | no | `1` | Maximum graph traversal depth, clamped to the supported bound. |
+| `graph_include_stale` | `boolean` | no | `false` | Include stale graph edges during expansion. |
+| `graph_include_inactive` | `boolean` | no | `false` | Include inactive/archived graph target documents during expansion. |
+| `include_community` | `boolean` | no | `false` | Include community metadata in `graph_context` when available. |
+| `path_to` | `string` | no | none | Target chunk id for bounded shortest-path metadata in `graph_context.path_to`. |
 | `body_contains`, `body_regex`, `regex`, `line_range`, `lines`, `byte_range` | `unknown` | no | none | Unsupported literal body-search parameters; return validation guidance. |
 
 **Output**
 
-Success returns `{ query, entity_types, mode, embeddings_queried?, fusion?, fusion_k?, total, warnings?, results }`. `embeddings_queried` lists successful embedding retrievers when catalog search is active. `fusion` is `"none"` or `"rrf"`; `fusion_k` is present for reciprocal rank fusion. Document results include `entity_type`, `identifier`, `title`, `path`, `fq_id`, `tags`, `modified`, `size`, `match_source`, optional `score`, and optional `matched_chunks`. RRF-fused document results can also include `fused_score`, `rank_sum`, and `per_embedding_ranks`. Each `matched_chunks` item includes `chunk_id`, `heading_path`, `breadcrumb`, `content`, `span_start`, `span_end`, `score`, `per_embedding_ranks`, and `indexed_at`. Memory results include `entity_type`, `identifier`, `memory_id`, `content_preview`, `tags`, `plugin_scope`, timestamps, `match_source`, and optional `score`; memory results do not include `matched_chunks`.
+Success returns `{ query, entity_types, mode, embeddings_queried?, fusion?, fusion_k?, total, warnings?, results }`. `embeddings_queried` lists successful embedding retrievers when catalog search is active. `fusion` is `"none"` or `"rrf"`; `fusion_k` is present for reciprocal rank fusion. Document results include `entity_type`, `identifier`, `title`, `path`, `fq_id`, `tags`, `modified`, `size`, `match_source`, optional `score`, and optional `matched_chunks`. If graph expansion contributes to a document, `match_source` includes `"graph"` and the result includes `graph_context` with graph evidence such as `seed_chunk_id`, `edge_id`, `relation`, `stale`, `confidence_score`, `depth`, optional `community`, and optional `path_to`. RRF-fused document results can also include `fused_score`, `rank_sum`, and `per_embedding_ranks`. Each `matched_chunks` item includes `chunk_id`, `heading_path`, `breadcrumb`, `content`, `span_start`, `span_end`, `score`, `per_embedding_ranks`, and `indexed_at`. Memory results include `entity_type`, `identifier`, `memory_id`, `content_preview`, `tags`, `plugin_scope`, timestamps, `match_source`, and optional `score`; memory results do not include `matched_chunks`.
 
 **Examples**
 

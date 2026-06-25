@@ -54,6 +54,7 @@ import { getToolMetadata } from '../tool-metadata.js';
 import { FM } from '../../constants/frontmatter-fields.js';
 import {
   mergeSearchResults,
+  mergeGraphContextProperty,
   resolveSearchIntent,
   type SearchMatchSource,
   type SearchMatchedChunk,
@@ -437,6 +438,7 @@ export function mergeRrfWithSupplementalResults(
         ...new Set([...(primary.match_source ?? []), ...(secondary.match_source ?? [])]),
       ],
       ...mergeMatchedChunkProperty(primary, secondary),
+      ...mergeGraphContextProperty(primary, secondary),
     });
   }
 
@@ -716,7 +718,7 @@ function buildGraphSearchResult(
         : {}),
       ...(pathTo ? { path_to: pathTo } : {}),
     },
-  } as SearchResultItem;
+  };
 }
 
 function communityContext(node: GraphSearchNode): {
@@ -750,7 +752,7 @@ function annotateSearchResultsWithCommunity(
         ...existingContext,
         community,
       },
-    } as SearchResultItem;
+    };
   });
 }
 

@@ -95,6 +95,63 @@ describe('search result merge and ranking', () => {
     ]);
   });
 
+  it('preserves graph context when graph-expanded and semantic document hits merge', () => {
+    const results: SearchResultItem[] = [
+      {
+        entity_type: 'document',
+        identifier: 'Connected.md',
+        path: 'Connected.md',
+        fq_id: 'doc-graph',
+        score: 0.9,
+        match_source: ['semantic'],
+        matched_chunks: [
+          {
+            chunk_id: 'semantic-chunk',
+            heading_path: 'Connected',
+            breadcrumb: 'Connected',
+            content: 'Semantic hit',
+            span_start: null,
+            span_end: null,
+            score: 0.9,
+            per_embedding_ranks: { primary: 1 },
+            indexed_at: { primary: '2026-06-25T00:00:00Z' },
+          },
+        ],
+      },
+      {
+        entity_type: 'document',
+        identifier: 'Connected.md',
+        path: 'Connected.md',
+        fq_id: 'doc-graph',
+        score: 0.7,
+        match_source: ['graph'],
+        graph_context: {
+          seed_chunk_id: 'seed-chunk',
+          edge_id: 'edge-1',
+          relation: 'references',
+          stale: false,
+          confidence_score: 1,
+          depth: 1,
+        },
+      },
+    ];
+
+    expect(mergeSearchResults(results, 10)).toEqual([
+      expect.objectContaining({
+        fq_id: 'doc-graph',
+        score: 0.9,
+        match_source: ['semantic', 'graph'],
+        graph_context: expect.objectContaining({
+          seed_chunk_id: 'seed-chunk',
+          edge_id: 'edge-1',
+          relation: 'references',
+          depth: 1,
+        }),
+        matched_chunks: [expect.objectContaining({ chunk_id: 'semantic-chunk' })],
+      }),
+    ]);
+  });
+
   it('applies one global limit after merge, dedupe, and deterministic sorting', () => {
     const results: SearchResultItem[] = [
       { entity_type: 'memory', identifier: 'mem-b', memory_id: 'mem-b', score: 0.8, match_source: ['semantic'] },

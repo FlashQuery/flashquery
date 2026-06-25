@@ -2,7 +2,7 @@ import type { ErrorEnvelope, WarningCode } from './response-formats.js';
 
 export type SearchMode = 'filesystem' | 'semantic' | 'mixed';
 export type SearchEntityType = 'documents' | 'memories';
-export type SearchMatchSource = 'filesystem' | 'semantic' | 'list';
+export type SearchMatchSource = 'filesystem' | 'semantic' | 'list' | 'graph';
 
 export interface SearchInput {
   query?: string;
@@ -46,6 +46,28 @@ export interface SearchResultItem {
   archived_at?: string | null;
   is_latest?: boolean | null;
   matched_chunks?: SearchMatchedChunk[];
+  graph_context?: SearchGraphContext;
+}
+
+export interface SearchGraphContext {
+  seed_chunk_id?: string;
+  edge_id?: string;
+  relation?: string;
+  stale?: boolean;
+  confidence_score?: number;
+  depth?: number;
+  community?: {
+    community_id: string;
+    community_label?: string | null;
+    community_summary?: string | null;
+  };
+  path_to?: {
+    found: boolean;
+    nodes?: string[];
+    edges?: string[];
+    max_depth?: number;
+  };
+  [key: string]: unknown;
 }
 
 export interface SearchMatchedChunk {
@@ -238,6 +260,7 @@ export function mergeSearchResults(results: SearchResultItem[], limit: number): 
       ...(matchSource.length > 0 ? { match_source: matchSource } : {}),
       ...(existing.score !== undefined || result.score !== undefined ? { score: Math.max(existingScore, resultScore) } : {}),
       ...mergeMatchedChunks(existing, result),
+      ...mergeGraphContextProperty(existing, result),
     });
   }
 
@@ -249,6 +272,35 @@ export function mergeSearchResults(results: SearchResultItem[], limit: number): 
       return sortKey(a).localeCompare(sortKey(b));
     })
     .slice(0, limit);
+}
+
+export function mergeGraphContextProperty(
+  left: Pick<SearchResultItem, 'graph_context'>,
+  right: Pick<SearchResultItem, 'graph_context'>
+): { graph_context?: SearchGraphContext } {
+  if (!left.graph_context && !right.graph_context) return {};
+  return {
+    graph_context: {
+      ...(left.graph_context ?? {}),
+      ...(right.graph_context ?? {}),
+      ...(left.graph_context?.community || right.graph_context?.community
+        ? {
+            community: {
+              ...(left.graph_context?.community ?? {}),
+              ...(right.graph_context?.community ?? {}),
+            },
+          }
+        : {}),
+      ...(left.graph_context?.path_to || right.graph_context?.path_to
+        ? {
+            path_to: {
+              ...(left.graph_context?.path_to ?? {}),
+              ...(right.graph_context?.path_to ?? {}),
+            },
+          }
+        : {}),
+    },
+  };
 }
 
 function mergeMatchedChunks(

@@ -23,13 +23,13 @@ steps:
       op: call_macro
       args:
         source: |
-          first = fq.write_document({
+          first_doc = fq.write_document({
             mode: "create",
             path: "macro/lock-one-${run.id}.md",
             title: "Macro Lock One ${run.id}",
             content: "Macro lock one ${run.id}"
           })
-          exit { path: $first.path }
+          exit { path: $first_doc.path }
       expect_json_equals:
         path: result.path
         value: "macro/lock-one-${run.id}.md"
