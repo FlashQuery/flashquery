@@ -1,8 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
+import { z } from 'zod';
 import type { LifecycleScope } from '../embedding/lifecycle/types.js';
+import type { EmbeddingProvider } from '../embedding/provider.js';
+import { parseLlmJson } from '../llm/json-repair.js';
+import type { LlmClient } from '../llm/runtime-types.js';
 import { createPgClientIPv4 } from '../utils/pg-client.js';
 import { detectAndApplyTopologyCommunities, type DetectedCommunity } from './communities.js';
+import type { GraphRuntimeConfig } from './config.js';
+import { resolveGraphLlmCompletion } from './llm-analysis.js';
 import {
   applyDeltas,
   capGraphLintPayload,
@@ -15,6 +21,9 @@ import {
 export interface GraphLintOptions {
   databaseUrl: string;
   instanceId: string;
+  graphConfig?: GraphRuntimeConfig;
+  llmClient?: LlmClient;
+  resolutionEmbeddingProvider?: EmbeddingProvider;
   rules?: string[];
   scope?: LifecycleScope;
   dryRun?: boolean;
@@ -92,6 +101,12 @@ const ALL_RULES = new Set([
   'LINT-DLQ',
 ]);
 
+const DuplicateEquivalenceSchema = z.object({
+  decision: z.enum(['equivalent', 'diverges']),
+  confidence: z.number().min(0).max(1).optional(),
+  reason: z.string().min(1).max(500).optional(),
+});
+
 export async function runGraphLint(options: GraphLintOptions): Promise<GraphLintPayload> {
   return await withClient(options.databaseUrl, async (client) => {
     const timestamp = (options.now ?? (() => new Date()))().toISOString();
@@ -101,6 +116,7 @@ export async function runGraphLint(options: GraphLintOptions): Promise<GraphLint
     const selectedRules = new Set(options.rules ?? ALL_RULES);
     const previous = await loadLatestPayload(client, options.instanceId);
     const previousFindingIds = new Set(previous?.raw_findings.map((finding) => finding.finding_id) ?? []);
+    const runWarnings: string[] = [];
 
     const communities = selectedRules.has('LINT-COMMUNITY')
       ? await detectAndApplyTopologyCommunities({
@@ -112,12 +128,22 @@ export async function runGraphLint(options: GraphLintOptions): Promise<GraphLint
       : [];
     const nodes = await loadLintNodes(client, options.instanceId, pathPrefix);
     if (selectedRules.has('LINT-Q1') && options.dryRun !== true) {
-      await applyResolutionSimilarityEdges(client, options.instanceId, nodes);
+      runWarnings.push(
+        ...(await applyResolutionSimilarityEdges(client, options.instanceId, nodes, {
+          graphConfig: options.graphConfig,
+          embeddingProvider: options.resolutionEmbeddingProvider,
+        }))
+      );
     }
     const edges = await loadLintEdges(client, options.instanceId, pathPrefix);
     const deadLetters = await loadDeadLetters(client, options.instanceId);
     const duplicatePropagation = selectedRules.has('LINT-R2')
-      ? await applyDuplicateEdgePropagation(client, options.instanceId, nodes, edges, options.dryRun === true)
+      ? await applyDuplicateEdgePropagation(client, options.instanceId, nodes, edges, {
+          dryRun: options.dryRun === true,
+          graphConfig: options.graphConfig,
+          llmClient: options.llmClient,
+          warnings: runWarnings,
+        })
       : new Map<string, DuplicatePropagationReport>();
 
     const categoryFindings = {
@@ -212,7 +238,7 @@ export async function runGraphLint(options: GraphLintOptions): Promise<GraphLint
         items: applied.integrity.items,
       },
       raw_findings: rawFindings,
-      warnings: lintWarnings(deadLetters, selectedRules, options.dryRun === true),
+      warnings: lintWarnings(deadLetters, selectedRules, options.dryRun === true, runWarnings),
     };
 
     if (options.dryRun !== true) {
@@ -492,6 +518,7 @@ interface DuplicatePropagationReport {
     relation?: string;
     other_chunk_id?: string;
     source_edge_id?: string;
+    detail?: string;
   }>;
 }
 
@@ -500,12 +527,20 @@ async function applyDuplicateEdgePropagation(
   instanceId: string,
   nodes: LintNodeRow[],
   edges: LintEdgeRow[],
-  dryRun: boolean
+  options: {
+    dryRun: boolean;
+    graphConfig?: GraphRuntimeConfig;
+    llmClient?: LlmClient;
+    warnings: string[];
+  }
 ): Promise<Map<string, DuplicatePropagationReport>> {
   const reports = new Map<string, DuplicatePropagationReport>();
+  const byChunk = new Map(nodes.map((node) => [node.chunk_id, node]));
   const knownNodes = new Set(nodes.map((node) => node.chunk_id));
   const existing = new Set(edges.map((edge) => edgeKey(edge.source_chunk_id, edge.target_chunk_id, edge.relation)));
   const duplicates = edges.filter((edge) => edge.relation === 'duplicates' && edge.status === 'active');
+  const costCap = Math.max(0, options.graphConfig?.maxClassificationJobsPerSave ?? 10);
+  let llmCalls = 0;
 
   for (const duplicate of duplicates) {
     const report: DuplicatePropagationReport = { propagated: [], skipped: [] };
@@ -522,19 +557,50 @@ async function applyDuplicateEdgePropagation(
         const newTarget = sourceIsFrom ? sourceEdge.target_chunk_id : pair.to;
         const otherChunkId = sourceIsFrom ? sourceEdge.target_chunk_id : sourceEdge.source_chunk_id;
         if (newSource === newTarget || otherChunkId === pair.to || !knownNodes.has(newSource) || !knownNodes.has(newTarget)) continue;
-        if (sourceEdge.relation === 'depends_on' || metadataString(sourceEdge.metadata, 'lint_r2_gate') === 'content_diverges') {
+        const key = edgeKey(newSource, newTarget, sourceEdge.relation);
+        if (existing.has(key)) continue;
+        if (!options.llmClient || !options.graphConfig || (!options.graphConfig.classificationPurpose && !options.graphConfig.classificationModel)) {
+          report.skipped.push({
+            reason: 'missing_llm_equivalence_gate',
+            relation: sourceEdge.relation,
+            other_chunk_id: otherChunkId,
+            source_edge_id: sourceEdge.id,
+          });
+          addWarningOnce(options.warnings, 'graph_lint_duplicate_propagation_skipped_missing_llm_gate');
+          continue;
+        }
+        if (llmCalls >= costCap) {
+          report.skipped.push({
+            reason: 'cost_cap_reached',
+            relation: sourceEdge.relation,
+            other_chunk_id: otherChunkId,
+            source_edge_id: sourceEdge.id,
+          });
+          addWarningOnce(options.warnings, 'graph_lint_duplicate_propagation_cost_cap_reached');
+          continue;
+        }
+        llmCalls += 1;
+        const gate = await evaluateDuplicatePropagationGate({
+          llmClient: options.llmClient,
+          graphConfig: options.graphConfig,
+          duplicate,
+          fromNode: byChunk.get(pair.from),
+          toNode: byChunk.get(pair.to),
+          otherNode: byChunk.get(otherChunkId),
+          sourceEdge,
+        });
+        if (gate.decision !== 'equivalent') {
           report.skipped.push({
             reason: 'content_diverges',
             relation: sourceEdge.relation,
             other_chunk_id: otherChunkId,
             source_edge_id: sourceEdge.id,
+            ...(gate.reason ? { detail: gate.reason } : {}),
           });
           continue;
         }
-        const key = edgeKey(newSource, newTarget, sourceEdge.relation);
-        if (existing.has(key)) continue;
         existing.add(key);
-        if (dryRun) {
+        if (options.dryRun) {
           report.propagated.push({
             direction: sourceIsFrom ? 'out' : 'in',
             relation: sourceEdge.relation,
@@ -567,6 +633,8 @@ async function applyDuplicateEdgePropagation(
               duplicate_edge_id: duplicate.id,
               propagated_from_edge_id: sourceEdge.id,
               propagation_gate: 'content_equivalent',
+              propagation_gate_reason: gate.reason ?? null,
+              propagation_gate_confidence: gate.confidence ?? null,
             }),
           ]
         );
@@ -591,20 +659,30 @@ async function applyDuplicateEdgePropagation(
 async function applyResolutionSimilarityEdges(
   client: pg.Client,
   instanceId: string,
-  nodes: LintNodeRow[]
-): Promise<void> {
+  nodes: LintNodeRow[],
+  options: { graphConfig?: GraphRuntimeConfig; embeddingProvider?: EmbeddingProvider }
+): Promise<string[]> {
+  const warnings: string[] = [];
   const resolvedQuestions = nodes.filter((node) => node.question_status === 'resolved' && node.question_resolution);
-  if (resolvedQuestions.length === 0) return;
+  if (resolvedQuestions.length === 0) return warnings;
+  const embeddingName = options.graphConfig?.embeddingName;
+  if (!embeddingName || !options.embeddingProvider) {
+    warnings.push('graph_lint_resolution_similarity_skipped_missing_embedding');
+    return warnings;
+  }
+  const threshold = options.graphConfig?.similarityThreshold ?? 0.78;
+  const matchCount = Math.max(5, options.graphConfig?.maxClassificationJobsPerSave ?? 10);
   for (const question of resolvedQuestions) {
-    const candidates = nodes
-      .filter((node) => node.chunk_id !== question.chunk_id)
-      .map((node) => ({
-        node,
-        score: textSimilarity(question.question_resolution ?? '', node.content),
-      }))
-      .filter((candidate) => candidate.score >= 0.35)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
+    const queryVector = await options.embeddingProvider.embed(question.question_resolution ?? '');
+    const candidates = await matchResolutionChunks(client, {
+      embeddingName,
+      instanceId,
+      queryVector,
+      threshold,
+      matchCount,
+      excludeChunkId: question.chunk_id,
+      allowedChunkIds: new Set(nodes.map((node) => node.chunk_id)),
+    });
     for (const candidate of candidates) {
       await client.query(
         `
@@ -618,17 +696,117 @@ async function applyResolutionSimilarityEdges(
         [
           instanceId,
           question.chunk_id,
-          candidate.node.chunk_id,
-          candidate.score,
-          'Resolution text matched candidate chunk content during graph lint.',
+          candidate.chunk_id,
+          candidate.similarity,
+          'Resolution text matched candidate chunk embedding during graph lint.',
           JSON.stringify({
             created_by: 'graph_lint_resolution_similarity',
-            source: 'resolution_text_similarity',
+            source: 'resolution_embedding_similarity',
+            embedding_name: embeddingName,
           }),
         ]
       );
     }
   }
+  return warnings;
+}
+
+async function evaluateDuplicatePropagationGate(options: {
+  llmClient: LlmClient;
+  graphConfig: GraphRuntimeConfig;
+  duplicate: LintEdgeRow;
+  fromNode?: LintNodeRow;
+  toNode?: LintNodeRow;
+  otherNode?: LintNodeRow;
+  sourceEdge: LintEdgeRow;
+}): Promise<{ decision: 'equivalent' | 'diverges'; confidence?: number; reason?: string }> {
+  const traceId = `graph-lint-duplicate-equivalence:${options.duplicate.id}:${options.sourceEdge.id}:${options.toNode?.chunk_id ?? 'unknown'}`;
+  const completion = await resolveGraphLlmCompletion({
+    llmClient: options.llmClient,
+    graphConfig: options.graphConfig,
+    traceId,
+    messages: [
+      {
+        role: 'system',
+        content:
+          'Decide whether a duplicate chunk is content-equivalent enough to inherit one graph edge. Return only JSON with decision, confidence, and reason.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          duplicate_edge_id: options.duplicate.id,
+          source_edge: {
+            id: options.sourceEdge.id,
+            relation: options.sourceEdge.relation,
+            reasoning: options.sourceEdge.reasoning,
+            confidence_score: options.sourceEdge.confidence_score,
+          },
+          original_duplicate_chunk: nodeGatePayload(options.fromNode),
+          inheriting_duplicate_chunk: nodeGatePayload(options.toNode),
+          edge_other_chunk: nodeGatePayload(options.otherNode),
+        }),
+      },
+    ],
+    parameters: { temperature: 0 },
+  });
+  if (!completion.ok) {
+    return { decision: 'diverges', reason: 'Graph LLM resolver unavailable for duplicate propagation.' };
+  }
+  const parsed = parseLlmJson(completion.text, DuplicateEquivalenceSchema);
+  if (!parsed.ok) {
+    return { decision: 'diverges', reason: 'Graph LLM equivalence response did not match schema.' };
+  }
+  return parsed.data;
+}
+
+function nodeGatePayload(node: LintNodeRow | undefined): Record<string, unknown> | null {
+  if (!node) return null;
+  return {
+    chunk_id: node.chunk_id,
+    document_path: node.document_path,
+    heading_path: node.heading_path,
+    content: excerpt(node.content, 1_200),
+    provenance_basis: node.provenance_basis,
+    question_status: node.question_status,
+    question_resolution: node.question_resolution,
+  };
+}
+
+async function matchResolutionChunks(
+  client: pg.Client,
+  input: {
+    embeddingName: string;
+    instanceId: string;
+    queryVector: number[];
+    threshold: number;
+    matchCount: number;
+    excludeChunkId: string;
+    allowedChunkIds: Set<string>;
+  }
+): Promise<Array<{ chunk_id: string; similarity: number }>> {
+  const rpcName = pg.escapeIdentifier(`match_chunks_${input.embeddingName}`);
+  const result = await client.query<{ chunk_id: string; similarity: number }>(
+    `
+    SELECT chunk_id::text AS chunk_id, similarity::float AS similarity
+    FROM ${rpcName}($1::vector, $2::double precision, $3::integer, $4::text, NULL::text[], 'any'::text, false)
+    `,
+    [vectorRpcArgument(input.queryVector), input.threshold, input.matchCount, input.instanceId]
+  );
+  return result.rows.filter(
+    (row) =>
+      row.chunk_id !== input.excludeChunkId &&
+      input.allowedChunkIds.has(row.chunk_id) &&
+      Number.isFinite(row.similarity) &&
+      row.similarity >= input.threshold
+  );
+}
+
+function vectorRpcArgument(value: number[]): string {
+  return `[${value.join(',')}]`;
+}
+
+function addWarningOnce(warnings: string[], warning: string): void {
+  if (!warnings.includes(warning)) warnings.push(warning);
 }
 
 function questionFindings(nodes: LintNodeRow[], edges: LintEdgeRow[], now = new Date()): LintCategoryInput[] {
@@ -1039,8 +1217,8 @@ function summarizeCommunities(items: Array<Record<string, unknown>>): Record<str
   };
 }
 
-function lintWarnings(deadLetters: DeadLetterRow[], rules: Set<string>, dryRun: boolean): string[] {
-  const warnings: string[] = [];
+function lintWarnings(deadLetters: DeadLetterRow[], rules: Set<string>, dryRun: boolean, extraWarnings: string[]): string[] {
+  const warnings = [...extraWarnings];
   if (deadLetters.length > 0) warnings.push('graph_dead_letters_present');
   if (!rules.has('LINT-R2')) warnings.push('graph_lint_duplicate_propagation_skipped_by_rules');
   if (dryRun) warnings.push('graph_lint_dry_run_no_persistence');
@@ -1059,8 +1237,8 @@ function nodeRef(node: LintNodeRow): Record<string, unknown> {
   };
 }
 
-function excerpt(content: string): string {
-  return content.replace(/\s+/g, ' ').trim().slice(0, 240);
+function excerpt(content: string, maxLength = 240): string {
+  return content.replace(/\s+/g, ' ').trim().slice(0, maxLength);
 }
 
 function arrayLength(value: unknown): number {
@@ -1103,31 +1281,6 @@ function edgeKey(source: string, target: string, relation: string): string {
   return `${source}\u0000${target}\u0000${relation}`;
 }
 
-function metadataString(metadata: Record<string, unknown> | null, key: string): string | null {
-  const value = metadata?.[key];
-  return typeof value === 'string' ? value : null;
-}
-
-function textSimilarity(left: string, right: string): number {
-  const leftTokens = tokenSet(left);
-  const rightTokens = tokenSet(right);
-  if (leftTokens.size === 0 || rightTokens.size === 0) return 0;
-  let overlap = 0;
-  for (const token of leftTokens) {
-    if (rightTokens.has(token)) overlap += 1;
-  }
-  return Number((overlap / leftTokens.size).toFixed(4));
-}
-
-function tokenSet(value: string): Set<string> {
-  return new Set(
-    value
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter((token) => token.length > 2 && !RESOLUTION_STOP_WORDS.has(token))
-  );
-}
-
 function alternatingChain(
   chunkIds: string[],
   edges: LintEdgeRow[],
@@ -1154,8 +1307,6 @@ function alternatingChain(
   }
   return chain;
 }
-
-const RESOLUTION_STOP_WORDS = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'into', 'resolved', 'resolve']);
 
 export const __testing = {
   stableFindingId,

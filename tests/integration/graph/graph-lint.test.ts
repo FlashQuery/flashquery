@@ -1,9 +1,12 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import pg from 'pg';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { loadConfig, type FlashQueryConfig } from '../../../src/config/loader.js';
+import { runGraphLint } from '../../../src/graph/lint.js';
 import { initLogger } from '../../../src/logging/logger.js';
+import { recordLlmUsage, drainCostWrites } from '../../../src/llm/cost-tracker.js';
+import type { LlmClient, LlmCompletionResult } from '../../../src/llm/runtime-types.js';
 import { maintainVault, resetMaintenanceStateForTests } from '../../../src/services/maintenance.js';
 import { initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
 import { setupTestSupabase } from '../../helpers/supabase.js';
@@ -88,6 +91,44 @@ async function seedGraph(client: pg.Client): Promise<{ chunks: string[] }> {
   return { chunks: [a, b, c, d] };
 }
 
+function duplicateGateMock(decisions: Array<'equivalent' | 'diverges'>): LlmClient {
+  const result = (decision: 'equivalent' | 'diverges'): LlmCompletionResult => ({
+    text: JSON.stringify({
+      decision,
+      confidence: decision === 'equivalent' ? 0.93 : 0.91,
+      reason: decision === 'equivalent' ? 'The duplicate chunk preserves the same claim.' : 'The candidate changes the operational meaning.',
+    }),
+    modelName: 'graph-lint-mock',
+    providerName: 'mock-provider',
+    inputTokens: 12,
+    outputTokens: 8,
+    latencyMs: 1,
+  });
+  return {
+    completeByPurpose: vi.fn(async (_purpose, _messages, _parameters, traceId) => {
+      const completion = result(decisions.shift() ?? 'equivalent');
+      recordLlmUsage({
+        instanceId: TEST_INSTANCE_ID,
+        purposeName: 'graph-classifier',
+        modelName: completion.modelName,
+        providerName: completion.providerName,
+        inputTokens: completion.inputTokens,
+        outputTokens: completion.outputTokens,
+        costUsd: 0,
+        latencyMs: completion.latencyMs,
+        fallbackPosition: 1,
+        traceId: traceId ?? null,
+      });
+      return { ...completion, purposeName: 'graph-classifier', fallbackPosition: 1 };
+    }),
+    complete: vi.fn(),
+    chat: vi.fn(),
+    chatByPurpose: vi.fn(),
+    chatByPurposeUnrecorded: vi.fn(),
+    getModelForPurpose: vi.fn(),
+  } as unknown as LlmClient;
+}
+
 describe.skipIf(!HAS_SUPABASE).sequential('graph lint maintenance actions', () => {
   let client: pg.Client;
   let config: FlashQueryConfig;
@@ -102,10 +143,12 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph lint maintenance actions', () =
   beforeEach(async () => {
     resetMaintenanceStateForTests();
     await client.query('DELETE FROM fqc_graph_lint_runs WHERE instance_id = $1', [TEST_INSTANCE_ID]);
+    await client.query('DELETE FROM fqc_llm_usage WHERE instance_id = $1', [TEST_INSTANCE_ID]);
     await client.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]);
   });
 
   afterAll(async () => {
+    await client?.query('DELETE FROM fqc_llm_usage WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.query('DELETE FROM fqc_graph_lint_runs WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.end().catch(() => undefined);
@@ -132,7 +175,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph lint maintenance actions', () =
     expect(secondPayload?.raw_findings.some((finding) => finding.delta === 'recurring')).toBe(true);
   });
 
-  it('T-I-034 reports duplicate edge propagation details', async () => {
+  it('T-I-034 gates duplicate edge propagation with LLM equivalence and honors dry-run', async () => {
     const { chunks } = await seedGraph(client);
     const before = await client.query<{ id: string }>(
       `
@@ -144,22 +187,27 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph lint maintenance actions', () =
     );
     const beforeIds = new Set(before.rows.map((row) => row.id));
 
-    const result = await maintainVault(config, { action: 'graph_lint', rules: ['LINT-R2'] });
+    const result = await runGraphLint({
+      databaseUrl: config.supabase.databaseUrl,
+      instanceId: TEST_INSTANCE_ID,
+      rules: ['LINT-R2'],
+      graphConfig: { enabled: true, classificationPurpose: 'graph-classifier', maxClassificationJobsPerSave: 10 },
+      llmClient: duplicateGateMock(['equivalent', 'diverges']),
+    });
+    await drainCostWrites(2_000);
 
-    expect(result.ok).toBe(true);
-    if (!result.ok || !('actions' in result.payload)) return;
-    const payload = result.payload.actions[0]?.action === 'graph_lint' ? result.payload.actions[0].payload : null;
-    expect(payload?.duplicates.items[0]).toMatchObject({
+    expect(result.duplicates.items[0]).toMatchObject({
       overlap_extent: 'substantial',
       edges_propagated: expect.any(Array),
       edges_skipped: expect.any(Array),
     });
-    const propagated = payload?.duplicates.items[0]?.edges_propagated ?? [];
+    const propagated = result.duplicates.items[0]?.edges_propagated ?? [];
     expect(propagated.some((edge) => edge.new_edge_id && !beforeIds.has(edge.new_edge_id))).toBe(true);
-    expect(payload?.duplicates.items[0]?.edges_skipped).toEqual([
+    expect(result.duplicates.items[0]?.edges_skipped).toEqual([
       expect.objectContaining({
         reason: 'content_diverges',
-        other_chunk_id: chunks[3],
+        detail: 'The candidate changes the operational meaning.',
+        source_edge_id: expect.any(String),
       }),
     ]);
     const created = await client.query<{ count: string }>(
@@ -175,6 +223,41 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph lint maintenance actions', () =
       [TEST_INSTANCE_ID, chunks[2], chunks[1]]
     );
     expect(Number(created.rows[0]?.count ?? 0)).toBe(1);
+
+    const usage = await client.query<{ count: string }>(
+      `
+      SELECT count(*)::text AS count
+      FROM fqc_llm_usage
+      WHERE instance_id = $1
+        AND purpose_name = 'graph-classifier'
+        AND trace_id LIKE 'graph-lint-duplicate-equivalence:%'
+      `,
+      [TEST_INSTANCE_ID]
+    );
+    expect(Number(usage.rows[0]?.count ?? 0)).toBeGreaterThanOrEqual(2);
+
+    await client.query('DELETE FROM fqc_graph_edges WHERE instance_id = $1 AND metadata->>\'created_by\' = \'graph_lint_lint_r2\'', [TEST_INSTANCE_ID]);
+    const dryRun = await runGraphLint({
+      databaseUrl: config.supabase.databaseUrl,
+      instanceId: TEST_INSTANCE_ID,
+      rules: ['LINT-R2'],
+      dryRun: true,
+      graphConfig: { enabled: true, classificationPurpose: 'graph-classifier', maxClassificationJobsPerSave: 10 },
+      llmClient: duplicateGateMock(['equivalent', 'diverges']),
+    });
+    expect(dryRun.duplicates.items[0]?.edges_propagated).toContainEqual(
+      expect.objectContaining({ dry_run: true, new_edge_id: null })
+    );
+    const afterDryRun = await client.query<{ count: string }>(
+      `
+      SELECT count(*)::text AS count
+      FROM fqc_graph_edges
+      WHERE instance_id = $1
+        AND metadata->>'created_by' = 'graph_lint_lint_r2'
+      `,
+      [TEST_INSTANCE_ID]
+    );
+    expect(Number(afterDryRun.rows[0]?.count ?? 0)).toBe(0);
   });
 
   it('deletes stale edges in non-dry-run lint and leaves them untouched during dry-run', async () => {

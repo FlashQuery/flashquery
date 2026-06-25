@@ -764,9 +764,17 @@ async function runGraphLintAction(
     throw new Error('graph_lint requires config.supabase.databaseUrl for run-history storage');
   }
   const { runGraphLint } = await import('../graph/lint.js');
+  const { llmClient } = await import('../llm/client.js');
+  const { createEmbeddingProviderForCatalogEntry } = await import('../embedding/provider.js');
+  const embeddingEntry = config.embeddings?.find((entry) => entry.name === config.graph?.embeddingName);
   return await runGraphLint({
     databaseUrl: config.supabase.databaseUrl,
     instanceId: config.instance.id,
+    graphConfig: config.graph,
+    llmClient,
+    ...(embeddingEntry
+      ? { resolutionEmbeddingProvider: createEmbeddingProviderForCatalogEntry(config, embeddingEntry) }
+      : {}),
     rules: input.rules,
     scope: input.scope,
     dryRun: input.dry_run === true,

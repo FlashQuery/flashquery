@@ -3,6 +3,8 @@ import pg from 'pg';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { loadConfig, type FlashQueryConfig } from '../../../src/config/loader.js';
+import type { EmbeddingProvider } from '../../../src/embedding/provider.js';
+import { runGraphLint } from '../../../src/graph/lint.js';
 import { initLogger } from '../../../src/logging/logger.js';
 import { createPgGraphQueryStore, queryGraph } from '../../../src/graph/queries.js';
 import { maintainVault, resetMaintenanceStateForTests } from '../../../src/services/maintenance.js';
@@ -14,6 +16,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const configPath = resolve(__dirname, '../../fixtures/flashquery.test.yml');
 const TEST_INSTANCE_ID = 'graph-provenance-question-test';
+const EMBEDDING_DIMENSIONS = 1536;
 
 function parseResult(result: { content: Array<{ type: 'text'; text: string }> }): unknown {
   return JSON.parse(result.content[0]?.text ?? '{}');
@@ -26,13 +29,20 @@ function configForTest(): FlashQueryConfig {
   if (process.env.DATABASE_URL) config.supabase.databaseUrl = process.env.DATABASE_URL;
   config.supabase.skipDdl = false;
   config.instance.id = TEST_INSTANCE_ID;
-  config.embeddings = [];
+  config.embeddings = [{ name: 'primary', dimensions: EMBEDDING_DIMENSIONS, endpoints: [] }];
+  config.graph = {
+    ...(config.graph ?? {}),
+    enabled: true,
+    embeddingName: 'primary',
+    similarityMode: 'threshold',
+    similarityThreshold: 0.78,
+  };
   return config;
 }
 
 async function insertChunk(
   client: pg.Client,
-  input: { path: string; heading: string; status?: string }
+  input: { path: string; heading: string; content?: string; status?: string; embedding?: number[] }
 ): Promise<string> {
   const document = await client.query<{ id: string }>(
     `
@@ -46,14 +56,38 @@ async function insertChunk(
     `
     INSERT INTO fqc_chunks (
       id, instance_id, document_id, heading_path, heading_level, breadcrumb,
-      content, content_hash, chunk_index
+      content, content_hash, chunk_index, embedding_primary, embedding_primary_model,
+      embedding_primary_dimensions, embedding_primary_provider, embedding_primary_truncated,
+      embedding_primary_indexed_at
     )
-    VALUES (gen_random_uuid(), $1, $2, $3, 1, $3, 'content', md5($3), 0)
+    VALUES (
+      gen_random_uuid(), $1, $2, $3, 1, $3, $4, md5($4), 0,
+      $5::vector, 'mock-embedding', $6, 'mock-provider', false, now()
+    )
     RETURNING id::text AS id
     `,
-    [TEST_INSTANCE_ID, document.rows[0].id, input.heading]
+    [
+      TEST_INSTANCE_ID,
+      document.rows[0].id,
+      input.heading,
+      input.content ?? 'content',
+      `[${(input.embedding ?? vector(2)).join(',')}]`,
+      EMBEDDING_DIMENSIONS,
+    ]
   );
   return chunk.rows[0].id;
+}
+
+function vector(activeIndex: number): number[] {
+  return Array.from({ length: EMBEDDING_DIMENSIONS }, (_, index) => (index === activeIndex ? 1 : 0));
+}
+
+function resolutionEmbeddingProvider(vector: number[]): EmbeddingProvider {
+  return {
+    embed: async () => vector,
+    getDimensions: () => EMBEDDING_DIMENSIONS,
+    getProviderInfo: () => ({ provider: 'mock-provider', model: 'mock-embedding' }),
+  };
 }
 
 describe.skipIf(!HAS_SUPABASE).sequential('graph provenance and question reads', () => {
@@ -177,16 +211,18 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph provenance and question reads',
   it('T-I-028 graph lint flags resolved question dependents and creates resolution-similarity resolves edges', async () => {
     const question = await insertChunk(client, { path: '/question.md', heading: 'Question' });
     const dependent = await insertChunk(client, { path: '/dependent.md', heading: 'Dependent' });
-    const resolution = await insertChunk(client, { path: '/resolution.md', heading: 'Resolution' });
-    await client.query(
-      `
-      UPDATE fqc_chunks
-      SET content = 'The cache invalidation bug is resolved by rotating the token salt.',
-          content_hash = md5('The cache invalidation bug is resolved by rotating the token salt.')
-      WHERE instance_id = $1 AND id = $2
-      `,
-      [TEST_INSTANCE_ID, resolution]
-    );
+    const resolution = await insertChunk(client, {
+      path: '/resolution.md',
+      heading: 'Resolution',
+      content: 'Credential seasoning rotation repaired the stale cache authenticator failure.',
+      embedding: vector(0),
+    });
+    const unrelated = await insertChunk(client, {
+      path: '/unrelated.md',
+      heading: 'Unrelated',
+      content: 'Quarterly billing invoices need a new export format.',
+      embedding: vector(1),
+    });
 
     await client.query(
       `
@@ -196,9 +232,10 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph provenance and question reads',
       VALUES
         ($1, $4, NULL, 'resolved', 'Resolved by rotating the token salt.'),
         ($2, $4, NULL, NULL, NULL),
-        ($3, $4, NULL, NULL, NULL)
+        ($3, $4, NULL, NULL, NULL),
+        ($5, $4, NULL, NULL, NULL)
       `,
-      [question, dependent, resolution, TEST_INSTANCE_ID]
+      [question, dependent, resolution, TEST_INSTANCE_ID, unrelated]
     );
     await client.query(
       `
@@ -210,12 +247,16 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph provenance and question reads',
       [TEST_INSTANCE_ID, question, dependent]
     );
 
-    const result = await maintainVault(configForTest(), { action: 'graph_lint', rules: ['LINT-Q1'] });
+    const graphConfig = configForTest();
+    const result = await runGraphLint({
+      databaseUrl: graphConfig.supabase.databaseUrl,
+      instanceId: TEST_INSTANCE_ID,
+      rules: ['LINT-Q1'],
+      graphConfig: graphConfig.graph,
+      resolutionEmbeddingProvider: resolutionEmbeddingProvider(vector(0)),
+    });
 
-    expect(result.ok).toBe(true);
-    if (!result.ok || !('actions' in result.payload)) return;
-    const payload = result.payload.actions[0]?.action === 'graph_lint' ? result.payload.actions[0].payload : null;
-    expect(payload?.questions.items[0]).toMatchObject({
+    expect(result.questions.items[0]).toMatchObject({
       chunk_id: question,
       question_status: 'resolved',
       downstream_impact_count: 2,
@@ -234,7 +275,22 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph provenance and question reads',
     );
     expect(edge.rows[0]).toMatchObject({
       id: expect.any(String),
-      metadata: expect.objectContaining({ created_by: 'graph_lint_resolution_similarity' }),
+      metadata: expect.objectContaining({
+        created_by: 'graph_lint_resolution_similarity',
+        source: 'resolution_embedding_similarity',
+      }),
     });
+    const unrelatedEdge = await client.query<{ id: string }>(
+      `
+      SELECT id::text
+      FROM fqc_graph_edges
+      WHERE instance_id = $1
+        AND source_chunk_id = $2
+        AND target_chunk_id = $3
+        AND relation = 'resolves'
+      `,
+      [TEST_INSTANCE_ID, question, unrelated]
+    );
+    expect(unrelatedEdge.rows).toHaveLength(0);
   });
 });
