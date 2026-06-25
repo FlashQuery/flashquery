@@ -1,0 +1,13 @@
+kind: edge
+description: Weak anecdotal evidence should still classify as supports. NOTE on low_confidence_flag — it CAN be elicited (verified once) but describing it in classify_edge regressed relation accuracy on gemma4 (supersedes/elaborates/duplicates flipped), so the flag instruction was reverted and the strict flag check is deferred to a stronger model. See NL/PORT_BACK notes.
+source:
+  chunk_id: anecdote
+  key_claims:
+    - "One user anecdotally reported the app felt faster after the cache was enabled, though no measurements were taken"
+target:
+  chunk_id: claim
+  key_claims:
+    - "The cache improves latency"
+expect:
+  primary_relation_in: [supports]
+  min_edges: 1

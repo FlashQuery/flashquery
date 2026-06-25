@@ -14,12 +14,17 @@ import type { LlmTransport } from './llm-client.ts';
 // ── Content-independent criteria library ────────────────────────────────────
 export const CRITERIA: Record<string, string> = {
   grounded:
-    'Every part of the output is directly supported by the source text; nothing is invented, added, or overstated.',
+    'Every part of the output is supported by the source; nothing is invented, added, or changed ' +
+    'in MEANING. Faithful reformatting of the same value (e.g. a different date format like ' +
+    '"14 March" vs "March 14th", or an equivalent rephrasing) is fine, and OMITTING detail is fine ' +
+    '(that is completeness, not grounding). Fail only for invented or meaning-changed content.',
   atomic:
     'Each item states one fact and does not bundle multiple INDEPENDENT facts. A single ' +
     'comparative result (e.g. "X is 9% better than Y") or a fact paired with its own ' +
     'consequence/deadline (e.g. "kept 13 months, then deleted") counts as ONE fact, not several. ' +
-    'Only mark fail when genuinely unrelated facts are crammed into one item.',
+    'But a list of multiple distinct items in one entry (e.g. "three steps: a, b, c") is NOT ' +
+    'atomic — each item should be its own entry. Mark fail when unrelated facts or a multi-item ' +
+    'list are crammed into one item.',
   complete:
     "The output captures the source's main FACTUAL points (ignore marketing, opinion, and " +
     'filler — those are not facts). Before marking fail, re-read the output items; only fail ' +

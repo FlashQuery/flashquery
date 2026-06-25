@@ -53,6 +53,22 @@ Where the staged changes live in the workbench:
 
 | 2026-06-25 | prompt | JSON well-formedness on number-dense passages: gemma4 emitted a stray empty-string element and let a later field bleed into an unclosed `key_claims` array. Node template now requires "exactly ONE well-formed JSON object: close every array/string, no empty-string element, no field bleeding into another's array." Fixed numeric-fidelity case 0→11/11. (Expected to be a non-issue on larger models; harmless to them.) | prompts/graph-prompts.yml `analyze_node` | STAGED local |
 
+| 2026-06-25 | prompt | `key_claims` on enumerations: the model bundled "three steps: a, b, c" into one claim. Node template now says to SPLIT lists/enumerations into one claim per item. Model now splits correctly. (Judge `atomic` was also refined to flag list-bundling — workbench-only.) | prompts/graph-prompts.yml `analyze_node` | STAGED local |
+
+| 2026-06-25 | prompt | Re-confirming the node ENUM suite after the NL prompt edits caught a regression: the now-denser `analyze_node` prompt crowded out `external_refs`, dropping "(see RFC-0042)" (consistently → []). Strengthened the field guidance ("extract EVERY cited identifier incl. parentheticals"). Node enum suite back to 8/8; edge suite unaffected (classify_edge unchanged). Lesson: shared-prompt additions can regress secondary fields — re-confirm the whole suite after edits. | prompts/graph-prompts.yml `analyze_node` | STAGED local |
+
+| 2026-06-25 | finding (no change) | `metadata.low_confidence_flag` is NOT addable to `classify_edge` on gemma4: describing it regressed relation classification on the fuzzy pairs (supersedes/elaborates/duplicates flipped). Reverted. classify_edge is near gemma4's complexity ceiling — defer low_confidence_flag to a stronger model, or test whether a bigger model holds relations with it present. | classify_edge | DEFERRED (model ceiling) |
+| 2026-06-25 | prompt | `external_refs` strengthened to catch parenthetical citations "(see RFC-0042)" — regressed under prompt crowding, now robust. | analyze_node | STAGED local |
+
+## Consolidated `analyze_node` deltas to push (one shot)
+
+All NL-driven node-prompt changes live in `prompts/graph-prompts.yml` and should land in
+`analyze_node` together: (1) output exactly one well-formed JSON object; (2) key_claims is a flat
+array of non-empty strings, consolidated (3-10) but without dropping consequences/conditions/
+comparatives; (3) split enumerations into one claim per item; (4) field definitions for
+certainty/staleness/question_status/provenance; (5) reasoning-first; (6) the format-only few-shot
+example; plus the schema deltas in `src/local-schemas.ts` (optional `reasoning`, relaxed hash).
+
 ## Natural-language evaluation (no production change)
 
 The LLM-as-judge for NL outputs (key_claims, chunk_summary, edge reasoning) is a **workbench

@@ -1,0 +1,12 @@
+kind: nl
+field: key_claims
+description: Structural — an enumerated list of three steps must be SPLIT into separate claims (tested via min_claims + per-step capture). Atomic is omitted because the model also emits an ordering claim that re-lists the steps, which atomic correctly flags; that strictness is covered by other cases.
+input: |
+  The onboarding flow has three required steps: first, create an account; second, verify your
+  email address; and third, connect a data source. The steps must be completed in that order.
+criteria: [grounded, complete]
+min_claims: 3
+must_capture:
+  - "onboarding requires creating an account"
+  - "onboarding requires verifying your email address"
+  - "onboarding requires connecting a data source"

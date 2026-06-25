@@ -28,7 +28,9 @@ prompts:
           distinct key facts (typically 3-10 for a chunk), not every sub-clause. But do NOT
           drop information: include consequences, deadlines, conditions, and comparative
           results. If a statement pairs a fact with its consequence (e.g. "kept 13 months,
-          then deleted"), keep BOTH halves rather than only the first.
+          then deleted"), keep BOTH halves rather than only the first. SPLIT lists and
+          enumerations: if the text enumerates items (first/second/third, or a/b/c), make
+          EACH item its own claim rather than one claim listing them all.
       - chunk_summary: string        (one sentence)
       - provenance_basis: string|null
           Name the EXTERNAL source that grounds the claims (a doc, RFC, system, dataset).
@@ -49,7 +51,9 @@ prompts:
           medium = true now but drifts with no fixed expiry (counts, status, ownership).
           low = durable (definitions, concepts, design rationale, historical facts).
           unknown = cannot tell.
-      - external_refs: string[]      (cited external ids/links; [] if none)
+      - external_refs: string[]   Extract EVERY cited external identifier: RFC/standard numbers,
+          document names, URLs, ticket IDs — INCLUDING ones in parentheticals like "(see RFC-0042)".
+          Use [] only if the chunk cites nothing external.
       - temporal_markers: string[]   (dates, deadlines, version markers; [] if none)
       - analyzed_content_hash: string  (leave "" — the system fills this in)
 

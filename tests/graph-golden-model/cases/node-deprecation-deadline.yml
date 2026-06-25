@@ -14,6 +14,8 @@ expect:
   certainty_level: high
   staleness_risk: high
   question_status: open
+  question_resolution_present: false
+  reasoning_present: true
   key_claims_min: 2
   key_claims_contains:
     - deprecat

@@ -1,0 +1,11 @@
+kind: nl
+field: key_claims
+description: Structural — a passage that contradicts itself; BOTH conflicting claims must be surfaced, not silently reconciled (feeds downstream contradiction detection).
+input: |
+  The initial benchmark showed the cache reduced p95 latency by 40%, a clear win. However, after
+  re-running the test on production hardware, the team concluded the cache had no measurable effect
+  on latency. The discrepancy is still unexplained.
+criteria: [grounded, complete]
+must_capture:
+  - "the initial benchmark showed the cache reduced p95 latency by 40%"
+  - "on production hardware the cache had no measurable effect on latency"

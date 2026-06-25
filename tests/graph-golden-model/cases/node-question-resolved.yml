@@ -8,4 +8,5 @@ input: |
   this question is now considered resolved.
 expect:
   question_status: resolved
+  question_resolution_present: true
   key_claims_min: 1

@@ -121,12 +121,23 @@ reference; new `consistent` criterion. Case `nl-consistency-deprecation`.
   - Note: with `atomic` omitted here, one claim bundled GA+adoption+target; fine for the
     completeness focus, but a reminder that very-long-doc atomicity is untested.
 
-## Structural nice-to-haves (do if cheap)  ☐
+## Structural nice-to-haves  ☑ (2026-06-25, gemma4)
 
-- ☐ **Enumerations** — "three things: a, b, c" → all three, atomic.
-  - Findings:
-- ☐ **Self-contradiction within a passage** — does extraction surface both sides? (feeds downstream contradiction detection)
-  - Findings:
+- ◐ **Enumerations** — 8/9; surfaced TWO real issues, both fixed, with one accurately-detected
+  residual. (1) The model originally bundled "three steps: a, b, c" into one claim → added a node
+  rule to SPLIT enumerations into one claim per item; it now does. (2) The JUDGE's `atomic` did not
+  catch list-bundling → refined `atomic` ("a list of multiple items in one entry is NOT atomic"),
+  validated by it now correctly failing a re-listing claim while the positive/negative controls
+  still behave. Residual: the model emits an ordering claim that re-lists the items, which the judge
+  (correctly) flags as non-atomic — left as an accurate finding rather than over-tuned away.
+- ☑ **Self-contradiction** — 6/6. Both conflicting claims surfaced (cache reduced p95 40% AND had
+  no measurable effect), plus the "discrepancy unexplained" note — no silent reconciliation. Good
+  for downstream contradiction detection.
+
+## Phase 5 — negative control (added)  ☑
+
+- ☑ `nl-consistency-negative` (given-mode): a summary asserting an unsupported "new GraphQL API"
+  was marked `consistent`=fail. Cross-output consistency now validated BOTH directions.
 
 ---
 
@@ -155,5 +166,11 @@ refinements) — the ones worth porting back or remembering:
   `judge_reasoning` on edge cases. All judge-criteria changes are workbench-only (no prod change).
 - 2026-06-25: Phase 6 done — no position bias at ~10-paragraph scale; the model scaled to 14
   claims (past the soft 3-10 hint) and kept all late-paragraph facts. Completeness nudge beats
-  the count hint, so long docs aren't truncated. **Phases 1-6 complete.** Remaining: the two
-  structural nice-to-haves (enumerations, self-contradiction) and a cross-output negative control.
+  the count hint, so long docs aren't truncated. **Phases 1-6 complete.**
+- 2026-06-25: Structural + cross-output negative done. Enumerations: model bundled list items →
+  added node rule to split enumerations (one claim per item); judge `atomic` didn't catch
+  list-bundling → refined it (multi-item list = non-atomic), controls still hold. Self-contradiction:
+  both sides surfaced (good for contradiction detection). Cross-output consistency now has a
+  passing negative control. **Entire NL test plan complete.** Production-bound prompt deltas from
+  NL work (all in `analyze_node`, logged in PORT_BACK): well-formed-JSON + flat/consolidated +
+  completeness + split-enumerations. Everything else (judge criteria, harness) is workbench-only.

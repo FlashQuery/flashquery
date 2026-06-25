@@ -1,0 +1,8 @@
+kind: node
+description: Exercises certainty_level=unknown — the chunk's confidence is genuinely indeterminable (fuzzy axis, accept unknown or low).
+input: |
+  The attached figures may be from either the staging run or the production run; it is unclear
+  which. The source is unlabeled and no author or date is given.
+expect:
+  certainty_level_in: [unknown, low]
+  key_claims_min: 1

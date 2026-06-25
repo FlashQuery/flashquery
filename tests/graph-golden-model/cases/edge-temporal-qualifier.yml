@@ -1,0 +1,14 @@
+kind: edge
+description: Exercises metadata.qualifiers.temporal — a version-bounded replacement should record the temporal qualifier. Relation is a judgment call (a replaced value both supersedes and contradicts), so accept either.
+source:
+  chunk_id: cfg-v2
+  key_claims:
+    - "As of v2, the default request timeout is 30 seconds, replacing the previous value"
+target:
+  chunk_id: cfg-v1
+  key_claims:
+    - "The default request timeout is 60 seconds"
+expect:
+  primary_relation_in: [supersedes, contradicts]
+  min_edges: 1
+  require_qualifier: temporal

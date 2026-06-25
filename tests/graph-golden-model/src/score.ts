@@ -150,6 +150,12 @@ export function scoreEdge(testCase: EdgeCase, result: EdgeOpResult): ScoredEdge 
         pass: validEdges.some((edge) => edge.qualifierKinds.includes(e.require_qualifier!)),
         detail: `got ${JSON.stringify(validEdges.map((edge) => edge.qualifierKinds))}`,
       });
+    if (e.require_low_confidence_flag)
+      checks.push({
+        name: 'an edge sets low_confidence_flag',
+        pass: validEdges.some((edge) => edge.lowConfidenceFlag === true),
+        detail: `got ${JSON.stringify(validEdges.map((edge) => edge.lowConfidenceFlag))}`,
+      });
     if (e.confidence_min !== undefined)
       checks.push({
         name: `primary confidence >= ${e.confidence_min}`,

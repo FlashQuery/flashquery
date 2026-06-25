@@ -1,0 +1,15 @@
+kind: edge
+description: Exercises metadata.qualifiers.uncertainty — a hedged supports relation should record the uncertainty qualifier.
+source:
+  chunk_id: prelim
+  key_claims:
+    - "Preliminary and noisy data suggests the cache may improve latency, but this is not confirmed"
+target:
+  chunk_id: claim
+  key_claims:
+    - "The cache improves latency"
+expect:
+  primary_relation: supports
+  expect_relations: [supports]
+  min_edges: 1
+  require_qualifier: uncertainty

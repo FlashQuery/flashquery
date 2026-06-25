@@ -1,15 +1,13 @@
 kind: edge
-description: Source updates/replaces the target's now-outdated value — supersedes.
+description: Source explicitly replaces the target document in full (clean supersession, not a value conflict). A replaced numeric value reads as both supersedes and contradicts, so this uses a document-level replacement to isolate supersedes.
 source:
-  chunk_id: policy-v2
+  chunk_id: policy-2026
   key_claims:
-    - "As of v2, the default request retry limit is 5"
-    - "This replaces the earlier retry limit"
+    - "The 2026 Security Policy supersedes and fully replaces the 2024 Security Policy"
 target:
-  chunk_id: policy-v1
+  chunk_id: policy-2024
   key_claims:
-    - "The default request retry limit is 3"
+    - "The 2024 Security Policy defines the organization's access rules"
 expect:
-  primary_relation: supersedes
-  expect_relations: [supersedes]
+  primary_relation_in: [supersedes]
   min_edges: 1

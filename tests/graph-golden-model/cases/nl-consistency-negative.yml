@@ -1,0 +1,10 @@
+kind: nl
+field: chunk_summary
+description: Cross-output NEGATIVE control — a summary that asserts something the claims do not support must be marked NOT consistent. (given-mode; input is the claims, given is the over-asserting summary)
+input: |
+  Claims:
+  - The /search endpoint is deprecated as of v2.
+  - Callers must migrate to /query before the Q3 2026 cutoff.
+given: "The /search endpoint is deprecated and is being replaced by a new GraphQL API."
+criteria: [consistent]
+expect_fail: [consistent]

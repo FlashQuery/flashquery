@@ -19,6 +19,7 @@ export interface ValidatedEdge {
   sourceClaimsReferenced: number[];
   targetClaimsReferenced: number[];
   llmAssessment?: string;
+  lowConfidenceFlag?: boolean;
   /** Which qualifier kinds the model attached non-empty arrays for. */
   qualifierKinds: string[];
   /** Passed the real validateGraphEdgeDraft + relation/index sanity checks. */
@@ -98,6 +99,7 @@ export async function runEdgeOp(
       sourceClaimsReferenced: edge.source_claims_referenced,
       targetClaimsReferenced: edge.target_claims_referenced,
       llmAssessment: edge.metadata?.llm_assessment,
+      lowConfidenceFlag: edge.metadata?.low_confidence_flag,
       qualifierKinds,
       valid,
       validationError,

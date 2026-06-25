@@ -1,0 +1,8 @@
+kind: node
+description: Documents that gemma4 commits to a definite staleness bucket rather than emitting unknown, even when staleness is genuinely indeterminable. Accepts any of unknown/medium/low for this ambiguous case.
+input: |
+  An undated note refers to "the current rate" without saying when it was written or what period
+  it covers. There is no version, deadline, or date anywhere in the text.
+expect:
+  staleness_risk_in: [unknown, medium, low]
+  key_claims_min: 1

@@ -69,6 +69,8 @@ export interface EdgeExpect {
   llm_assessment_in?: string[];
   /** At least one valid edge must carry a non-empty qualifier of this kind. */
   require_qualifier?: 'temporal' | 'conditional' | 'uncertainty';
+  /** A valid edge must set metadata.low_confidence_flag = true (hedged/weak link). */
+  require_low_confidence_flag?: boolean;
   /** The primary (highest-confidence valid) edge's confidence must be >= this. */
   confidence_min?: number;
   /** Judge the primary edge's natural-language `reasoning` against these criteria
