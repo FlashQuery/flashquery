@@ -1,0 +1,14 @@
+kind: edge
+description: Source adds a related, additional capability beyond the target's claim — extends.
+source:
+  chunk_id: formats-extra
+  key_claims:
+    - "The API also returns CSV and Parquet, in addition to JSON"
+target:
+  chunk_id: formats-base
+  key_claims:
+    - "The API returns JSON responses"
+expect:
+  primary_relation: extends
+  expect_relations: [extends]
+  min_edges: 1

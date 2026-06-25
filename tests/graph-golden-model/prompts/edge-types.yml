@@ -1,0 +1,75 @@
+# LOCAL WORKING COPY of src/graph/defaults/edge-types.yml.
+# Refine here, run the workbench, then push back to production when ready.
+# Diffs from production are tracked in ../PORT_BACK.md.
+#
+# Refinement baked in: supports / elaborates / extends descriptions sharpened to
+# separate the gradient gemma4 was collapsing (validated — clean diagonal matrix).
+relations:
+  - name: contains
+    category: structural
+    directionality: directed
+    detection_method: structural
+    description: A parent document section contains a child section.
+  - name: references
+    category: structural
+    directionality: directed
+    detection_method: structural
+    description: A source chunk links to or cites a target chunk.
+    metadata_schema:
+      unresolved_target:
+        type: string
+        optional: true
+      unresolved_anchor:
+        type: string
+        optional: true
+  - name: supports
+    category: classified
+    directionality: directed
+    detection_method: classified
+    description: The source chunk provides EVIDENCE, data, or results that back up the target chunk's claim (not merely more detail).
+  - name: contradicts
+    category: classified
+    directionality: symmetric
+    detection_method: classified
+    description: Two chunks make incompatible claims.
+  - name: supersedes
+    category: classified
+    directionality: directed
+    detection_method: classified
+    description: The source chunk replaces or updates the target chunk.
+  - name: duplicates
+    category: classified
+    directionality: symmetric
+    detection_method: classified
+    description: Two chunks express substantially the same claim.
+  - name: depends_on
+    category: classified
+    directionality: directed
+    detection_method: classified
+    description: The source chunk requires the target chunk to be true or complete.
+  - name: elaborates
+    category: classified
+    directionality: directed
+    detection_method: classified
+    description: The source chunk adds explanatory DETAIL to the SAME claim in the target (no new claim, not evidence).
+  - name: summarizes
+    category: classified
+    directionality: directed
+    detection_method: classified
+    description: The source chunk summarizes the target chunk.
+    requires_claim_support: false
+  - name: rationale_for
+    category: classified
+    directionality: directed
+    detection_method: classified
+    description: The source chunk explains the reason for the target chunk.
+  - name: extends
+    category: classified
+    directionality: directed
+    detection_method: classified
+    description: The source chunk adds a NEW, related claim or capability not present in the target (beyond mere detail).
+  - name: resolves
+    category: classified
+    directionality: directed
+    detection_method: classified
+    description: The source chunk resolves a question or concern in the target chunk.

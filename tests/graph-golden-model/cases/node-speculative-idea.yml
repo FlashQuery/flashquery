@@ -1,0 +1,11 @@
+kind: node
+description: Hedged, undecided proposal — exercises certainty_level=low.
+input: |
+  ## Possible gRPC migration (early thinking)
+
+  We might eventually move some internal services from REST to gRPC. It is unclear
+  whether the performance gains would justify the migration effort, and no decision
+  has been made yet. This is an early idea that we may or may not pursue.
+expect:
+  certainty_level: low
+  key_claims_min: 1

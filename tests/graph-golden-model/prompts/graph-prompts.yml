@@ -1,0 +1,93 @@
+# LOCAL WORKING COPY of src/graph/defaults/graph-prompts.yml.
+# This is the editable source the workbench uses. Refine here; when the suite is
+# green on our target model, this file (plus edge-types.yml and any logic fixes)
+# is what gets pushed to production. Diffs tracked in ../PORT_BACK.md.
+#
+# Refinements baked in vs. the as-wired production prompts:
+#  - node: full field schema + definitions, reasoning-first, sharpened certainty /
+#    staleness buckets, question_status null rule, provenance = external-only,
+#    analyzed_content_hash optional.
+#  - edge: relation vocabulary injected, edge schema described, reasoning-first per
+#    edge, and an explicit qualifier-extraction instruction.
+prompts:
+  - id: analyze_node
+    version: "2-wb"
+    template: |-
+      You analyze ONE document chunk for a knowledge graph. Return ONLY a JSON object
+      matching the schema below — no prose, no markdown, no code fences.
+
+      First fill "reasoning" with a short step-by-step evaluation (justify certainty_level
+      and staleness_risk against the definitions). Complete it BEFORE the other fields.
+
+      Schema (keys, in this order):
+      - reasoning: string            (your brief evaluation, written first)
+      - key_claims: string[]         (atomic factual claims, in order)
+      - chunk_summary: string        (one sentence)
+      - provenance_basis: string|null
+          Name the EXTERNAL source that grounds the claims (a doc, RFC, system, dataset).
+          Use null when the chunk is self-contained — never cite "the text" itself.
+      - question_status: "open"|"deferred"|"resolved"|null
+          null UNLESS the chunk itself poses a question. Do not invent one.
+          open = asked, unanswered; deferred = explicitly postponed; resolved = answered here.
+      - question_resolution: string|null
+      - certainty_level: "high"|"medium"|"low"|"unknown"
+          high = stated as settled/decided/ratified; medium = probable but unconfirmed;
+          low = hedged/speculative/proposed; unknown = not determinable.
+      - staleness_risk: "low"|"medium"|"high"|"unknown"
+          high = pinned to an expiring anchor (deadline, cutoff, version cutover, dated
+                 decision); score high even before that date arrives.
+          medium = true now but drifts with no fixed expiry (counts, status, ownership).
+          low = durable (definitions, concepts, design rationale, historical facts).
+          unknown = cannot tell.
+      - external_refs: string[]      (cited external ids/links; [] if none)
+      - temporal_markers: string[]   (dates, deadlines, version markers; [] if none)
+      - analyzed_content_hash: string  (leave "" — the system fills this in)
+
+      Example of the OUTPUT FORMAT only (illustrative — do NOT copy its content; note
+      every list is an array and any cited identifier appears in external_refs):
+      {"reasoning":"Defines a term; stated as fact, no expiry, cites a standard.","key_claims":["UTC is the primary time standard"],"chunk_summary":"Explains what UTC is and cites the standard.","provenance_basis":"ITU-R TF.460","question_status":null,"question_resolution":null,"certainty_level":"high","staleness_risk":"low","external_refs":["ITU-R TF.460"],"temporal_markers":[],"analyzed_content_hash":""}
+
+      Chunk:
+      {{chunk_content}}
+    required_variables:
+      - chunk_content
+    overridable: true
+  - id: classify_edge
+    version: "2-wb"
+    template: |-
+      You classify the relationship FROM the source chunk TO the target chunk for a
+      knowledge graph. Return ONLY a JSON object { "edges": Edge[] } — no prose, no fences.
+      Emit an empty edges array if no relationship holds.
+
+      Classified relation types:
+      {{graph:classified_types}}
+
+      Each Edge has:
+      - reasoning: string          (write this FIRST: what in the claims makes the relation hold)
+      - relation: one of the relation names above (choose the most specific)
+      - source_claims_referenced: number[]   (indices into source_key_claims)
+      - target_claims_referenced: number[]   (indices into target_key_claims)
+      - confidence_score: number 0..1
+      - metadata:
+          llm_assessment: "strong"|"moderate"|"weak"|"uncertain"
+          qualifiers: { temporal: string[], conditional: string[], uncertainty: string[] }
+            Each qualifier is an ARRAY of strings (a list, even for a single item) — e.g.
+            "conditional": ["only when the working set fits in memory"]. Never a bare string.
+            Inspect the relationship for constraints and RECORD them:
+            - conditional: REQUIRED whenever the source qualifies its claim with words like
+              "when", "if", "only", "provided", "as long as", "unless" — put that condition
+              as a one-element array. Do not leave it empty if such a condition is present.
+            - temporal: time/version bounds (["as of v2"], ["after Q3"]).
+            - uncertainty: hedges (["may"], ["might"]) that weaken the link.
+            Use [] for a kind that does not apply.
+
+      Source:
+      {{source_chunk}}
+
+      Target:
+      {{target_chunk}}
+    required_variables:
+      - graph:classified_types
+      - source_chunk
+      - target_chunk
+    overridable: true

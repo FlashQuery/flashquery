@@ -1,0 +1,15 @@
+kind: node
+description: >
+  A question explicitly tabled with no decision taken. NOTE: deferred vs resolved is a
+  judgment call — "we decided to defer" is arguably resolved (a decision was made),
+  while "no decision, revisit later" leans deferred. This axis is inherently fuzzy, so
+  we accept either rather than forcing a brittle single answer.
+input: |
+  ## Database sharding
+
+  Should we shard the primary database to handle projected growth? No decision has been
+  made. We are not deciding this now; the question stays on the backlog to revisit after
+  the storage migration.
+expect:
+  question_status_in: [deferred, resolved]
+  key_claims_min: 1

@@ -1,0 +1,15 @@
+kind: edge
+description: Two unrelated chunks (billing policy vs. UI theming) — should yield no edge. False-positive guard.
+source:
+  chunk_id: billing-policy
+  key_claims:
+    - "Invoices are issued monthly"
+    - "Late payments incur a 2 percent fee"
+target:
+  chunk_id: ui-theme
+  key_claims:
+    - "The dashboard supports a dark theme"
+    - "Theme preference persists across sessions"
+expect:
+  min_edges: 0
+  max_edges: 0

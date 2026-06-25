@@ -1,0 +1,11 @@
+kind: node
+description: Current operational state that drifts over time with no fixed expiry — exercises staleness=medium (drift bucket).
+input: |
+  ## Platform team
+
+  The platform team currently has eight engineers and is actively hiring two more.
+  At present, on-call rotation covers business hours only; weekend coverage is
+  handled on a best-effort basis. The team reports to the VP of Engineering.
+expect:
+  staleness_risk: medium
+  key_claims_min: 2

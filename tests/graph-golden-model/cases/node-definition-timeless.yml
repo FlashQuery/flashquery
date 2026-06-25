@@ -1,0 +1,15 @@
+kind: node
+description: Durable, definitional content with no expiry — exercises certainty=high and staleness=low (durable bucket).
+input: |
+  ## Idempotency
+
+  An operation is idempotent if performing it multiple times produces the same
+  result as performing it once. In HTTP, GET, PUT, and DELETE are expected to be
+  idempotent, whereas POST generally is not. Idempotency is what lets a client
+  safely retry a request after a network failure without risking duplicate side
+  effects.
+expect:
+  certainty_level: high
+  staleness_risk: low
+  question_status: null
+  key_claims_min: 2

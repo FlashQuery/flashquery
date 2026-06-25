@@ -1,0 +1,14 @@
+kind: edge
+description: Same pair as edge-duplicates with source/target swapped — duplicates is symmetric, so the relation should hold both directions.
+source:
+  chunk_id: limits-doc-b
+  key_claims:
+    - "Clients may send up to 100 requests per minute to the API"
+target:
+  chunk_id: limits-doc-a
+  key_claims:
+    - "The API rate limit is 100 requests per minute"
+expect:
+  primary_relation: duplicates
+  expect_relations: [duplicates]
+  min_edges: 1

@@ -1,0 +1,24 @@
+kind: edge
+description: Source revokes an endpoint that the target still tells callers to use — a clear contradiction.
+source:
+  chunk_id: api-v2-notes
+  key_claims:
+    - "The legacy /search endpoint has been removed in v2"
+    - "Callers must migrate to the /query endpoint"
+target:
+  chunk_id: onboarding-guide
+  key_claims:
+    - "Use the /search endpoint to run queries"
+    - "The /search endpoint is the recommended entry point for new integrations"
+expect:
+  primary_relation: contradicts
+  expect_relations:
+    - contradicts
+  forbid_relations:
+    - supports
+    - duplicates
+  min_edges: 1
+  max_edges: 3
+  # Metadata axes on a clear-cut pair: the model should be confident and assess it strongly.
+  llm_assessment_in: [strong, moderate]
+  confidence_min: 0.6

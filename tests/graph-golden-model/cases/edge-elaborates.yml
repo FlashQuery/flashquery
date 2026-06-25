@@ -1,0 +1,15 @@
+kind: edge
+description: Source adds detail to a claim the target states briefly — elaborates.
+source:
+  chunk_id: sso-detail
+  key_claims:
+    - "SSO is implemented via SAML 2.0 using an SP-initiated flow"
+    - "Users are provisioned just-in-time on first login, mapped by email domain"
+target:
+  chunk_id: sso-overview
+  key_claims:
+    - "The product supports single sign-on"
+expect:
+  primary_relation: elaborates
+  expect_relations: [elaborates]
+  min_edges: 1

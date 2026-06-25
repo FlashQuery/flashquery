@@ -1,0 +1,22 @@
+{
+  "name": "flashquery-graph-golden-model",
+  "version": "0.1.0",
+  "description": "Prompt-refinement workbench for FlashQuery graph intelligence. Runs YAML test cases through the REAL graph schema/vocabulary/validation logic against one or more OpenAI-compatible (Ollama) models, scores actual vs. expected, and writes a detailed report for debugging and prompt refinement. Not a CI gate; an iteration loop. Refined prompts/logic get pushed back to src/graph.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "node": "tsx src/run.ts node",
+    "edge": "tsx src/run.ts edge",
+    "all": "tsx src/run.ts all",
+    "selftest": "tsx src/run.ts all --mock"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

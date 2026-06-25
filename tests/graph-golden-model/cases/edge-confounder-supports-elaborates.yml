@@ -1,0 +1,16 @@
+kind: edge
+description: >
+  Confounder — source could read as supports (evidence for) or elaborates (adds detail to)
+  the target. Both are defensible, so accept either as primary; the point is to see which
+  the model leans toward in the confusion matrix.
+source:
+  chunk_id: cache-detail
+  key_claims:
+    - "The cache uses an LRU policy with a 5-minute TTL and cut p95 latency by 40%"
+target:
+  chunk_id: cache-claim
+  key_claims:
+    - "Caching improves API performance"
+expect:
+  primary_relation_in: [supports, elaborates]
+  min_edges: 1

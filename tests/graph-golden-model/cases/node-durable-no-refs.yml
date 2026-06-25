@@ -1,0 +1,15 @@
+kind: node
+description: Durable definitional content with no citations and no dates — exercises empty external_refs, empty temporal_markers, and null provenance_basis.
+input: |
+  ## Linked list
+
+  A linked list stores its elements in nodes, where each node holds a value and a
+  pointer to the next node. Unlike an array, its elements are not contiguous in
+  memory, so insertion and deletion at a known position are constant time, while
+  random access is linear time.
+expect:
+  staleness_risk: low
+  external_refs_empty: true
+  temporal_markers_empty: true
+  provenance_present: false
+  key_claims_min: 2

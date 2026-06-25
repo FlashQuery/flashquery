@@ -1,0 +1,16 @@
+kind: edge
+description: Source is a one-line summary of the target's detailed multi-step content — summarizes (requires_claim_support is false for this relation).
+source:
+  chunk_id: migration-tldr
+  key_claims:
+    - "In short, the migration moves every service onto the container platform"
+target:
+  chunk_id: migration-detail
+  key_claims:
+    - "Each service is containerized with a Dockerfile and Helm chart"
+    - "Services are cut over one at a time behind a feature flag"
+    - "The legacy VM fleet is decommissioned after the final cutover"
+expect:
+  primary_relation: summarizes
+  expect_relations: [summarizes]
+  min_edges: 1

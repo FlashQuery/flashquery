@@ -1,0 +1,15 @@
+kind: edge
+description: Source gives empirical evidence for the target's claim — supports.
+source:
+  chunk_id: perf-benchmark
+  key_claims:
+    - "After enabling the read-through cache, p95 latency dropped from 800ms to 480ms"
+    - "Error rates were unchanged during the test"
+target:
+  chunk_id: design-claim
+  key_claims:
+    - "Adding a read-through cache improves API latency"
+expect:
+  primary_relation: supports
+  expect_relations: [supports]
+  min_edges: 1

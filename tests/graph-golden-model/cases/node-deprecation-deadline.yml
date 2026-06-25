@@ -1,0 +1,23 @@
+kind: node
+description: High-certainty deprecation notice with a hard deadline, a citation, and an open question.
+input: |
+  ## v2 API — Search endpoint deprecation
+
+  The legacy `/search` endpoint is deprecated as of v2 and will be removed.
+  All callers must migrate to `/query` before the Q3 2026 cutoff; after that
+  date the old endpoint returns 410 Gone. This decision is final and has been
+  ratified by the platform team (see RFC-0042).
+
+  Open question: do we keep a read-only shim for external partners who cannot
+  migrate in time, or hold firm on the cutoff?
+expect:
+  certainty_level: high
+  staleness_risk: high
+  question_status: open
+  key_claims_min: 2
+  key_claims_contains:
+    - deprecat
+    - "Q3 2026"
+  temporal_markers_min: 1
+  external_refs_contains:
+    - RFC-0042

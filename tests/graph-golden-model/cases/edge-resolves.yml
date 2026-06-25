@@ -1,0 +1,14 @@
+kind: edge
+description: Source answers an open question/concern raised in the target — resolves.
+source:
+  chunk_id: auth-decision
+  key_claims:
+    - "Decision: we will use Auth0 as the authentication provider"
+target:
+  chunk_id: auth-question
+  key_claims:
+    - "Open question: which authentication provider should we adopt for the platform?"
+expect:
+  primary_relation: resolves
+  expect_relations: [resolves]
+  min_edges: 1

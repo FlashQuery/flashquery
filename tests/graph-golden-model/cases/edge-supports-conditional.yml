@@ -1,0 +1,15 @@
+kind: edge
+description: Source supports the target but only under a stated condition — should classify as supports AND attach a conditional qualifier.
+source:
+  chunk_id: cache-conditional
+  key_claims:
+    - "When the working set fits in memory, enabling the cache lowered p95 latency by 40%"
+target:
+  chunk_id: cache-benefit-claim
+  key_claims:
+    - "The cache improves latency"
+expect:
+  primary_relation: supports
+  expect_relations: [supports]
+  require_qualifier: conditional
+  min_edges: 1

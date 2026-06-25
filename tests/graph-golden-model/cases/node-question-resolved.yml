@@ -1,0 +1,11 @@
+kind: node
+description: Poses a question and then answers it — exercises question_status=resolved with a non-empty resolution.
+input: |
+  ## SSO decision
+
+  Open question from last quarter: should we support single sign-on for enterprise
+  customers? Decision: yes. We will adopt SAML-based SSO for enterprise tiers, and
+  this question is now considered resolved.
+expect:
+  question_status: resolved
+  key_claims_min: 1

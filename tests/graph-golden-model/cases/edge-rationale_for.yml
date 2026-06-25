@@ -1,0 +1,14 @@
+kind: edge
+description: Source explains WHY the target decision was made — rationale_for.
+source:
+  chunk_id: monorepo-rationale
+  key_claims:
+    - "We chose a monorepo because it makes cross-service refactors atomic and shares one toolchain"
+target:
+  chunk_id: monorepo-decision
+  key_claims:
+    - "The org standardized on a single monorepo for all services"
+expect:
+  primary_relation: rationale_for
+  expect_relations: [rationale_for]
+  min_edges: 1

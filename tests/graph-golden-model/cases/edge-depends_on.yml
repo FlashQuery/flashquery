@@ -1,0 +1,15 @@
+kind: edge
+description: Source requires the target to be true/complete first — depends_on.
+source:
+  chunk_id: export-job
+  key_claims:
+    - "The nightly export job runs only after the ETL pipeline has finished loading the warehouse"
+    - "If the warehouse is not loaded, the export is skipped"
+target:
+  chunk_id: etl-pipeline
+  key_claims:
+    - "The ETL pipeline loads the warehouse tables each night"
+expect:
+  primary_relation: depends_on
+  expect_relations: [depends_on]
+  min_edges: 1

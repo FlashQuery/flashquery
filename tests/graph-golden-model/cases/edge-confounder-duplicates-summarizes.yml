@@ -1,0 +1,15 @@
+kind: edge
+description: >
+  Confounder — source restates the target concisely. Could be duplicates (same claim) or
+  summarizes (condenses). Accept either as primary; watch which the model picks.
+source:
+  chunk_id: restate
+  key_claims:
+    - "The service is deployed in three regions for redundancy"
+target:
+  chunk_id: original
+  key_claims:
+    - "We run the service in us-east, us-west, and eu-central so that a single region outage does not take it down"
+expect:
+  primary_relation_in: [duplicates, summarizes]
+  min_edges: 1

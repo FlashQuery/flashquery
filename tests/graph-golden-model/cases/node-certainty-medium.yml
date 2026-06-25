@@ -1,0 +1,11 @@
+kind: node
+description: A claim asserted as probable but not confirmed — exercises certainty_level=medium (the hardest bucket).
+input: |
+  ## Incident 4821 — preliminary note
+
+  The outage was most likely caused by the config change deployed that morning.
+  We have not fully confirmed root cause, but the timing strongly suggests it.
+  A complete post-mortem is still in progress.
+expect:
+  certainty_level: medium
+  key_claims_min: 1
