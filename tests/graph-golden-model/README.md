@@ -449,13 +449,16 @@ a perf optimization to validate here before proposing to the dev/arch agent — 
 
 ## 11. Planned skill
 
-A skill (e.g. `flashquery-graph-testgen`) is planned to let an agent operate this workbench. It
-should be **thin orchestration over the docs in this repo** — inline the guardrails and step order,
-reference the docs for schemas/commands so it doesn't drift. Triggers: "create/refine a graph test",
-"cover `<axis/relation>`", "fill a coverage gap", "test analyze_node / classify_edge", "run the
-graph golden-model". Each workflow below is specified as **Purpose / Uses (reads) / Touches (writes) / Produces /
-Behavior** so a skill can be built from it. They compose: a typical loop is 11.1 → 11.2 → (11.3 and,
-for NL, 11.4) → repeat → 11.5 → 11.6 → eventually 11.7.
+Status: the planned skill now exists as `flashquery-graph-testgen` at
+`.agents/skills/flashquery-graph-testgen/SKILL.md`.
+
+The skill lets an agent operate this workbench. It is **thin orchestration over the docs in this
+repo** — it inlines the guardrails and step order, and references the docs for schemas/commands so
+it doesn't drift. Triggers: "create/refine a graph test", "cover `<axis/relation>`", "fill a
+coverage gap", "test analyze_node / classify_edge", "run the graph golden-model". Each workflow
+below is specified as **Purpose / Uses (reads) / Touches (writes) / Produces / Behavior** and is
+mirrored by the skill's workflow-specific reference files. They compose: a typical loop is 11.1 →
+11.2 → (11.3 and, for NL, 11.4) → repeat → 11.5 → 11.6 → eventually 11.7.
 
 ### 11.1 Author a test
 - **Purpose:** turn an uncovered/under-covered axis (or a target the user names) into a runnable,
