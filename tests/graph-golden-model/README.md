@@ -1,110 +1,203 @@
-# FlashQuery Graph Golden-Model
+# FlashQuery Graph Golden-Model — Workbench Design & Operations
 
-A prompt-refinement workbench for graph intelligence. It runs contrived YAML test
-cases through the **real** graph extraction logic (schemas, vocabulary, validation
-imported straight from `src/graph`) against one or more local Ollama models, scores
-what the model produced against what we expect, and writes a detailed report you
-use to refine the prompts.
+A prompt-refinement workbench for FlashQuery's graph intelligence. It runs hand-written YAML
+test cases through the **real** graph extraction logic (schemas, vocabulary, validation imported
+straight from `src/graph`) against one or more OpenAI-compatible models (local Ollama by default),
+scores the model's output against expectations, and writes a detailed report used to refine the
+prompts — proven on a weak local model first so that stronger/commercial models clear the bar.
 
-It is **not** a CI gate. It's the iteration loop that gets our prompts to reliably
-produce the categorizations, relationships, and indicators we believe the graph can
-extract — proven on a weak local model first, so commercial models clear the bar
-comfortably.
+This document is numbered for self-reference (e.g. "see §9.6") and is intended to be the
+research/design record that feeds a later **requirements documentation step** for the AI dev/arch
+agent. Supporting docs: `cases/README.md` (authoring rules), `cases/COVERAGE.md` (the live
+coverage matrix), `cases/NL-TESTPLAN.md` (natural-language plan + learnings log), `PORT_BACK.md`
+(the production push manifest). See §13 for all references.
 
-## Production-safety policy (important)
+---
 
-**Do NOT modify `src/graph` (production) during refinement.** Other processes run
-against production source and can't tolerate uncontrolled graph changes. Every proposed
-change is staged *locally* in this workbench:
+## 1. Purpose and scope
+
+### 1.1 What this is
+A standalone TypeScript harness (run with `tsx`, no build step) that feeds contrived YAML "cases"
+to a model and scores the result. It imports the real FlashQuery graph logic (JSON repair, edge
+validation, vocabulary/prompt loaders, Zod schemas) so it exercises production behavior, but it
+sources the *prompts and schema* from editable local copies so refinement never touches production
+(§2, §3).
+
+### 1.2 What it is not
+It is **not** a CI gate and not a correctness proof of the graph feature. It is an iteration loop
+for getting the prompts (and any logic/schema fixes) to reliably produce the categorizations,
+relationships, and indicators the graph relies on.
+
+### 1.3 Relationship to production and the requirements step
+Refinements are staged locally and pushed to production in one deliberate, reviewed change (§10.5).
+The findings in §9 and the open questions in §12 are the inputs to the requirements step; product
+decisions (§12) are for the user, architecture/implementation decisions are for the dev/arch agent.
+
+### 1.4 Prior art
+Modeled on the existing `tests/macro-framework/macro-golden-model` "executable spec" pattern: a
+standalone harness that exercises real source behavior against a model without being wired into a
+live instance.
+
+---
+
+## 2. Production-safety policy (non-negotiable)
+
+**Do NOT modify `src/graph` (production) during refinement.** Other processes run against
+production source and cannot tolerate uncontrolled graph changes. Every proposed change is staged
+locally:
 
 - prompt text → `prompts/graph-prompts.yml` (local copy of the prod file)
-- relation vocabulary → `prompts/edge-types.yml` (local copy of the prod file)
+- relation vocabulary/descriptions → `prompts/edge-types.yml` (local copy of the prod file)
 - schema/logic deltas → `src/local-schemas.ts` (the workbench parses against this)
 
-The workbench imports the real *unchanged* helpers (the json-repair corrector, edge
-validation, the YAML loaders) but sources prompts/schema from the local copies above.
-When the suite is green, push everything (prompts + edge-types + schema/logic) to
-production in ONE deliberate shot, then test there. `PORT_BACK.md` is the manifest.
+The workbench imports the real *unchanged* helpers (the json-repair corrector, edge validation, the
+YAML loaders) but sources prompts/schema from the local copies above. When the suite is green, push
+everything to production in ONE deliberate shot, then test there (§10.5). `PORT_BACK.md` is the
+manifest of what to push.
 
-## For AI agents — orientation
+---
 
-If you are an AI agent picking this up cold, read this section first, then `cases/README.md`
-(authoring rules) and `cases/COVERAGE.md` (what's covered). The non-negotiable rule is the
-**Production-safety policy above**: never edit `src/graph`; stage everything locally.
+## 3. Architecture and design
 
-### What this is, in one paragraph
+### 3.1 Design thesis — real logic, local prompts
+The two requirements in tension are *fidelity* (test what production actually does) and *safety*
+(don't change production while iterating). The resolution: import the real parsing/validation/
+vocabulary code from `src/graph`, but render the prompts from local YAML and parse against a local
+schema copy. This means a discovered bug is a real bug, while every fix is contained until the
+deliberate push.
 
-A standalone TypeScript harness (run with `tsx`, no build step) that feeds hand-written YAML
-"cases" to an OpenAI-compatible model (local Ollama by default), then scores the model's output
-against expectations. It imports the *real* FlashQuery graph logic (JSON repair, edge validation,
-vocabulary/prompt loaders, Zod schemas) so you're testing production behavior — but it sources the
-*prompts and schema* from editable local copies so you can refine without touching production.
+### 3.2 The two LLM operations under test
+- **Node analysis** (`analyze_node`) — for one chunk, extracts `key_claims`, `chunk_summary`,
+  `provenance_basis`, `question_status`, `question_resolution`, `certainty_level`, `staleness_risk`,
+  `external_refs`, `temporal_markers` (and a non-persisted `reasoning` field, §3.6).
+- **Edge classification** (`classify_edge`) — for a source/target pair, types the relationship into
+  the 10 classified relations with `reasoning`, `confidence_score`, claim references, and `metadata`
+  (`llm_assessment`, `qualifiers` temporal/conditional/uncertainty, `low_confidence_flag`).
 
-### Folder structure
+### 3.3 Imported real vs staged local
+| Concern | Source | Why |
+| --- | --- | --- |
+| JSON repair + Zod parse | real (`src/llm/json-repair.ts`) | the actual corrector that runs in prod |
+| edge validation | real (`src/graph/edge-validation.ts`) | real structural/relation rules |
+| prompt + vocab loaders | real (`src/graph/prompts.ts`, `vocabulary.ts`) | real rendering of `{{graph:classified_types}}` |
+| prompt templates | local (`prompts/graph-prompts.yml`) | the refinement surface |
+| relation vocabulary | local (`prompts/edge-types.yml`) | descriptions are injected; sharpening them is a lever |
+| node schema deltas | local (`src/local-schemas.ts`) | proposed schema changes, parsed via the real corrector |
+| transport | local thin client | mirrors the prod request shape; adds cache/mock |
+
+### 3.4 Response cache and resumability
+Model responses are cached on disk (`.cache/`, gitignored), keyed by a hash of the exact request
+(model + params + messages). Rationale: a multi-call case (e.g. an `nl` case = extract **then**
+judge) can exceed a single shell/run window; the cache lets an interrupted run resume — completed
+calls replay instantly, only unfinished calls hit the model. Editing a prompt changes the hash and
+correctly forces a re-run. It also speeds iteration. Disable with `--no-cache`; wipe with
+`--clear-cache`.
+
+### 3.5 Offline mock
+`--mock` returns canned, schema-valid responses so the parse/score/report pipeline can be exercised
+with no model server (`npm run selftest`). It is wiring-only — negative controls intentionally
+diverge under mock.
+
+### 3.6 The non-persisted `reasoning` field
+The node schema (`src/local-schemas.ts`) adds an optional `reasoning` field so the model can do
+chain-of-thought *inside* the JSON (the corrector cannot extract prose-then-JSON). It improves
+judgment fields and is not stored. This is distinct from a "reasoning model" (§8).
+
+---
+
+## 4. Folder structure
 
 ```
 prompts/
   graph-prompts.yml   EDITABLE local copy of prod prompts: analyze_node + classify_edge templates.
-  edge-types.yml      EDITABLE local copy of the relation vocabulary (descriptions matter — they're injected).
+  edge-types.yml      EDITABLE local copy of the relation vocabulary (descriptions are injected).
 cases/
-  *.yml               the tests. Filename prefix = kind: node-*, edge-*, nl-*.
+  *.yml               the tests. Filename prefix encodes kind: node-*, edge-*, nl-*.
   README.md           how to author cases + the test-design discipline.
-  COVERAGE.md         indicator × axis matrix with per-model status (start here to see gaps).
+  COVERAGE.md         indicator × axis matrix + per-model status (it documents how to maintain itself).
   NL-TESTPLAN.md      the natural-language test plan + a dated learnings log.
 src/
-  run.ts              CLI entry (modes + flags below).
+  run.ts              CLI entry (§5.2).
   config.ts           resolves settings from .env / flags.
-  llm-client.ts       OpenAI-compat transport + on-disk response cache + offline mock.
+  llm-client.ts       OpenAI-compat transport + response cache + offline mock.
   prompts.ts          renders messages FROM prompts/*.yml via the real loaders.
-  node-op.ts edge-op.ts nl-op.ts   run one extraction/classification/NL op (call model + parse with REAL parsers).
-  judge.ts            LLM-as-judge: criteria library + judge prompt + verdict schema (for NL outputs).
+  node-op.ts edge-op.ts nl-op.ts   run one node/edge/NL op (call model + parse with REAL parsers).
+  judge.ts            LLM-as-judge: criteria library + judge prompt + verdict schema.
   cases.ts            loads + types the YAML cases.
   score.ts            scorers (node / edge / nl) → pass/fail checks.
   report.ts           writes results/<timestamp>/report.{json,md} + console + confusion matrix.
   aggregate.ts        stitches batched runs into one scorecard + matrix (ignores mock runs).
   probe.ts            send a freeform prompt to the model (investigation only — never source answers from it).
-  local-schemas.ts    schema deltas proposed for prod but staged here (workbench parses against these).
+  local-schemas.ts    schema deltas proposed for prod but staged here.
 results/              generated reports (gitignored).
-.cache/               response cache, keyed by request hash (gitignored).
-.env                  GRAPH_GOLDEN_BASE_URL + GRAPH_GOLDEN_MODEL (see .env.example).
+.cache/               response cache (gitignored).
+.env / .env.example   GRAPH_GOLDEN_BASE_URL + GRAPH_GOLDEN_MODEL.
 PORT_BACK.md          manifest of every local change to push to production in one shot.
 ```
 
-### How to run
+---
 
+## 5. Running the workbench
+
+### 5.1 Setup and configuration
 ```
 npm install
-npm run all                      # node + edge + nl cases on the default model
-npm run node | edge | nl         # one kind
-npm run selftest                 # offline (mock model) — verifies the harness wiring only
-npx tsx src/run.ts edge --only "edge-supports,edge-contradicts" --model granite4
-npx tsx src/aggregate.ts --model gemma4:latest    # combined scorecard + confusion matrix
+cp .env.example .env     # then set the two things that matter:
+#   GRAPH_GOLDEN_BASE_URL=http://192.168.15.12:11434/v1   # OpenAI-compat base
+#   GRAPH_GOLDEN_MODEL=gemma4:latest                      # default model (comma-separate for several)
 ```
+The local Ollama box serves several models (e.g. `granite4`, `gemma4:latest`, `nemotron3:33b`).
+Both base URL and model are overridable per run (§5.2).
 
-Modes (first positional arg): `node` | `edge` | `nl` | `all` (default `all`).
+### 5.2 Modes and flags
+First positional arg = mode: `node` | `edge` | `nl` | `all` (default `all`).
+```
+npm run all | node | edge | nl
+npm run selftest                                   # offline mock; wiring check only
+npx tsx src/run.ts edge --only "edge-supports,edge-contradicts" --model granite4
+```
 Flags: `--model a,b` (one or several), `--base-url`, `--api-key`, `--only <substr[,substr...]>`,
 `--temperature`, `--baseline` (use unmodified prod prompts for A/B), `--reasoning-effort
-<none|low|medium|high>` (default `none` — disables reasoning-model "thinking"; keep it off),
-`--extra-body '<json>'`, `--no-cache`, `--clear-cache`, `--mock`.
+<none|low|medium|high>` (default `none`, §8), `--extra-body '<json>'`, `--no-cache`, `--clear-cache`,
+`--mock`.
 
-**Resumability:** model responses are cached by request hash, so a run that's interrupted (or a
-slow multi-call NL case) resumes on the next invocation — completed calls replay instantly, only
-unfinished ones hit the model. Editing a prompt changes the hash and correctly re-runs. Each NL
-extract→judge case is 2 model calls; expect long wall-clock time on weak local models.
+### 5.3 Resumability and batching
+Because of §3.4, slow suites are run in batches (e.g. `--only "edge-a,edge-b"`) or simply re-run —
+each invocation advances the cache. An `nl` extract→judge case is 2 model calls; expect long
+wall-clock time on weak local models.
 
-### The three case kinds (how to construct tests)
+### 5.4 Aggregation
+`npx tsx src/aggregate.ts --model <m>` stitches the latest result per case across all (non-mock)
+reports into one scorecard + edge confusion matrix. Use it to get the numbers for `COVERAGE.md`.
 
-Author the expectation **a priori** (your hypothesis of correct output) — never derive it from a
-model. All cases are YAML; the runner auto-discovers `cases/*.yml`. Keep `description` colon-free
-or quote it (an unquoted `:` breaks YAML).
+### 5.5 Reports
+Every run writes `results/<timestamp>/report.json` (complete) and `report.md` (human-readable). For
+every case and model it records: the model, the exact prompt sent, the raw output, the parsed
+result, validation errors, each expectation pass/fail, and — for edges — a relation confusion
+matrix (the headline artifact for which relations a model blurs).
 
-**node** — per-chunk enum/indicator extraction:
+---
+
+## 6. Test cases
+
+### 6.1 Authoring discipline
+Author the expected outcome **a priori** from human judgment, then run and observe. Never let a
+model author the expected answer (a model-derived test is guaranteed to pass and proves nothing);
+`probe.ts` is for investigation only. Diagnose any failure in this order (§9 shows worked examples):
+1. **Bad/ambiguous test** → fix or relax it.
+2. **Prompt gap** → refine `prompts/graph-prompts.yml` or `prompts/edge-types.yml`.
+3. **Logic/schema bug** → fix in `src/local-schemas.ts`; log in `PORT_BACK.md`.
+
+YAML note: keep `description` colon-free or quote it (an unquoted `:` breaks the file and the loader
+reads the whole directory, so one bad file breaks every run).
+
+### 6.2 node cases
 ```yaml
 kind: node
 description: ...
 input: |        # the chunk text
   ...
-expect:         # assert only what matters; enums are exact, *_in accepts a set (ambiguous axes)
+expect:         # assert only what matters; enums exact, *_in accepts a set (§6.5)
   certainty_level: high            # or certainty_level_in: [high, medium]
   staleness_risk: high             # or staleness_risk_in: [...]
   question_status: open            # open|deferred|resolved|null ; or question_status_in: [...]
@@ -114,10 +207,11 @@ expect:         # assert only what matters; enums are exact, *_in accepts a set 
   key_claims_contains: ["RFC-0042"]    # case-insensitive substring in some claim
   temporal_markers_min: 1
   external_refs_contains: ["RFC-0042"]
-  external_refs_empty: true            # / temporal_markers_empty / chunk_summary_nonempty / provenance_present
+  external_refs_empty: true            # also: temporal_markers_empty / chunk_summary_nonempty / provenance_present
 ```
 
-**edge** — relationship between two chunks (the edge prompt sees `key_claims`, not raw text):
+### 6.3 edge cases
+The edge prompt sees `key_claims`, not raw text.
 ```yaml
 kind: edge
 description: ...
@@ -125,20 +219,21 @@ source: { chunk_id: a, key_claims: ["..."] }   # or { chunk_id: a, text: | ... }
 target: { chunk_id: b, key_claims: ["..."] }
 expect:
   primary_relation: contradicts        # the one right answer (feeds the confusion matrix)
-  primary_relation_in: [a, b]          # OR accept a set, for genuinely confusable pairs
-  expect_relations: [contradicts]      # at least one valid edge with each
+  primary_relation_in: [a, b]          # OR accept a set (§6.5)
+  expect_relations: [contradicts]
   forbid_relations: [supports]
   min_edges: 1
   max_edges: 3
   llm_assessment_in: [strong, moderate]
   require_qualifier: temporal          # temporal | conditional | uncertainty
   confidence_min: 0.6
-  judge_reasoning: [consistent, justifies]   # LLM-judge the edge's reasoning text
+  judge_reasoning: [consistent, justifies]   # LLM-judge the edge's reasoning text (§7)
 ```
-The 10 classified relations: supports, contradicts, supersedes, duplicates, depends_on,
-elaborates, summarizes, rationale_for, extends, resolves.
+The 10 classified relations: supports, contradicts, supersedes, duplicates, depends_on, elaborates,
+summarizes, rationale_for, extends, resolves.
 
-**nl** — natural-language outputs (key_claims, chunk_summary) scored by an LLM judge:
+### 6.4 nl cases
+Natural-language outputs scored by an LLM judge (§7).
 ```yaml
 kind: nl
 field: key_claims               # or chunk_summary
@@ -146,218 +241,267 @@ description: ...
 input: |                        # source text (extracted via node analysis, then judged)
   ...
 criteria: [grounded, atomic, complete]    # default set per field if omitted
-must_capture: ["a specific fact (must itself be atomic)"]
+must_capture: ["a specific fact (must itself be atomic, §9.4)"]
 max_claims: 5                   # min_claims / max_claims = precision bounds
 # variants:
 #   given: ["a provided output"]   -> judge this instead of extracting (calibration / negative controls)
 #   expect_fail: [grounded]        -> these criteria SHOULD fail (negative controls)
 #   against: key_claims            -> judge `field` against the model's own claims (cross-output consistency)
 ```
-Judge criteria library (in `src/judge.ts`): `grounded`, `atomic`, `complete`, `faithful`,
-`representative`, `concise`, `consistent`, `justifies`. The judge is itself an LLM, so **validate
-it** with `given`-mode controls (feed known-good → expect pass; known-bad → `expect_fail`) before
-trusting a new/changed criterion.
 
-### Diagnosing a failure (in order)
+### 6.5 The `*_in` tolerances
+`certainty_level_in`, `staleness_risk_in`, `question_status_in`, `primary_relation_in` accept a set
+of values. Reserve them for axes that are **genuinely ambiguous to a careful human** (§9.5, §9.6) —
+not as a way to launder a flaky test into a pass. Default to strict single-value expectations.
 
-1. **Bad/ambiguous test?** Fix or relax it (use `*_in` only for genuinely judgment-call axes).
-2. **Prompt gap?** Refine `prompts/graph-prompts.yml` or `prompts/edge-types.yml` (descriptions are injected).
-3. **Logic/schema bug?** Fix in `src/local-schemas.ts` (staged) and log it in `PORT_BACK.md`.
+---
 
-### Gotchas learned the hard way
+## 7. LLM-as-judge
 
-- The node `analyze_node` prompt is **shared** by all node outputs — a change for one field can
-  regress another (e.g. dense prompt dropped `external_refs`). Re-confirm the whole node suite after edits.
-- `classify_edge` is near gemma4's complexity ceiling: adding instructions (e.g. a metadata field)
-  can flip the fuzzy relation pairs (supersedes↔contradicts, supports↔elaborates). Add sparingly; re-confirm relations.
-- gemma4 effectively never emits the `unknown` enum value — it commits to a definite bucket.
-- Reasoning *models* (native "thinking") are slow and unlike prod; keep `reasoning_effort=none`.
-  This is different from reasoning-first CoT (a `reasoning` field inside the JSON), which is fine.
-- After editing a judge criterion, re-run its positive AND negative calibration controls.
+### 7.1 Why a judge
+Enum/category outputs have exact answers; natural-language outputs (`key_claims`, `chunk_summary`,
+edge `reasoning`) do not. For those, the workbench feeds the source + the extracted output + a rubric
+back to the model and gets a per-criterion pass/fail verdict. The judge is a **testing tool, not a
+production prompt**.
 
-### Maintaining the docs & the feedback → push-back lifecycle
+### 7.2 Criteria library (`src/judge.ts`)
+`grounded` (no fabrication or meaning change; faithful reformatting/omission is OK), `atomic` (one
+fact per item; comparatives and fact+consequence count as one; a multi-item list does not),
+`complete` (captures the main factual points; ignore fluff), `faithful` (no distortion of
+direction/strength/polarity/scope), `representative`, `concise`, `consistent` (asserts nothing the
+reference doesn't support), `justifies` (gives a plausible rationale for an edge relation; no causal
+mechanism required). Plus per-fact `captures: <fact>`.
 
-This workbench only has value if the docs stay honest and the refinements actually flow back to
-production. The lifecycle, end to end:
+### 7.3 Calibrating the judge
+The judge is itself an LLM, so it must be validated before it's trusted. Every criterion has
+`given`-mode controls: a known-good output (expect pass) and a known-bad output (`expect_fail`).
+**After editing any criterion, re-run its positive AND negative controls** (§9.7). Criteria are
+context-sensitive: the claim/summary criteria do not transfer cleanly to edge reasoning (§9.6).
 
-1. **Run → record.** After each run, update `cases/COVERAGE.md` (status, case, model, findings) and,
-   for NL work, `cases/NL-TESTPLAN.md`'s learnings log. `COVERAGE.md` has its own "How to maintain"
-   section — follow it. Treat the matrix as the live state of the project.
-2. **Feed changes back into the editable sources, not ad hoc.** When you fix a miss, the change goes
-   into one of three places and nowhere else:
-   - prompt wording → `prompts/graph-prompts.yml` (`analyze_node` / `classify_edge`)
-   - relation vocabulary/descriptions → `prompts/edge-types.yml`
-   - schema/logic → `src/local-schemas.ts`
-   Every such change gets a row in `PORT_BACK.md` (what, why, where it lands in `src/graph`).
-3. **Re-run and re-confirm.** Because the prompts are shared, re-run the affected suite(s) and update
-   `COVERAGE.md`. A green you didn't re-verify after a shared-prompt edit is not green.
-4. **Decide.** Iterate until the suite is green on the target model(s). Use `--baseline` to quantify
-   improvement over the unmodified production prompts, and a second model (`--model`) for robustness.
-5. **Push back to production (the whole point).** When you're satisfied, apply the **consolidated
-   `PORT_BACK.md` deltas to `src/graph` in ONE deliberate change** — the prompt YAML, edge-types
-   descriptions, and the schema/logic edits together — then run this suite against the real instance
-   to confirm nothing drifted. Items marked DEFERRED (e.g. `low_confidence_flag`) do NOT go in;
-   note them for a stronger model. This single, reviewed push is how refinement reaches production
-   without the uncontrolled mid-stream changes the safety policy forbids.
+---
 
-`PORT_BACK.md` is therefore both a changelog and the production push manifest — keep it accurate;
-it is what a human reviews before the one-shot merge.
+## 8. Reasoning models, thinking, and reasoning-first
 
-### Planned: a skill to drive this workflow
+Two distinct things share the word "reasoning":
+- A **reasoning model / native thinking** (e.g. gemma4) runs a slow internal thinking pass before
+  answering. The production graph path does not use it, and it is slow. The workbench disables it by
+  default via the OpenAI-compatible `reasoning_effort: "none"`, which Ollama maps to its internal
+  "think" switch (plain models ignore it). With thinking off, gemma4 dropped from a >44s timeout to
+  ~26s in our environment. Override with `--reasoning-effort <none|low|medium|high>` or
+  `--extra-body '{"think": false}'` (the native field). Keep it off for this work.
+- **Reasoning-first / chain-of-thought** is the optional `reasoning` field inside the JSON (§3.6) —
+  a cheap single-completion technique that improves judgment-field accuracy and is unrelated to a
+  reasoning model.
 
-A skill (e.g. `flashquery-graph-testgen`) is planned to let an agent operate this workbench
-reliably. It should be **thin orchestration over the docs in this repo** (this README, `COVERAGE.md`,
-`cases/README.md`, `NL-TESTPLAN.md`, `PORT_BACK.md` are the source of truth) — inline the guardrails
-and the step order, reference the docs for detailed schemas/commands so it doesn't drift as the
-harness evolves. It should trigger on things like "create/refine a graph test", "cover `<axis/
-relation>`", "fill a coverage gap", "test analyze_node / classify_edge", "run the graph golden-model".
+External basis for the disable mechanism: Ollama thinking capability and the OpenAI-compat
+`reasoning_effort` mapping (§13.2).
 
-Workflows it must support, and the actions in each:
+---
 
-1. **Author a test.** Read `COVERAGE.md` to pick a gap → choose the kind (node | edge | nl) → write
-   the expectation *a priori* (never from a model) → create the `cases/*.yml` → add/update the
-   `COVERAGE.md` row in the same step.
-2. **Run & diagnose.** Run the case(s) (`tsx src/run.ts ...`, `reasoning_effort=none`, cache makes
-   it resumable) → read `results/<ts>/report.md` → classify any miss in order: bad/ambiguous test →
-   prompt gap → logic/schema bug.
-3. **Refine & feed back.** Apply the fix to exactly one editable source — `prompts/graph-prompts.yml`,
-   `prompts/edge-types.yml`, or `src/local-schemas.ts` (NEVER `src/graph`) → log it in `PORT_BACK.md`
-   → re-run → re-confirm shared-prompt consumers (whole node/edge suite) → update `COVERAGE.md`.
-4. **Validate the judge (NL).** Before trusting a new/changed judge criterion, run `given`-mode
-   positive and negative controls; never let a model author the expected answer.
-5. **Compare & stress.** A/B against production prompts with `--baseline`; run a second model with
-   `--model` for robustness; aggregate with `src/aggregate.ts`.
-6. **Maintain docs.** Keep `COVERAGE.md` (status banner + rows) and `NL-TESTPLAN.md` (learnings log)
-   current; record findings and model-ceiling items honestly (⚠/DEFERRED with the trade-off).
-7. **Push back to production.** When green on the target model(s), apply the consolidated
-   `PORT_BACK.md` deltas to `src/graph` in one reviewed change; exclude DEFERRED items; re-run the
-   suite against the real instance.
+## 9. Research findings and conclusions
 
-Non-negotiables the skill must enforce regardless of what's read: don't touch `src/graph` during
-refinement; `must_capture` facts must be atomic; validate the judge with controls; re-run
-calibration after any criterion edit; the production push is a separate, deliberate, reviewed step.
+Each finding states the observation, the reasoning, and the conclusion/action. Detailed per-case
+results live in `cases/COVERAGE.md` and `cases/NL-TESTPLAN.md`; the production-bound deltas are in
+`PORT_BACK.md`.
 
-## The loop
+### 9.1 The as-wired prompts under-specified the task
+**Observation:** the prompts the code sends today show the model neither the JSON schema nor (for
+edges) the relation vocabulary; the runtime also did not pass a `response_format`. On gemma4 the
+as-wired prompts scored 0/3 on the first run — the model invented its own JSON shape and, for edges,
+relation names it was never shown. **Reasoning:** the json-repair corrector fixes *syntax*; it
+cannot invent the right *fields* or *vocabulary*. **Conclusion:** the prompt must show the model the
+schema and the relation vocabulary. Both are now in the refined local prompts; `--baseline` still
+runs the as-wired versions for A/B.
 
-1. Run the suite against a model. Read `results/<timestamp>/report.md`.
-2. Where expectations miss, refine **locally**: prompt wording in
-   `prompts/graph-prompts.yml` / `prompts/edge-types.yml`; schema/logic in
-   `src/local-schemas.ts`. Log the change in `PORT_BACK.md`.
-3. Re-run. Repeat until the suite passes on the target model.
-4. Swap the model (`--model ...`) and re-run to test robustness model-to-model.
-5. Compare against the unmodified production prompts any time with `--baseline`.
-6. When stable, push all staged changes to production in one shot and test there.
+### 9.2 JSON well-formedness on dense input
+**Observation:** on number-dense passages the model emitted a stray empty-string element and let a
+later field bleed into an unclosed `key_claims` array (the corrector then mangled it). **Reasoning:**
+a longer/denser prompt+input destabilizes structure; the model "loses the array." **Conclusion:**
+the node prompt now requires "exactly ONE well-formed JSON object" (close arrays/strings, no empty
+element, no field bleeding). This is the class of issue expected to disappear on stronger models, so
+hardening it on the weak floor is no-downside.
 
-Refinement levers in the toolkit: sharper field/relation definitions, reasoning-first
-(CoT inside the JSON), explicit array/format rules, and **few-shot format examples**
-(a neutral, content-free example embedded in a template — stabilizes wobbly fields).
+### 9.3 Completeness vs consolidation tension
+**Observation:** instructing "consolidate to distinct facts" fixed over-generation but caused
+under-capture (the model dropped the consequence half of compound facts, e.g. "kept 13 months" but
+not "then deleted"). **Reasoning:** the two goals pull in opposite directions; optimizing one alone
+regresses the other. **Conclusion:** the prompt now states the balance — consolidate, *but do not
+drop* consequences/conditions/comparatives — and to split enumerations into one claim per item.
 
-## Configure
+### 9.4 Atomicity, comparatives, and enumerations
+**Observation/Reasoning:** a single comparative ("9% better than Y") is one fact, not two; a
+fact+consequence is one; but a list "three steps: a, b, c" is several. The judge initially over-split
+comparatives and under-split lists. Also, a `must_capture` fact that bundles two facts conflicts with
+the atomicity it asks for. **Conclusion:** the `atomic` criterion now treats comparatives/consequence
+as one and a multi-item list as non-atomic; `must_capture` facts must themselves be atomic.
 
-Copy `.env.example` to `.env` and set the two things that matter:
+### 9.5 Fuzzy enum axes and the `unknown` value
+**Observation:** `certainty_level`/`staleness_risk` gradations are calibration-sensitive, and gemma4
+**effectively never emits `unknown`** — it commits to a definite bucket. `deferred` vs `resolved`
+for a decision-to-defer is a genuine judgment call. **Reasoning:** some distinctions are inherently
+fuzzy; content-independent cue-word criteria fix the tractable ones (e.g. "likely/probably" ⇒
+medium; deadline/version-bound ⇒ high even before the date; durable ⇒ low), but the `unknown` value
+and `deferred`/`resolved` boundary are model/semantics judgment calls. **Conclusion:** sharpened the
+definitions where it helped (folded into the prompt); used `*_in` tolerance for the genuinely fuzzy
+cases; surfaced the residual product questions in §12 (12.1, 12.2, 12.6).
 
-```
-GRAPH_GOLDEN_BASE_URL=http://192.168.15.12:11434/v1   # OpenAI-compat base
-GRAPH_GOLDEN_MODEL=granite4                            # default model (comma-separate for several)
-```
+### 9.6 Edge confounders and the classify_edge complexity ceiling
+**Observation:** with sharpened vocabulary, all 10 relations classify correctly — but `classify_edge`
+is near gemma4's complexity ceiling: adding a metadata instruction (`low_confidence_flag`) flipped
+the fuzzy pairs (supersedes↔contradicts, supports↔elaborates, even duplicates). A replaced *value*
+genuinely reads as both supersedes and contradicts. **Reasoning:** each added instruction competes
+for the weak model's attention and degrades the sensitive relation distinctions. **Conclusion:**
+keep `classify_edge` lean; the supports/elaborates/extends distinction lives in the `edge-types.yml`
+descriptions; `low_confidence_flag` is **deferred** (§12.4, PORT_BACK) because it cannot be added on
+gemma4 without regressing relations; confusable pairs use `*_in` tolerance with confounder cases.
 
-Both are overridable per run: `--base-url`, `--model`, `--api-key`.
+### 9.7 The judge is reliable on subtle errors, with one weak criterion
+**Observation:** in `given`-mode controls the judge correctly caught unit/scale slips, flipped
+direction, quantifier/modal swaps, condition-drops, and dropped negations, while accepting faithful
+paraphrase. Its weakest criterion is `complete` — it occasionally hallucinated an omission, worse
+amid marketing fluff. **Reasoning:** completeness requires the judge to enumerate "all key facts,"
+which is the most subjective check. **Conclusion:** sharpened `complete` (ignore fluff; re-read the
+output before failing) and re-verified the negative control still fails. Division of labor:
+`grounded` catches unsupported/changed values; `faithful` catches distortions of
+direction/strength/polarity/scope.
 
-## Run
+### 9.8 Model-to-model robustness
+**Observation:** granite4 (weak/fast) reliably handles claims, certainty high/low, question
+status, refs, temporal markers — but **fails the staleness ordinal** (under-rates high→medium,
+medium→low) and resists comparative atomicity. gemma4 (thinking off) clears those. **Reasoning:**
+ordinal calibration needs a more capable model; prompt wording alone can't close it on granite4.
+**Conclusion:** gemma4 is a viable target for graph work; staleness/certainty gradation is a
+model-capability axis to confirm per model. Run `--model a,b` for robustness.
 
-```
-npm install
-npm run all                                  # node + edge cases, default model
-npm run node                                 # node cases only
-npm run edge                                 # edge cases only
-npm run selftest                             # offline (canned model) — verifies the harness itself
-npx tsx src/run.ts all --model granite4,llama3.1:8b   # several models, one report
-```
+### 9.9 Shared-prompt ripple
+**Observation:** `analyze_node` is shared by all node outputs; a density increase for one field
+(claims) dropped a secondary field (`external_refs`, including parenthetical "(see RFC-0042)").
+Similarly `classify_edge` additions rippled to relations (§9.6). **Reasoning:** instructions in a
+shared prompt compete. **Conclusion:** strengthened `external_refs` guidance; **re-confirm the whole
+node/edge suite after any shared-prompt edit**. A future option (dev/arch, §12 note) is per-field
+prompt splitting.
 
-Useful flags: `--only <substr[,substr...]>` (subset of cases), `--baseline` (use the
-unmodified production prompts instead of the local refined copies — A/B), `--model a,b`
-(several models, one report), `--temperature`, `--no-cache` / `--clear-cache`.
+### 9.10 Production-bound prompt/schema deltas (summary)
+All staged in the local sources and consolidated in `PORT_BACK.md` for one-shot push: well-formed-
+JSON instruction; flat/consolidated **and** complete `key_claims`; split enumerations; per-field
+definitions for certainty/staleness/question_status/provenance (external-only); strengthened
+`external_refs`; reasoning-first; a format-only few-shot example; relation-vocabulary descriptions in
+`edge-types.yml`; and the schema deltas (optional `reasoning`, relaxed `analyzed_content_hash`).
+**Deferred (do not push):** `low_confidence_flag` in `classify_edge` (§9.6, §12.4).
 
-### Resumable runs (response cache)
+---
 
-Model responses are cached on disk (`.cache/`, gitignored) keyed by a hash of the exact
-request (model + params + messages). This makes slow multi-call cases — notably end-to-end
-`nl` cases that do extract **then** judge — **resumable across separate runs**: if a run is
-interrupted, completed calls replay instantly on the next run and only the unfinished call
-hits the model. It also speeds iteration (unchanged calls never re-run; editing a prompt
-changes the hash and correctly re-runs). Disable with `--no-cache`; wipe with `--clear-cache`.
-This exists because each shell invocation here is wall-clock limited; the cache lets a run
-that needs more total time finish over multiple invocations.
+## 10. Maintaining the docs & the feedback → push-back lifecycle
 
-**Reasoning models vs. our `--reasoning` lever — don't conflate them.** A reasoning
-*model* (e.g. gemma4) runs a slow internal thinking pass before answering, which the
-production graph path does not use. The workbench disables it by default via
-`reasoning_effort: "none"` (Ollama maps this to its internal Think switch; plain models
-ignore it). With it off, gemma4 dropped from a 44s timeout to ~26s. Override with
-`--reasoning-effort <none|low|medium|high>` (or `--extra-body '{"think": false}'` for the
-native field). The refined prompt's reasoning-first (a `reasoning` field inside the JSON)
-is a cheap single-completion technique and is unrelated to a reasoning model.
+1. **Run → record.** After each run update `cases/COVERAGE.md` (status, case, model, findings) per
+   its own "How to maintain" section, and `cases/NL-TESTPLAN.md`'s learnings log for NL work.
+2. **Feed changes into the editable sources only** (§2): prompt YAML, `edge-types.yml`, or
+   `local-schemas.ts`. Every change gets a `PORT_BACK.md` row (what, why, where it lands).
+3. **Re-run and re-confirm** shared-prompt consumers (§9.9); update `COVERAGE.md`. A green not
+   re-verified after a shared-prompt edit is not green.
+4. **Decide.** Iterate to green on the target model(s); use `--baseline` to quantify the gain and a
+   second `--model` for robustness.
+5. **Push back to production.** Apply the consolidated `PORT_BACK.md` deltas to `src/graph` in ONE
+   reviewed change; exclude DEFERRED items; then run this suite against the real instance to confirm
+   nothing drifted. This single deliberate push is the only sanctioned route to production (§2).
 
-## What it tests
+`PORT_BACK.md` is both changelog and push manifest; it is what a human reviews before the merge.
 
-Two LLM operations, mirrored faithfully:
+---
 
-- **Node analysis** — extracts `key_claims`, `chunk_summary`, `certainty_level`,
-  `staleness_risk`, `question_status`, `external_refs`, `temporal_markers`, …
-- **Edge classification** — types a chunk pair into the 10 classified relations
-  (`supports`, `contradicts`, `supersedes`, `duplicates`, `depends_on`, `elaborates`,
-  `summarizes`, `rationale_for`, `extends`, `resolves`) with reasoning, confidence, and
-  metadata qualifiers.
+## 11. Planned skill
 
-The local prompts started as verbatim copies of what the code sends today; the as-wired
-versions are still reachable with `--baseline`. The headline early finding was that the
-as-wired prompts showed the model neither the JSON schema nor the relation vocabulary —
-both now in the refined local prompts.
+A skill (e.g. `flashquery-graph-testgen`) is planned to let an agent operate this workbench. It
+should be **thin orchestration over the docs in this repo** — inline the guardrails and step order,
+reference the docs for schemas/commands so it doesn't drift. Triggers: "create/refine a graph test",
+"cover `<axis/relation>`", "fill a coverage gap", "test analyze_node / classify_edge", "run the
+graph golden-model". Workflows and actions:
 
-## Natural-language outputs (LLM-as-judge)
+1. **Author** — read `COVERAGE.md` → pick a gap → choose kind → write the expectation a priori →
+   create `cases/*.yml` → update the `COVERAGE.md` row.
+2. **Run & diagnose** — run (`reasoning_effort=none`, cache resumable) → read the report → classify
+   the miss (bad-test → prompt → logic).
+3. **Refine & feed back** — fix one editable source (never `src/graph`) → log `PORT_BACK.md` →
+   re-run → re-confirm shared-prompt consumers → update `COVERAGE.md`.
+4. **Validate the judge** — `given`-mode positive + negative controls before trusting a criterion.
+5. **Compare & stress** — `--baseline`; second `--model`; `aggregate.ts`.
+6. **Maintain docs** — keep `COVERAGE.md` and `NL-TESTPLAN.md` current; record findings and
+   DEFERRED items honestly.
+7. **Push back** — consolidated one-shot to `src/graph` excluding DEFERRED; re-run on the instance.
 
-Enum axes (certainty, relation, …) have exact answers. Natural-language outputs —
-`key_claims`, `chunk_summary`, edge `reasoning` — don't, so `kind: nl` cases evaluate them
-with an **LLM judge** (gemma4): the source text + the extracted output + a rubric of
-content-independent criteria (`grounded`, `atomic`, `complete`, `faithful`, `representative`,
-`concise`, plus per-fact `captures: X`) go back to the model, which returns a per-criterion
-pass/fail verdict. The judge is a testing tool, not a production prompt.
+Non-negotiables to enforce regardless of what's read: don't touch `src/graph`; `must_capture` facts
+must be atomic; validate the judge with controls; re-run calibration after any criterion edit; the
+production push is a separate, reviewed step.
 
-Because the judge is itself an LLM, it's validated with `given`-mode calibration cases that
-feed known-good / known-bad output and assert the verdict (e.g. a hallucinated claim must be
-`grounded: fail`). See `cases/COVERAGE.md` → *Natural-language extraction*. An end-to-end
-`nl` case makes 2 model calls (extract + judge); run those where there's no per-call timeout.
+---
 
-```
-npm run nl                                   # natural-language cases
-```
+## 12. Open Questions (product behavior)
 
-## Aggregating batched runs
+Product-behavior decisions for the user. Architecture/implementation questions (e.g. whether to
+split `analyze_node` into per-field prompts, which model to run in production, whether to persist the
+`reasoning` field) are deferred to the dev/arch agent and are not listed here. Resolved items have
+been folded into the referenced sections.
 
-gemma4 is slow enough that a full suite can exceed a single run window, so run in
-batches (e.g. `--only "edge-supports,edge-extends"`); each batch writes its own report.
-`npx tsx src/aggregate.ts --model gemma4:latest` stitches the latest result per case
-into one scorecard + confusion matrix (it ignores `--mock` reports).
+### 12.1 Is an `unknown` value needed for `certainty_level` / `staleness_risk`? — Open
+gemma4 effectively never emits `unknown`; it commits to a definite bucket (§9.5). Does the product
+want an `unknown` value at all, and if so, what input should *deterministically* produce it?
+Sub-questions: is "indeterminable" a meaningful product state, or should the model always commit? If
+kept, define the cue(s) that warrant it.
 
-## The report
+### 12.2 Canonical semantics of `question_status` `deferred` vs `resolved` — Open
+A decision *to defer* is arguably `resolved` (a decision was made) or `deferred` (postponed). We
+currently accept either (§9.5). Product should define the intended meaning, since downstream UI/logic
+may treat them differently. Sub-question: do we distinguish "tabled, no decision yet" from "decided
+to defer until X"?
 
-Every run writes `results/<timestamp>/report.json` (complete) and `report.md`
-(human-readable). For **every case and every model** it captures: the model used,
-the exact prompt sent, the raw model output, the parsed result, validation errors,
-each expectation pass/fail, and — for edges — a relation confusion matrix. That
-confusion matrix is the headline: it shows which relation types the model blurs, i.e.
-which prompt/vocabulary descriptions need sharpening.
+### 12.3 Should a value replacement be `supersedes`, `contradicts`, or both? — Open
+When chunk B replaces a value stated in chunk A (e.g. "timeout is 30s as of v2" vs "timeout is 60s"),
+the model reasonably reads it as either supersedes or contradicts (§9.6). Product/graph-semantics
+decision: record one relation, or emit both (a multi-edge) so the UI can show "changed" and
+"conflicting" distinctly?
 
-## Layout
+### 12.4 Is `low_confidence_flag` a desired product signal on edges? — Open
+It can be elicited, but describing it in `classify_edge` regresses relation accuracy on gemma4
+(§9.6); it is currently deferred. If the product wants it, it implies a stronger model or a separate
+pass. Decision: is the flag worth that cost, or is `llm_assessment` (already captured) sufficient?
 
-```
-cases/                 YAML test cases (grow this; see cases/README.md)
-cases/COVERAGE.md      indicator × axis matrix with per-model status
-prompts/graph-prompts.yml   EDITABLE local copy of the prod prompt templates
-prompts/edge-types.yml      EDITABLE local copy of the prod relation vocabulary
-src/local-schemas.ts   staged schema deltas (workbench parses against these)
-src/prompts.ts         renders messages from prompts/*.yml via the real loaders
-src/*.ts               runner, ops, scorer, report, aggregate, probe
-results/               generated reports (gitignored)
-PORT_BACK.md           manifest of everything to push to production in one shot
-```
+### 12.5 For confusable relation pairs, is a single deterministic relation required, or is a
+confidence-ranked set acceptable? — Open
+Pairs like supports/elaborates and summarizes/duplicates are genuinely confusable (§9.6). Does the
+product need one deterministic choice per pair, or can it consume a ranked/typed set with
+confidence? This determines whether `*_in` tolerance reflects acceptable production behavior or a gap
+to close.
+
+### 12.6 `staleness_risk` of undated "current state" (counts, rates, ownership) — Open
+Should an undated "current rate"/headcount be `medium` (drifts) or `unknown` (§9.5)? Ties to 12.1.
+Product definition needed so the bucket is unambiguous.
+
+### Resolved (folded into the document)
+- **staleness_risk for deadline/version-bound content is `high` even before the date passes** —
+  Resolved; folded into the staleness definition (§9.3, §9.5, §9.10).
+- **`certainty_level: medium` needs content-independent cue words** ("likely/probably/preliminary")
+  — Resolved; folded into the certainty definition (§9.5, §9.10).
+- **`provenance_basis` names an external source, else null (never "the text")** — Resolved; folded
+  into the provenance definition (§9.10).
+- **`question_status` is null unless the chunk itself poses a question** — Resolved; folded into the
+  question_status definition (§9.10).
+
+> Note on "Matt's Comments": no such feedback blocks exist in these workbench docs (that convention
+> belongs to the FlashQuery pipeline docs). User feedback during this work has been folded directly
+> into §9 and §12.
+
+---
+
+## 13. References
+
+### 13.1 Internal
+- System under test: `src/graph/` (production graph logic), `src/llm/json-repair.ts` (corrector).
+- Feature/research doc: `flashquery-product/Roadmap/Features/Graph Document Intelligence (Jun 2026)/`.
+- Prior-art pattern: `tests/macro-framework/macro-golden-model`.
+- Supporting docs: `cases/README.md`, `cases/COVERAGE.md`, `cases/NL-TESTPLAN.md`, `PORT_BACK.md`.
+
+### 13.2 External
+- Ollama — Thinking capability: https://docs.ollama.com/capabilities/thinking
+- Ollama blog — Thinking: https://ollama.com/blog/thinking
+- `reasoning_effort` on the OpenAI-compatible endpoint (maps to Ollama "think"):
+  https://github.com/ollama/ollama/issues/14820
