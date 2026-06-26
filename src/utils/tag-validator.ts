@@ -13,13 +13,20 @@ export interface TagValidationResult {
   conflicts: string[];   // Always empty array; field retained for API compatibility (TAGS-03 removed)
 }
 
+function nonStringTagErrors(tags: readonly unknown[]): string[] {
+  return tags.flatMap((tag, index) =>
+    typeof tag === 'string' ? [] : [`Tag at index ${index} must be a string`]
+  );
+}
+
 /**
  * Normalize tags: trim whitespace, lowercase, filter empty strings.
  * Hash prefix is preserved; casing within is lowered.
  * Example: [" Status ", "MyTag", "  "] => ["status", "mytag"]
  */
-export function normalizeTags(tags: string[]): string[] {
+export function normalizeTags(tags: readonly unknown[]): string[] {
   return tags
+    .filter((tag): tag is string => typeof tag === 'string')
     .map((tag) => tag.trim().toLowerCase())
     .filter((tag) => tag.length > 0);
 }
@@ -54,16 +61,17 @@ export function validateTagUniqueness(tags: string[]): { valid: boolean; errors:
  * Normalizes once, then passes the normalized array to uniqueness validator.
  * Status mutual exclusivity check removed (D-06): #status/* tags treated like any other tag.
  */
-export function validateAllTags(tags: string[]): TagValidationResult {
+export function validateAllTags(tags: readonly unknown[]): TagValidationResult {
+  const typeErrors = nonStringTagErrors(tags);
   const normalized = normalizeTags(tags);
 
   const uniqueness = validateTagUniqueness(normalized);
-  const valid = uniqueness.valid;
+  const valid = typeErrors.length === 0 && uniqueness.valid;
 
   return {
     normalized,
     valid,
-    errors: uniqueness.errors,
+    errors: [...typeErrors, ...uniqueness.errors],
     conflicts: [], // Always empty array; field retained for API compatibility
   };
 }
@@ -79,7 +87,7 @@ export function validateAllTags(tags: string[]): TagValidationResult {
  * This is a defensive safeguard used before every frontmatter write to guarantee
  * uniqueness even if duplicates somehow bypass validation.
  */
-export function deduplicateTags(tags: string[]): string[] {
+export function deduplicateTags(tags: readonly unknown[]): string[] {
   const normalized = normalizeTags(tags);
   return Array.from(new Set(normalized));
 }

@@ -52,6 +52,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun
+from frontmatter_fields import FM
 
 
 # ---------------------------------------------------------------------------
@@ -102,6 +103,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
     doc_remove = f"_test/{TEST_NAME}_remove_{run.run_id}.md"
     doc_copy = f"_test/{TEST_NAME}_copy_{run.run_id}.md"
     doc_moved = f"_test/{TEST_NAME}_moved_{run.run_id}.md"
+    doc_bad_tags = f"_test/{TEST_NAME}_bad_tags_{run.run_id}.md"
 
     with TestContext(
         fqc_dir=args.fqc_dir,
@@ -137,9 +139,41 @@ def run_test(args: argparse.Namespace) -> TestRun:
             body="Throwaway body for remove_document.",
             tags=["fqc-test", run.run_id],
         )
+        ctx.create_file(
+            doc_bad_tags,
+            title="Version Token Doc With Bad Tags",
+            body="Malformed tag regression body.",
+            tags=["fqc-test", run.run_id],
+        )
         scan = ctx.scan_vault()
         run.step("setup: create fixtures and scan", scan.ok, scan.error or "", scan.timing_ms, scan)
         if not scan.ok:
+            return run
+
+        # Regression guard for the full-suite flake where malformed existing
+        # frontmatter tags caused tag.trim to throw inside write_document.
+        ctx.vault.write_frontmatter(doc_bad_tags, {FM.TAGS: ["valid-tag", 123]}, touch_updated=True)
+        bad_tags_write = ctx.client.call_tool(
+            "write_document",
+            mode="update",
+            identifier=doc_bad_tags,
+            content="Attempt update with malformed existing frontmatter tags.",
+        )
+        bad_tags_payload = _json(bad_tags_write.text)
+        passed = (
+            isinstance(bad_tags_payload, dict)
+            and bad_tags_payload.get("error") == "invalid_input"
+            and bad_tags_payload.get("details", {}).get("field") == "tags"
+            and "tag.trim" not in bad_tags_write.text
+        )
+        run.step(
+            "write_document rejects non-string existing frontmatter tags without runtime crash",
+            passed,
+            bad_tags_write.error or bad_tags_write.text,
+            bad_tags_write.timing_ms,
+            bad_tags_write,
+        )
+        if not passed:
             return run
 
         # doc_remove is cleaned up by remove_document later in the test (file+DB row deleted).

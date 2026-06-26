@@ -105,6 +105,16 @@ describe('validateAllTags', () => {
     expect(result.valid).toBe(true);
     expect(result.conflicts).toEqual([]);
   });
+
+  it('rejects non-string tag elements without throwing', () => {
+    const result = validateAllTags(['valid', 123, { tag: 'bad' }]);
+    expect(result.valid).toBe(false);
+    expect(result.normalized).toEqual(['valid']);
+    expect(result.errors).toEqual([
+      'Tag at index 1 must be a string',
+      'Tag at index 2 must be a string',
+    ]);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
