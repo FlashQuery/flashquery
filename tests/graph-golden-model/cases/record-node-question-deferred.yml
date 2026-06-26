@@ -1,0 +1,27 @@
+kind: record
+op: node
+input_source: synthetic
+description: >
+  Chunk that explicitly postpones a question - tests question_status deferred, null resolution, and a
+  temporal marker from the postponement horizon.
+input: |
+  The question of multi-region failover was explicitly postponed to next quarter's planning cycle, so
+  no work on it is scheduled for the current release.
+expect:
+  certainty_level: high
+  staleness_risk_in: [medium, high]
+  question_status: deferred
+  question_resolution_present: false
+  provenance_present: false
+  external_refs_empty: true
+  temporal_markers_min: 1
+judge:
+  key_claims:
+    criteria: [grounded, atomic, complete]
+    must_capture:
+      - "multi-region failover was postponed to next quarter"
+  chunk_summary:
+    criteria: [grounded, representative, concise]
+structural_only:
+  - reasoning
+  - analyzed_content_hash

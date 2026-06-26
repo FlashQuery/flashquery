@@ -1,0 +1,27 @@
+kind: record
+op: node
+input_source: synthetic
+description: >
+  Hedged preliminary finding - tests certainty medium (cue words likely/preliminary/not yet
+  confirmed) without literal-uncertainty over-triggering, self-contained provenance.
+input: |
+  Preliminary analysis suggests the new read-through caching layer will likely reduce p99 latency,
+  though the results are not yet confirmed and a full benchmark is still pending.
+expect:
+  certainty_level: medium
+  staleness_risk_in: [medium, low]
+  question_status: null
+  question_resolution_present: false
+  provenance_present: false
+  external_refs_empty: true
+  temporal_markers_empty: true
+judge:
+  key_claims:
+    criteria: [grounded, atomic, complete]
+    must_capture:
+      - "the new read-through caching layer will likely reduce p99 latency"
+  chunk_summary:
+    criteria: [grounded, representative, concise]
+structural_only:
+  - reasoning
+  - analyzed_content_hash

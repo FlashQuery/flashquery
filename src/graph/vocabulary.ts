@@ -41,94 +41,100 @@ export const DEFAULT_GRAPH_RELATIONS_PATH = 'src/graph/defaults/edge-types.yml';
 
 const FALLBACK_GRAPH_RELATIONS: GraphRelationDefinition[] = [
   {
-    name: 'contains',
-    category: 'structural',
-    directionality: 'directed',
-    detectionMethod: 'structural',
-    description: 'A parent document section contains a child section.',
+    "name": "contains",
+    "category": "structural",
+    "directionality": "directed",
+    "detectionMethod": "structural",
+    "description": "A parent document section contains a child section."
   },
   {
-    name: 'references',
-    category: 'structural',
-    directionality: 'directed',
-    detectionMethod: 'structural',
-    description: 'A source chunk links to or cites a target chunk.',
-    metadataSchema: {
-      unresolved_target: { type: 'string', optional: true },
-      unresolved_anchor: { type: 'string', optional: true },
-    },
+    "name": "references",
+    "category": "structural",
+    "directionality": "directed",
+    "detectionMethod": "structural",
+    "description": "A source chunk links to or cites a target chunk.",
+    "metadataSchema": {
+      "unresolved_target": {
+        "type": "string",
+        "optional": true
+      },
+      "unresolved_anchor": {
+        "type": "string",
+        "optional": true
+      }
+    }
   },
   {
-    name: 'supports',
-    category: 'classified',
-    directionality: 'directed',
-    detectionMethod: 'classified',
-    description: 'The source chunk provides evidence for the target chunk.',
+    "name": "supports",
+    "category": "classified",
+    "directionality": "directed",
+    "detectionMethod": "classified",
+    "description": "The source chunk provides EVIDENCE, data, or results that back up the target chunk's claim (not merely more detail)."
   },
   {
-    name: 'contradicts',
-    category: 'classified',
-    directionality: 'symmetric',
-    detectionMethod: 'classified',
-    description: 'Two chunks make incompatible claims.',
+    "name": "contradicts",
+    "category": "classified",
+    "directionality": "symmetric",
+    "detectionMethod": "classified",
+    "description": "Two chunks make incompatible claims."
   },
   {
-    name: 'supersedes',
-    category: 'classified',
-    directionality: 'directed',
-    detectionMethod: 'classified',
-    description: 'The source chunk replaces or updates the target chunk.',
+    "name": "supersedes",
+    "category": "classified",
+    "directionality": "directed",
+    "detectionMethod": "classified",
+    "description": "The source chunk replaces or updates the target chunk."
   },
   {
-    name: 'duplicates',
-    category: 'classified',
-    directionality: 'symmetric',
-    detectionMethod: 'classified',
-    description: 'Two chunks express substantially the same claim.',
+    "name": "duplicates",
+    "category": "classified",
+    "directionality": "symmetric",
+    "detectionMethod": "classified",
+    "description": "Two chunks express substantially the same claim."
   },
   {
-    name: 'depends_on',
-    category: 'classified',
-    directionality: 'directed',
-    detectionMethod: 'classified',
-    description: 'The source chunk requires the target chunk to be true or complete.',
+    "name": "depends_on",
+    "category": "classified",
+    "directionality": "directed",
+    "detectionMethod": "classified",
+    "description": "The source chunk requires the target chunk to be true or complete."
   },
   {
-    name: 'elaborates',
-    category: 'classified',
-    directionality: 'directed',
-    detectionMethod: 'classified',
-    description: 'The source chunk adds detail to the target chunk.',
+    "name": "elaborates",
+    "category": "classified",
+    "directionality": "directed",
+    "detectionMethod": "classified",
+    "description": "The source chunk adds explanatory DETAIL to the SAME claim in the target (no new claim, not evidence)."
   },
   {
-    name: 'summarizes',
-    category: 'classified',
-    directionality: 'directed',
-    detectionMethod: 'classified',
-    description: 'The source chunk summarizes the target chunk.',
-    requiresClaimSupport: false,
+    "name": "summarizes",
+    "category": "classified",
+    "directionality": "directed",
+    "detectionMethod": "classified",
+    "description": "The source chunk summarizes the target chunk.",
+    "requiresClaimSupport": false
   },
   {
-    name: 'rationale_for',
-    category: 'classified',
-    directionality: 'directed',
-    detectionMethod: 'classified',
-    description: 'The source chunk explains the reason for the target chunk.',
+    "name": "rationale_for",
+    "category": "classified",
+    "directionality": "directed",
+    "detectionMethod": "classified",
+    "description": "The source chunk explains the reason for the target chunk."
   },
   {
-    name: 'extends',
-    category: 'classified',
-    directionality: 'directed',
-    detectionMethod: 'classified',
-    description: 'The source chunk extends the target chunk with a related claim.',
+    "name": "extends",
+    "category": "classified",
+    "directionality": "directed",
+    "detectionMethod": "classified",
+    "description": "The source chunk adds a NEW, related claim or capability not present in the target (beyond mere detail)."
   },
   {
-    name: 'resolves',
-    category: 'classified',
-    directionality: 'directed',
-    detectionMethod: 'classified',
-    description: 'The source chunk resolves a question or concern in the target chunk.',
-  },
+    "name": "resolves",
+    "category": "classified",
+    "directionality": "directed",
+    "detectionMethod": "classified",
+    "description": "The source chunk resolves a question or concern in the target chunk."
+  }
 ];
 
 function relationFromYaml(raw: z.infer<typeof RelationSchema>): GraphRelationDefinition {

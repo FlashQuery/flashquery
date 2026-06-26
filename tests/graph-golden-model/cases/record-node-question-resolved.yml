@@ -1,0 +1,28 @@
+kind: record
+op: node
+input_source: synthetic
+description: >
+  Chunk that answers its own question - tests question_status resolved, a non-null question_resolution
+  naming the chosen option, and high certainty on the decision.
+input: |
+  Should we shard the primary database by tenant or by region? After review, the team decided to shard
+  by tenant rather than by region, effective in the next release.
+expect:
+  certainty_level: high
+  staleness_risk_in: [medium, high]
+  question_status: resolved
+  question_resolution_present: true
+  question_resolution_contains: ["tenant"]
+  provenance_present: false
+  external_refs_empty: true
+  temporal_markers_min: 1
+judge:
+  key_claims:
+    criteria: [grounded, atomic, complete]
+    must_capture:
+      - "the team decided to shard the database by tenant"
+  chunk_summary:
+    criteria: [grounded, representative, concise]
+structural_only:
+  - reasoning
+  - analyzed_content_hash

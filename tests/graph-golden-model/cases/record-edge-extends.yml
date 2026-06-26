@@ -1,0 +1,30 @@
+kind: record
+op: edge
+input_source: synthetic
+description: >
+  Full-record edge - the source builds a NEW capability on top of what the target establishes - tests
+  the extends relation (vs the confusable elaborates, which only adds detail) and every primary-edge field.
+source:
+  chunk_id: build
+  key_claims:
+    - "Building on the existing caching layer, we added a tiered eviction policy with per-tenant quotas"
+target:
+  chunk_id: base
+  key_claims:
+    - "The service has a response caching layer"
+expect:
+  primary_relation_in: [extends, elaborates]
+  expect_relations: [extends]
+  min_edges: 1
+  max_edges: 2
+  confidence_min: 0.5
+  llm_assessment_in: [strong, moderate]
+  reasoning_max_sentences: 2
+judge:
+  reasoning:
+    criteria: [justifies]
+structural_only:
+  - qualifiers
+  - low_confidence_flag
+  - source_claims_referenced
+  - target_claims_referenced

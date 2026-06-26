@@ -1,0 +1,30 @@
+kind: record
+op: edge
+input_source: synthetic
+description: >
+  summarizes-vs-duplicates confounder - the source restates the single target fact at a higher level.
+  Either reading is defensible (accept both), but it must not be mistaken for contradicts/supersedes.
+source:
+  chunk_id: recap
+  key_claims:
+    - "The post-incident review concluded the rollout was successful"
+target:
+  chunk_id: fact
+  key_claims:
+    - "The rollout was successful"
+expect:
+  primary_relation_in: [summarizes, duplicates]
+  min_edges: 1
+  max_edges: 2
+  forbid_relations: [contradicts, supersedes]
+  confidence_min: 0.4
+  llm_assessment_in: [strong, moderate, weak]
+  reasoning_max_sentences: 2
+judge:
+  reasoning:
+    criteria: [justifies]
+structural_only:
+  - qualifiers
+  - low_confidence_flag
+  - source_claims_referenced
+  - target_claims_referenced

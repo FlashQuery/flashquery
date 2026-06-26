@@ -2,11 +2,11 @@
 // the result through the REAL parser/schema imported from src/graph. Mirrors
 // analyzeGraphNode() minus the Supabase write.
 
-// Parse with the REAL corrector (parseLlmJson = jsonrepair + zod). The node schema is taken from a
-// LOCAL OVERRIDE (production-first policy, README §3.7) because we have a staged schema change; the
-// override mirrors the production path + export names. Production src/graph stays unmodified.
+// Parse with the REAL corrector (parseLlmJson = jsonrepair + zod) and the REAL production node schema.
+// The schema deltas (optional reasoning, analyzed_content_hash default '') were pushed to production
+// (PORT_BACK §1.4), so the local override is gone and we import src/graph directly again.
 import { parseLlmJson } from '../../../src/llm/json-repair.js';
-import { GraphNodeAnalysisPayloadSchema, type GraphNodeAnalysisPayload } from '../local-overrides/src/graph/schemas.ts';
+import { GraphNodeAnalysisPayloadSchema, type GraphNodeAnalysisPayload } from '../../../src/graph/schemas.js';
 import type { Settings } from './config.ts';
 import type { ChatMessage, LlmTransport } from './llm-client.ts';
 import { buildNodeMessages, type NodeInput } from './prompts.ts';

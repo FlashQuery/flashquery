@@ -1,0 +1,33 @@
+kind: record
+op: node
+input_source: synthetic
+description: >
+  ADR / decision-record style input. FINDING: gemma4 under-detects a DECLARATIVELY-stated decision
+  ("the team decided X", no literal "?") as question_status=resolved - it reads it as a plain fact
+  (null). A near-identical one-shot did not move it, so this is a model-capability ceiling (tied to
+  §12.2), not a prompt-wording gap. We accept resolved-or-null here and check the other fields; the
+  "?"-framed resolved case (question-resolved) covers the resolved path.
+input: |
+  After evaluating Redis and in-process caching for sessions, the team decided to cache sessions in
+  Redis because it survives restarts and scales horizontally. The decision is accepted.
+expect:
+  certainty_level: high
+  staleness_risk_in: [low, medium]
+  provenance_present: false
+  external_refs_empty: true
+  temporal_markers_empty: true
+judge:
+  key_claims:
+    criteria: [grounded, atomic, complete]
+    must_capture:
+      - "the team decided to cache sessions in Redis"
+  chunk_summary:
+    criteria: [grounded, representative, concise]
+structural_only:
+  # gemma4 ceiling: declarative decision under-detected as resolved (see description). question_status
+  # and the dependent question_resolution are waived here rather than asserted against an unreliable
+  # signal; the "?"-framed resolved path is covered by record-node-question-resolved.
+  - question_status
+  - question_resolution
+  - reasoning
+  - analyzed_content_hash

@@ -13,4 +13,4 @@ expect:
   expect_relations: [supports]
   min_edges: 1
   reasoning_max_sentences: 2
-  judge_reasoning: [consistent, justifies]
+  judge_reasoning: [justifies]

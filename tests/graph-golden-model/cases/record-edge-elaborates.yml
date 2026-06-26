@@ -1,0 +1,30 @@
+kind: record
+op: edge
+input_source: synthetic
+description: >
+  Full-record edge - source adds specific detail to a general target claim - tests elaborates (vs the
+  confusable supports) and every primary-edge field.
+source:
+  chunk_id: detail
+  key_claims:
+    - "Specifically, the response cache uses an LRU eviction policy with a 512MB cap per node"
+target:
+  chunk_id: general
+  key_claims:
+    - "The service caches responses to reduce latency"
+expect:
+  primary_relation_in: [elaborates, supports]
+  expect_relations: [elaborates]
+  min_edges: 1
+  max_edges: 2
+  confidence_min: 0.5
+  llm_assessment_in: [strong, moderate]
+  reasoning_max_sentences: 2
+judge:
+  reasoning:
+    criteria: [justifies]
+structural_only:
+  - qualifiers
+  - low_confidence_flag
+  - source_claims_referenced
+  - target_claims_referenced

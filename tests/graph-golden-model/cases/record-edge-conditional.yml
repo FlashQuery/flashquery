@@ -1,0 +1,30 @@
+kind: record
+op: edge
+input_source: synthetic
+description: >
+  Stress test for the conditional qualifier. The source qualifies its claim with "only when ..." -
+  the edge must extract that condition into qualifiers.conditional (now asserted, not waived).
+source:
+  chunk_id: cond
+  key_claims:
+    - "The cache returns stale data only when the TTL is configured above 60 seconds"
+target:
+  chunk_id: gen
+  key_claims:
+    - "The cache can serve stale responses"
+expect:
+  primary_relation_in: [supports, elaborates]
+  expect_relations: [supports]
+  min_edges: 1
+  max_edges: 2
+  confidence_min: 0.5
+  llm_assessment_in: [strong, moderate]
+  require_qualifier: conditional
+  reasoning_max_sentences: 2
+judge:
+  reasoning:
+    criteria: [justifies]
+structural_only:
+  - low_confidence_flag
+  - source_claims_referenced
+  - target_claims_referenced

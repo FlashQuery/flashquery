@@ -1,0 +1,11 @@
+kind: node
+description: Decision-ratification provenance (isolated, second phrasing). An ADR cited as approving a decision should populate provenance_basis - second data point on whether ratification/approval framing is systematically missed.
+input: |
+  The migration to the /v2/query endpoint was approved in ADR-17.
+expect:
+  provenance_present: true
+  provenance_basis_contains:
+    - "ADR-17"
+  external_refs_contains:
+    - "ADR-17"
+  key_claims_min: 1

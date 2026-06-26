@@ -1,0 +1,29 @@
+kind: record
+op: node
+input_source: synthetic
+description: >
+  Stress test for separating fact from marketing fluff - key_claims must capture the benchmark facts
+  and NOT treat promotional adjectives ("blazing-fast", "best-in-class", "game-changer") as claims.
+  Certainty rests on the measured number; a perf figure drifts (staleness medium).
+input: |
+  Our blazing-fast, best-in-class platform is a total game-changer. In the latest benchmark it
+  processed 12,000 events per second, up from 9,000 in the prior release.
+expect:
+  certainty_level: high
+  staleness_risk_in: [medium, low]
+  question_status: null
+  question_resolution_present: false
+  provenance_present: false
+  external_refs_empty: true
+  temporal_markers_empty: true
+  key_claims_min: 1
+judge:
+  key_claims:
+    criteria: [grounded, atomic, complete]
+    must_capture:
+      - "the platform processed 12,000 events per second in the benchmark, up from 9,000 in the prior release"
+  chunk_summary:
+    criteria: [grounded, representative, concise]
+structural_only:
+  - reasoning
+  - analyzed_content_hash

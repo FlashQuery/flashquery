@@ -1,0 +1,28 @@
+kind: record
+op: node
+input_source: synthetic
+description: >
+  Durable definitional content with no citations or dates - tests staleness low, empty external_refs
+  and temporal_markers, null provenance, high certainty.
+input: |
+  A hash table stores key-value pairs and provides average constant-time lookup by mapping each key
+  to a bucket via a hash function. Collisions, where two keys map to the same bucket, are resolved by
+  chaining or open addressing.
+expect:
+  certainty_level: high
+  staleness_risk: low
+  question_status: null
+  question_resolution_present: false
+  provenance_present: false
+  external_refs_empty: true
+  temporal_markers_empty: true
+judge:
+  key_claims:
+    criteria: [grounded, atomic, complete]
+    must_capture:
+      - "a hash table provides average constant-time lookup"
+  chunk_summary:
+    criteria: [grounded, representative, concise]
+structural_only:
+  - reasoning
+  - analyzed_content_hash

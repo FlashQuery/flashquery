@@ -8,7 +8,7 @@
 import * as fs from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { GraphNodeAnalysisPayload } from '../local-overrides/src/graph/schemas.ts';
+import type { GraphNodeAnalysisPayload } from '../../../src/graph/schemas.js';
 import type { Settings } from './config.ts';
 import type { ChatMessage } from './llm-client.ts';
 import type { ParseInfo } from './node-op.ts';
@@ -20,7 +20,12 @@ const RESULTS = join(HERE, '..', 'results');
 
 export interface CaseDetail {
   name: string;
-  kind: 'node' | 'edge' | 'nl';
+  kind: 'node' | 'edge' | 'nl' | 'record';
+  /** For record cases: which op was exercised. */
+  op?: 'node' | 'edge';
+  /** INFO-ONLY (record cases): input provenance, for slicing results later. */
+  inputSource?: 'synthetic' | 'external';
+  sourceNote?: string;
   description?: string;
   model: string;
   mocked: boolean;
@@ -35,6 +40,12 @@ export interface CaseDetail {
     output: unknown;
     verdicts: { name: string; verdict: string; reason: string }[];
   };
+  /** For record cases: every NL field judged this run. */
+  judges?: {
+    field: string;
+    output: unknown;
+    verdicts: { name: string; verdict: string; reason: string }[];
+  }[];
   derivedClaims?: { source?: string[]; target?: string[] };
   checks: Check[];
   parseOk: boolean;
@@ -141,12 +152,14 @@ function toMarkdown(report: Report): string {
     L.push('');
     L.push(`Fixtures passing: **${s.fixturesPassing}/${s.fixturesTotal}** · Checks: **${s.checksPassed}/${s.checksTotal}**`);
     L.push('');
-    L.push(`| case | kind | result | score | expected→predicted |`);
-    L.push(`| --- | --- | --- | --- | --- |`);
+    L.push(`| case | kind | input | result | score | expected→predicted |`);
+    L.push(`| --- | --- | --- | --- | --- | --- |`);
     for (const c of run.cases) {
       const res = c.passed === c.total ? 'PASS' : 'FAIL';
       const prim = c.kind === 'edge' && c.expectedPrimary ? `${c.expectedPrimary}→${c.predictedPrimary ?? '(none)'}` : '';
-      L.push(`| ${c.name} | ${c.kind} | ${res} | ${c.passed}/${c.total} | ${prim} |`);
+      const kind = c.kind === 'record' && c.op ? `record/${c.op}` : c.kind;
+      const input = c.inputSource ?? '';
+      L.push(`| ${c.name} | ${kind} | ${input} | ${res} | ${c.passed}/${c.total} | ${prim} |`);
     }
     L.push('');
     // Detailed diagnostics for failing cases.
@@ -163,6 +176,11 @@ function toMarkdown(report: Report): string {
           L.push('');
           L.push(`Judged ${c.nl.field}: \`${JSON.stringify(c.nl.output)}\``);
           for (const v of c.nl.verdicts) L.push(`- judge ${v.name}: **${v.verdict}** — ${v.reason}`);
+        }
+        for (const jf of c.judges ?? []) {
+          L.push('');
+          L.push(`Judged ${jf.field}: \`${JSON.stringify(jf.output)}\``);
+          for (const v of jf.verdicts) L.push(`- judge ${v.name}: **${v.verdict}** — ${v.reason}`);
         }
         L.push('');
         L.push(`<details><summary>prompt sent</summary>`);

@@ -1,0 +1,33 @@
+kind: record
+op: edge
+input_source: synthetic
+description: >
+  Full-record edge - the source is a high-level recap of the enumerated detail in the target - tests
+  the summarizes relation (vs the confusable duplicates) and every primary-edge field.
+source:
+  chunk_id: recap
+  key_claims:
+    - "Section 4 recaps the three prior findings of the report"
+target:
+  chunk_id: detail
+  key_claims:
+    - "Finding 1: p95 latency improved after the cache rollout"
+    - "Finding 2: error rates dropped by half"
+    - "Finding 3: infrastructure cost rose 8%"
+expect:
+  primary_relation: summarizes
+  expect_relations: [summarizes]
+  forbid_relations: [duplicates]
+  min_edges: 1
+  max_edges: 2
+  confidence_min: 0.5
+  llm_assessment_in: [strong, moderate]
+  reasoning_max_sentences: 2
+judge:
+  reasoning:
+    criteria: [justifies]
+structural_only:
+  - qualifiers
+  - low_confidence_flag
+  - source_claims_referenced
+  - target_claims_referenced

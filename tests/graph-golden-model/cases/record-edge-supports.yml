@@ -1,0 +1,32 @@
+kind: record
+op: edge
+input_source: synthetic   # info-only: hand-written claims (vs. 'external' = real web/doc text)
+description: >
+  Full-record (README §14): a production-faithful claim pair → classify_edge → EVERY field of the
+  primary (highest-confidence valid) edge checked. relation / confidence / llm_assessment via
+  expected-vs-actual; reasoning via LLM-as-judge; qualifiers, low_confidence_flag and the
+  claim-reference arrays waived via structural_only (validated structurally / deferred).
+source:
+  chunk_id: bench
+  key_claims:
+    - "After enabling the read-through cache, p95 latency dropped from 800ms to 480ms in the benchmark"
+target:
+  chunk_id: claim
+  key_claims:
+    - "The read-through cache improves API latency"
+expect:
+  primary_relation: supports
+  expect_relations: [supports]
+  min_edges: 1
+  max_edges: 2
+  confidence_min: 0.5
+  llm_assessment_in: [strong, moderate]
+  reasoning_max_sentences: 2
+judge:
+  reasoning:
+    criteria: [justifies]
+structural_only:
+  - qualifiers
+  - low_confidence_flag
+  - source_claims_referenced
+  - target_claims_referenced

@@ -1,0 +1,28 @@
+kind: record
+op: node
+input_source: synthetic
+description: >
+  Statistic grounded in a named survey - tests provenance_present naming the dataset, a temporal
+  marker from the year, and drift-prone staleness for a survey figure.
+input: |
+  According to the 2025 Stack Overflow Developer Survey, 62% of professional developers reported using
+  AI coding tools at least weekly, up from 44% the year before.
+expect:
+  certainty_level: high
+  staleness_risk_in: [medium, low]
+  question_status: null
+  question_resolution_present: false
+  provenance_present: true
+  provenance_basis_contains: ["Stack Overflow Developer Survey"]
+  external_refs_contains: ["Stack Overflow Developer Survey"]
+  temporal_markers_min: 1
+judge:
+  key_claims:
+    criteria: [grounded, atomic, complete]
+    must_capture:
+      - "62% of professional developers reported using AI coding tools at least weekly"
+  chunk_summary:
+    criteria: [grounded, representative, concise]
+structural_only:
+  - reasoning
+  - analyzed_content_hash

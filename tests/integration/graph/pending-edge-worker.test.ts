@@ -375,7 +375,7 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph pending edge worker real infere
       `graph-edge-classification:${source}:${target}`,
     ]);
     const edgePrompt = calls[2]![1][0]!.content;
-    expect(edgePrompt).toContain('Classify the relationship between two document chunks using these graph types:');
+    expect(edgePrompt).toContain('You classify the relationship FROM the source chunk TO the target chunk');
     expect(edgePrompt).toContain('contradicts');
     expect(edgePrompt).toContain('Source claim from node analysis');
     expect(edgePrompt).not.toContain('{{graph:classified_types}}');

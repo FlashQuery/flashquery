@@ -7,6 +7,9 @@ export const GraphLlmAssessmentSchema = z.enum(['strong', 'moderate', 'weak', 'u
 
 export const GraphNodeAnalysisPayloadSchema = z
   .object({
+    // Optional chain-of-thought written first to improve the downstream fields; NOT persisted
+    // (buildGraphNodeAnalysisRow ignores it).
+    reasoning: z.string().optional(),
     key_claims: z.array(z.string().min(1)).default([]),
     chunk_summary: z.string().min(1),
     provenance_basis: z.string().min(1).nullable(),
@@ -16,7 +19,7 @@ export const GraphNodeAnalysisPayloadSchema = z
     staleness_risk: GraphStalenessRiskSchema,
     external_refs: z.array(z.string().min(1)).default([]),
     temporal_markers: z.array(z.string().min(1)).default([]),
-    analyzed_content_hash: z.string().min(1),
+    analyzed_content_hash: z.string().default(''),
   })
   .strict();
 

@@ -21,7 +21,12 @@ export interface NlOpResult {
   latencyMs: number;
 }
 
-export async function runNlOp(c: NlCase, transport: LlmTransport, settings: Settings): Promise<NlOpResult> {
+export async function runNlOp(
+  c: NlCase,
+  graphTransport: LlmTransport,
+  judgeTransport: LlmTransport,
+  settings: Settings
+): Promise<NlOpResult> {
   const criteria = resolveCriteria(c.field, c.criteria, c.must_capture);
   let output: unknown = c.given;
   let extracted = false;
@@ -31,7 +36,7 @@ export async function runNlOp(c: NlCase, transport: LlmTransport, settings: Sett
   let payload: Record<string, unknown> | undefined;
 
   if (c.given === undefined) {
-    const node = await runNodeOp({ content: c.input }, transport, settings);
+    const node = await runNodeOp({ content: c.input }, graphTransport, settings);
     extracted = true;
     extractParse = node.parse;
     extractRaw = node.raw;
@@ -49,7 +54,7 @@ export async function runNlOp(c: NlCase, transport: LlmTransport, settings: Sett
   const judge =
     output === undefined
       ? ({ ok: false, raw: '', summary: 'no output to judge (extraction failed or field missing)', prompt: '' } as JudgeResult)
-      : await runJudge({ transport, input: reference, field: c.field, output, criteria });
+      : await runJudge({ transport: judgeTransport, input: reference, field: c.field, output, criteria });
 
   return {
     field: c.field,

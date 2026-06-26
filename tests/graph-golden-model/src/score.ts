@@ -3,10 +3,11 @@
 // separate is what makes a failing run diagnosable — "the model can't produce
 // our JSON shape" is a different problem from "it picked the wrong relation".
 
-import type { EdgeCase, NlCase, NodeCase } from './cases.ts';
+import type { EdgeCase, NlCase, NodeCase, RecordCase } from './cases.ts';
 import type { EdgeOpResult } from './edge-op.ts';
 import type { NodeOpResult } from './node-op.ts';
 import type { NlOpResult } from './nl-op.ts';
+import type { RecordJudgeField, RecordOpResult } from './record-op.ts';
 
 export interface Check {
   name: string;
@@ -75,6 +76,12 @@ export function scoreNode(testCase: NodeCase, result: NodeOpResult): Scored {
       });
     if (a.temporal_markers_min !== undefined)
       checks.push(min('temporal_markers_min', p.temporal_markers.length, a.temporal_markers_min));
+    for (const needle of a.temporal_markers_contains ?? [])
+      checks.push({
+        name: `temporal_markers contains "${needle}"`,
+        pass: includesCI(p.temporal_markers, needle),
+        detail: `got ${JSON.stringify(p.temporal_markers)}`,
+      });
     for (const needle of a.external_refs_contains ?? [])
       checks.push({
         name: `external_refs contains "${needle}"`,
@@ -191,6 +198,12 @@ export function scoreEdge(testCase: EdgeCase, result: EdgeOpResult): ScoredEdge 
         pass: (primaryEdge?.confidenceScore ?? 0) >= e.confidence_min,
         detail: `got ${primaryEdge?.confidenceScore}`,
       });
+    if (e.confidence_max !== undefined)
+      checks.push({
+        name: `primary confidence <= ${e.confidence_max}`,
+        pass: primaryEdge ? primaryEdge.confidenceScore <= e.confidence_max : false,
+        detail: `got ${primaryEdge?.confidenceScore}`,
+      });
     if (e.reasoning_max_sentences !== undefined)
       checks.push({
         name: `primary reasoning sentence count <= ${e.reasoning_max_sentences}`,
@@ -260,6 +273,126 @@ export function scoreNl(c: NlCase, result: NlOpResult): Scored {
     passed: checks.filter((ck) => ck.pass).length,
     total: checks.length,
   };
+}
+
+// ── Full-record scoring (README §14) ─────────────────────────────────────────
+// The coverage tables enumerate EVERY field the op outputs and, for each, which `expect` keys (or
+// `judge` block) count as "an expectation present". The coverage guard fails the case if a field is
+// covered by none of them and is not explicitly waived via `structural_only`. Keep these in sync
+// with the production payload schemas (node: GraphNodeAnalysisPayloadSchema; edge: the edge draft).
+
+interface FieldCoverage {
+  expectKeys: string[];
+  /** Key under the case's `judge:` block that also satisfies coverage for this field. */
+  judgeKey?: string;
+}
+
+const NODE_FIELD_COVERAGE: Record<string, FieldCoverage> = {
+  reasoning: { expectKeys: ['reasoning_present', 'reasoning_max_sentences'], judgeKey: 'reasoning' },
+  key_claims: { expectKeys: ['key_claims_min', 'key_claims_contains'], judgeKey: 'key_claims' },
+  chunk_summary: { expectKeys: ['chunk_summary_nonempty', 'chunk_summary_max_sentences'], judgeKey: 'chunk_summary' },
+  provenance_basis: { expectKeys: ['provenance_present', 'provenance_basis', 'provenance_basis_contains'] },
+  question_status: { expectKeys: ['question_status', 'question_status_in'] },
+  question_resolution: { expectKeys: ['question_resolution_present', 'question_resolution_contains'], judgeKey: 'question_resolution' },
+  certainty_level: { expectKeys: ['certainty_level', 'certainty_level_in'] },
+  staleness_risk: { expectKeys: ['staleness_risk', 'staleness_risk_in'] },
+  external_refs: { expectKeys: ['external_refs_contains', 'external_refs_empty'] },
+  temporal_markers: { expectKeys: ['temporal_markers_min', 'temporal_markers_contains', 'temporal_markers_empty'] },
+  // System-filled post-parse (fallbackContentHash); the model emits "". Always structural_only.
+  analyzed_content_hash: { expectKeys: [] },
+};
+
+const EDGE_FIELD_COVERAGE: Record<string, FieldCoverage> = {
+  relation: { expectKeys: ['primary_relation', 'primary_relation_in', 'expect_relations'] },
+  reasoning: { expectKeys: ['reasoning_max_sentences'], judgeKey: 'reasoning' },
+  confidence_score: { expectKeys: ['confidence_min', 'confidence_max'] },
+  llm_assessment: { expectKeys: ['llm_assessment_in'] },
+  qualifiers: { expectKeys: ['require_qualifier'] },
+  low_confidence_flag: { expectKeys: ['require_low_confidence_flag'] },
+  // Bounds-checked by the real validateGraphEdgeDraft path; not value-asserted. Structural_only.
+  source_claims_referenced: { expectKeys: [] },
+  target_claims_referenced: { expectKeys: [] },
+};
+
+function coverageChecks(c: RecordCase): Check[] {
+  const table = c.op === 'node' ? NODE_FIELD_COVERAGE : EDGE_FIELD_COVERAGE;
+  const waived = new Set(c.structural_only ?? []);
+  const expect = c.expect as Record<string, unknown>;
+  const judge = c.judge ?? {};
+  const checks: Check[] = [];
+  for (const [field, cov] of Object.entries(table)) {
+    const byExpect = cov.expectKeys.some((k) => expect[k] !== undefined);
+    const byJudge = cov.judgeKey ? judge[cov.judgeKey] !== undefined : false;
+    const byWaiver = waived.has(field);
+    const covered = byExpect || byJudge || byWaiver;
+    checks.push({
+      name: `coverage: ${field}`,
+      pass: covered,
+      detail: covered
+        ? byWaiver
+          ? 'structural-only (waived)'
+          : byJudge
+            ? 'judged'
+            : 'asserted'
+        : 'NO expectation — add to expect/judge or list in structural_only',
+    });
+  }
+  return checks;
+}
+
+/** Score one judged NL field exactly like the nl scorer: JSON-valid + each criterion expects pass. */
+function scoreJudgeField(jf: RecordJudgeField): Check[] {
+  const checks: Check[] = [];
+  const judgeOk = jf.judge.ok && !!jf.judge.verdict;
+  checks.push({
+    name: `judge[${jf.field}] returned valid JSON`,
+    pass: judgeOk,
+    detail: judgeOk ? undefined : jf.judge.summary,
+  });
+  if (judgeOk) {
+    const vmap = new Map(jf.judge.verdict!.criteria.map((v) => [v.name.toLowerCase(), v]));
+    for (const crit of jf.criteria) {
+      const v = vmap.get(crit.name.toLowerCase());
+      const got = v ? (v.verdict.trim().toLowerCase() === 'pass' ? 'pass' : 'fail') : undefined;
+      checks.push({
+        name: `${jf.field}.${crit.name}: expect pass`,
+        pass: got === 'pass',
+        detail: v ? `judge=${got}${v.reason ? ` — ${v.reason}` : ''}` : 'judge omitted this criterion',
+      });
+    }
+  }
+  return checks;
+}
+
+export function scoreRecord(c: RecordCase, result: RecordOpResult): ScoredEdge {
+  let parseOk: boolean;
+  let schemaOk: boolean;
+  const semantic: Check[] = [];
+  let expectedPrimary: string | undefined;
+  let predictedPrimary: string | undefined;
+
+  if (c.op === 'node') {
+    const sn = scoreNode({ name: c.name, description: c.description, expect: c.expect } as NodeCase, result.node!);
+    parseOk = sn.parseOk;
+    schemaOk = sn.schemaOk;
+    semantic.push(...sn.checks);
+  } else {
+    const se = scoreEdge({ name: c.name, description: c.description, expect: c.expect } as EdgeCase, result.edge!);
+    parseOk = se.parseOk;
+    schemaOk = se.schemaOk;
+    semantic.push(...se.checks);
+    expectedPrimary = se.expectedPrimary;
+    predictedPrimary = se.predictedPrimary;
+    // scoreEdge treats primary_relation as a display label only; the record asserts it for real.
+    if (schemaOk && c.expect.primary_relation !== undefined)
+      semantic.push(eq('primary_relation', result.primaryEdge?.relation, c.expect.primary_relation));
+  }
+
+  // The completeness guarantee + the per-field judges.
+  semantic.push(...coverageChecks(c));
+  for (const jf of result.judges) semantic.push(...scoreJudgeField(jf));
+
+  return { ...finalize(c.name, c.description, parseOk, schemaOk, semantic), expectedPrimary, predictedPrimary };
 }
 
 function eq(name: string, actual: unknown, expected: unknown): Check {

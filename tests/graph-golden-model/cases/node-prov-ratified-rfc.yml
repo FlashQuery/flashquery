@@ -1,0 +1,11 @@
+kind: node
+description: Decision-ratification provenance (isolated). An RFC cited as ratifying a decision should populate provenance_basis per the prompt's "approving/ratifying" clause - probing whether gemma4 treats ratification framing as provenance or only as an external_ref.
+input: |
+  The deprecation of the legacy /search endpoint was ratified in RFC-0042.
+expect:
+  provenance_present: true
+  provenance_basis_contains:
+    - "RFC-0042"
+  external_refs_contains:
+    - "RFC-0042"
+  key_claims_min: 1

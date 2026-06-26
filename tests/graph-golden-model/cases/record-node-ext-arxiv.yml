@@ -1,0 +1,32 @@
+kind: record
+op: node
+input_source: external
+source_note: "arxiv.org/abs/2506.18901 (RealPlay) abstract excerpt"
+description: >
+  External (real research abstract). Self-contained method description with no citations or dates -
+  tests durable staleness, null provenance, empty refs, and research self-claim certainty.
+input: |
+  We introduce RealPlay, a neural network-based real-world game engine that enables interactive video
+  generation from user control signals. Unlike prior works focused on game-style visuals, RealPlay
+  aims to produce photorealistic, temporally consistent video sequences that resemble real-world
+  footage. It operates in an interactive loop: users observe a generated scene, issue a control
+  command, and receive a short video chunk in response.
+expect:
+  certainty_level_in: [high, medium]
+  staleness_risk_in: [low, medium]
+  question_status: null
+  question_resolution_present: false
+  provenance_present: false
+  external_refs_empty: true
+  temporal_markers_empty: true
+judge:
+  key_claims:
+    criteria: [grounded, atomic, complete]
+    must_capture:
+      - "RealPlay is a neural network-based real-world game engine"
+      - "it enables interactive video generation from user control signals"
+  chunk_summary:
+    criteria: [grounded, representative, concise]
+structural_only:
+  - reasoning
+  - analyzed_content_hash

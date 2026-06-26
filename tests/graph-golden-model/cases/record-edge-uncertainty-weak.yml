@@ -1,0 +1,31 @@
+kind: record
+op: edge
+input_source: synthetic
+description: >
+  Stress test for uncertainty PROPAGATION - the source is explicitly unsure ("might... not sure").
+  The hedge must travel into a weak/uncertain llm_assessment AND a lower confidence_score (confidence_max),
+  not just the uncertainty qualifier. low_confidence_flag is waived (we chose not to instruct it -
+  it's redundant with the uncertainty qualifier and cost relation accuracy, README 9.6/12.4).
+source:
+  chunk_id: hedge
+  key_claims:
+    - "The outage might have been caused by the config change, but we are not sure"
+target:
+  chunk_id: claim
+  key_claims:
+    - "The config change caused the outage"
+expect:
+  primary_relation_in: [supports, rationale_for]
+  min_edges: 1
+  max_edges: 2
+  confidence_max: 0.6
+  llm_assessment_in: [weak, uncertain, moderate]
+  require_qualifier: uncertainty
+  reasoning_max_sentences: 2
+judge:
+  reasoning:
+    criteria: [justifies]
+structural_only:
+  - low_confidence_flag
+  - source_claims_referenced
+  - target_claims_referenced

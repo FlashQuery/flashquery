@@ -34,13 +34,23 @@ export const CRITERIA: Record<string, string> = {
   representative:
     'The summary conveys the single main point of the source.',
   concise:
-    'The summary is brief (one or two sentences) and is not a verbatim copy of the source.',
+    'The summary is brief (one or two sentences). It need not add or remove information; for a source ' +
+    'that is already only a sentence or two, a faithful one-sentence summary that closely mirrors the ' +
+    'source is acceptable — do NOT fail it for resembling the source. Fail only if it is long-winded ' +
+    'or pads the source with extra length.',
   consistent:
     'The output asserts nothing that the reference text does not support — no fact or claim beyond what the reference contains.',
   justifies:
     'The reasoning gives a plausible explanation for why the chosen relation holds between the ' +
-    'source and target, referring to their content. It need NOT describe a causal mechanism; a ' +
-    'sound rationale that fits the claims is enough. Fail only if it is generic filler or off-topic.',
+    'source and target. A sound rationale that fits the relation is enough: it need NOT describe a ' +
+    'causal mechanism, and it need NOT restate or elaborate the target claim\'s specific details — ' +
+    'naming the relation and the source-side basis for it is sufficient. ' +
+    'EXAMPLE THAT PASSES: relation "depends_on", source claim "the export job requires the migration ' +
+    'to finish first", target claim "the migration provisions the analytics schema", reasoning "the ' +
+    'export job depends on the migration completing first" — PASS (it states the dependency basis; it ' +
+    'need not mention the schema). ' +
+    'EXAMPLE THAT FAILS: reasoning "this is an important relationship" — FAIL (generic filler, no ' +
+    'rationale). Fail only if it is generic filler, off-topic, or contradicts the claims.',
 };
 
 export const DEFAULT_CRITERIA: Record<string, string[]> = {

@@ -1,0 +1,31 @@
+kind: record
+op: node
+input_source: external
+source_note: "RFC 9745 / RFC 8594 (Deprecation and Sunset HTTP header fields)"
+description: >
+  External (real standards fact). DEFINITIONAL statement: the RFCs are the SUBJECT of the definition,
+  not a grounding source - so provenance_basis is null (product decision: a definition is not
+  "grounded" by a dictionary). The RFCs still appear in external_refs. Tests durable staleness, RFC
+  external_refs, and the definition-is-not-provenance rule.
+input: |
+  The Deprecation HTTP header field is defined in RFC 9745, and the Sunset HTTP header field is
+  defined in RFC 8594.
+expect:
+  certainty_level: high
+  staleness_risk: low
+  question_status: null
+  question_resolution_present: false
+  provenance_present: false
+  external_refs_contains: ["RFC 9745", "RFC 8594"]
+  temporal_markers_empty: true
+judge:
+  key_claims:
+    criteria: [grounded, atomic, complete]
+    must_capture:
+      - "the Deprecation HTTP header field is defined in RFC 9745"
+      - "the Sunset HTTP header field is defined in RFC 8594"
+  chunk_summary:
+    criteria: [grounded, representative, concise]
+structural_only:
+  - reasoning
+  - analyzed_content_hash

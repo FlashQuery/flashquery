@@ -1,0 +1,25 @@
+kind: record
+op: node
+input_source: synthetic
+description: >
+  Bare proposal/idea with no basis and no decision - tests certainty low (speculation), no invented
+  question_status, durable-or-unknown staleness.
+input: |
+  One idea floated in the planning meeting was to maybe rewrite the job scheduler in Rust at some
+  point. No decision was made, and there is no evidence yet that it would actually help.
+expect:
+  certainty_level: low
+  staleness_risk_in: [low, unknown]
+  question_status: null
+  question_resolution_present: false
+  provenance_present: false
+  external_refs_empty: true
+  temporal_markers_empty: true
+judge:
+  key_claims:
+    criteria: [grounded, atomic, complete]
+  chunk_summary:
+    criteria: [grounded, representative, concise]
+structural_only:
+  - reasoning
+  - analyzed_content_hash

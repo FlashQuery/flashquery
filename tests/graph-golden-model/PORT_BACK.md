@@ -1,51 +1,56 @@
 # Port-back manifest
 
-The single source of truth for **what to push to production**, to be applied in ONE deliberate,
-reviewed change when the suite is green (see README §10.5; safety policy README §2). Nothing here
-is applied to `src/graph` yet. The *reasoning* behind each change is in README §9 (referenced by
-section); this file is the actionable manifest, not the narrative.
+The single source of truth for **what to push to production**, applied in ONE deliberate, reviewed
+change (see README §10.5; safety policy README §2). **PUSHED to `src/graph` on 2026-06-26** — all §1
+deltas below are now in production (statuses = pushed); §2 remains deferred. The *reasoning* behind
+each change is in README §9; this file is the actionable manifest.
 
-Where each change is staged in the workbench:
-- prompt text → `prompts/graph-prompts.yml` (local copy of the prod file)
-- relation vocabulary/descriptions → `prompts/edge-types.yml` (local copy of the prod file)
-- schema/logic deltas → `local-overrides/src/graph/schemas.ts`
+Where each change was staged in the workbench before the push:
+- prompt text → `prompts/graph-prompts.yml` (local copy of the prod file) → pushed to `src/graph/defaults/graph-prompts.yml` + `FALLBACK_GRAPH_PROMPTS`
+- relation descriptions → `prompts/edge-types.yml` → pushed to `src/graph/defaults/edge-types.yml` + `FALLBACK_GRAPH_RELATIONS`
+- schema deltas → was `local-overrides/src/graph/schemas.ts` (now REMOVED) → pushed to `src/graph/schemas.ts`; the workbench imports the production schema again
 
 ## 1. Deltas to push
 
 ### 1.1 `analyze_node` prompt → production node-analysis path
 | # | change | rationale (README) | status |
 | --- | --- | --- | --- |
-| 1 | Show the model the output schema + per-field definitions | §9.1 | staged |
-| 2 | `certainty_level` content-independent cue words (likely/probably/preliminary ⇒ medium; no basis ⇒ low) | §9.5 | staged |
-| 3 | `staleness_risk` buckets (expiring anchor ⇒ high even before the date; drifts ⇒ medium; durable ⇒ low) | §9.3, §9.5 | staged |
-| 4 | `question_status` = null unless the chunk itself poses a question | §9.5 | staged |
-| 5 | `provenance_basis` names an EXTERNAL source, else null (never "the text") | §9.5 | staged |
-| 6 | `key_claims` = flat array of non-empty strings, consolidated (3–10) but NOT dropping consequences/conditions/comparatives; split enumerations one-per-item | §9.3, §9.4 | staged |
-| 7 | Require exactly one well-formed JSON object (close arrays/strings; no empty element; no field bleed) | §9.2 | staged |
-| 8 | `external_refs` = extract every cited identifier, incl. parentheticals like "(see RFC-0042)" | §9.9 | staged |
-| 9 | Reasoning-first (`reasoning` field written before the others) | §3.6 | staged |
-| 10 | A format-only few-shot example (neutral domain) to stabilize wobbly fields | §9.9 | staged |
-| 16 | `chunk_summary` preserves key details/constraints/numbers/dates/deadlines/exceptions/risk and safety qualifiers, causal/attribution details, and other uniqueness-defining details | §9.9 | staged |
-| 17 | Free-form node strings are constrained: `reasoning` is 1-2 sentences, `provenance_basis` is a cited source ID/name or null, and `question_resolution` states the actual answer/decision with key conditions/deadlines | §9.9 | staged |
-| 19 | `certainty_level` scores confidence in extracted claims/source; unlabeled, unclear, or ambiguous source/data should not be marked high merely because uncertainty is explicitly stated | §9.5 | staged |
+| 1 | Show the model the output schema + per-field definitions | §9.1 | pushed |
+| 2 | `certainty_level` content-independent cue words (likely/probably/preliminary ⇒ medium; no basis ⇒ low) | §9.5 | pushed |
+| 3 | `staleness_risk` buckets (expiring anchor ⇒ high even before the date; drifts ⇒ medium; durable ⇒ low) | §9.3, §9.5 | pushed |
+| 4 | `question_status` = null unless the chunk itself poses a question | §9.5 | pushed |
+| 5 | `provenance_basis` names an EXTERNAL source, else null (never "the text") | §9.5 | pushed |
+| 6 | `key_claims` = flat array of non-empty strings, consolidated (3–10) but NOT dropping consequences/conditions/comparatives; split enumerations one-per-item | §9.3, §9.4 | pushed |
+| 7 | Require exactly one well-formed JSON object (close arrays/strings; no empty element; no field bleed) | §9.2 | pushed |
+| 8 | `external_refs` = extract every cited identifier, incl. parentheticals like "(see RFC-0042)" | §9.9 | pushed |
+| 9 | Reasoning-first (`reasoning` field written before the others) | §3.6 | pushed |
+| 10 | A format-only few-shot example (neutral domain) to stabilize wobbly fields | §9.9 | pushed |
+| 16 | `chunk_summary` preserves key details/constraints/numbers/dates/deadlines/exceptions/risk and safety qualifiers, causal/attribution details, and other uniqueness-defining details | §9.9 | pushed |
+| 17 | Free-form node strings are constrained: `reasoning` is 1-2 sentences, `provenance_basis` is a cited source ID/name or null, and `question_resolution` states the actual answer/decision with key conditions/deadlines | §9.9 | pushed |
+| 19 | `certainty_level` scores confidence in extracted claims/source; unlabeled, unclear, or ambiguous source/data should not be marked high merely because uncertainty is explicitly stated | §9.5 | pushed |
+| 20 | `provenance_basis`: (a) not mutually exclusive with `external_refs` — a grounding/ratifying source belongs in BOTH; (b) INTERNAL grounding sources count too (e.g. "our post-checkout surveys"); (c) a source that is merely the SUBJECT of a definitional claim ("X is defined in RFC Y") is NOT provenance (product decisions 2026-06-26) | §14.7, §14.8 | pushed |
+| 21 | `question_status` one-shot examples + clarify a "question" can be a weighed decision without a literal "?" (fixed `deferred`/`resolved`), THEN narrowed `open` so tentativeness about a FACT (preliminary/likely/floated idea) maps to certainty_level, not `open` (full re-run caught the broadening over-flagging facts as open) | §14.7, §14.10 | pushed |
+| 22 | `temporal_markers` expanded: enumerate sub-types (date/quarter/relative/deadline/**semantic version**) + a one-shot extraction example + copy-verbatim / do-not-infer guard (stress test found versions dropped) | §14.10 | pushed |
+| 23 | `external_refs` expanded with a few-shot example + broadened scope (RFC/standard, named docs/datasets/surveys, product+version names, API paths, URLs, tickets) — "an external reference is an external reference" (stress test found `[]` / under-extraction) | §14.10 | pushed |
+| 24 | `reasoning` format tightened: 1-2 sentences MAX, evidence-based (cite the cue driving certainty/staleness); it improves the downstream fields and is not itself judged | §14.10 | pushed |
 
 ### 1.2 `classify_edge` prompt → production edge-classification path
 | # | change | rationale | status |
 | --- | --- | --- | --- |
-| 11 | Inject the relation vocabulary `{{graph:classified_types}}` into the prompt | §9.1 | staged |
-| 12 | `metadata.qualifiers` are arrays; list trigger words; `conditional` REQUIRED when present | §6.3 | staged |
+| 11 | Inject the relation vocabulary `{{graph:classified_types}}` into the prompt | §9.1 | pushed |
+| 12 | `metadata.qualifiers` are arrays; list trigger words; `conditional` REQUIRED when present | §6.3 | pushed |
 | — | **Keep `classify_edge` lean.** Do NOT add the `low_confidence_flag` instruction (see §2). | §9.6 | — |
 
 ### 1.3 `edge-types.yml` vocabulary descriptions
 | # | change | rationale | status |
 | --- | --- | --- | --- |
-| 13 | Sharpen supports/elaborates/extends descriptions (evidence vs. detail vs. new claim) | §9.6 | staged |
+| 13 | Sharpen supports/elaborates/extends descriptions (evidence vs. detail vs. new claim) | §9.6 | pushed |
 
 ### 1.4 Schema/logic (`local-overrides/src/graph/schemas.ts` → `src/graph/schemas.ts`)
 | # | change | rationale | status |
 | --- | --- | --- | --- |
-| 14 | `analyzed_content_hash`: `z.string().min(1)` → `z.string().default('')` (model can't compute it; fallbackContentHash supplies it post-parse) | §9.2 | staged |
-| 15 | Add optional, non-persisted `reasoning` field to the node payload | §3.6 | staged |
+| 14 | `analyzed_content_hash`: `z.string().min(1)` → `z.string().default('')` (model can't compute it; fallbackContentHash supplies it post-parse) | §9.2 | pushed |
+| 15 | Add optional, non-persisted `reasoning` field to the node payload | §3.6 | pushed |
 
 ### 1.5 Production file map — exact files to touch
 Verified against `src/graph` (2026-06-25). Production already renders prompts from config
@@ -86,10 +91,20 @@ to push. They validated extraction quality and are calibrated with positive/nega
 (README §7, §9.7).
 
 ## 4. Status and procedure
-- **Current:** full suite **60/60 on gemma4** (thinking off) via the local refined prompts; clean
-  diagonal edge confusion matrix; node + NL all green (`cases/COVERAGE.md`).
-- **Procedure:** apply §1 deltas to `src/graph` in one reviewed change, exclude §2, then run this
-  suite against the real instance to confirm no drift (README §10.5).
+- **Status: PUSHED 2026-06-26.** §1 deltas applied to `src/graph` in one change: prompts → defaults
+  YAML + `FALLBACK_GRAPH_PROMPTS` (version 1→2); relations → defaults YAML + `FALLBACK_GRAPH_RELATIONS`;
+  node schema → optional `reasoning` + `analyzed_content_hash` default `''`. `low_confidence_flag` (§2)
+  excluded. `pending-edge-worker.test.ts` edge-prompt assertion updated to the new text.
+- **Verification done here:** parity (T-U-076/T-U-052 invariant: packaged YAML deep-equals the in-code
+  FALLBACK), prompt validation, schema parse (reasoning optional, hash default), and non-persistence
+  (row builder drops `reasoning`) all confirmed via the production code under `tsx`.
+- **Verification still owed (on a machine with the repo's native toolchain):** run the full graph
+  unit + integration suite (`vitest`) and a golden-model run against a real instance to confirm no
+  drift. The flashquery `vitest` could not run in the workbench sandbox (its `node_modules` carries
+  macOS-native bindings; reinstalling for Linux would break the local setup) — so run `npm test` for
+  the graph suites locally.
+- **Deployment:** existing instances' `.fqc/graph-prompts.yml` / `.fqc/edge-types.yml` sidecars still
+  need re-syncing separately (§1.5 deployment note).
 
 ## 5. Alignment with production (keeping pushes straightforward)
 Assessment (verified 2026-06-25): the workbench is already well aligned for a near-copy push.

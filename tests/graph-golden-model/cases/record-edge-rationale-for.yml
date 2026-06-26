@@ -1,0 +1,30 @@
+kind: record
+op: edge
+input_source: synthetic
+description: >
+  Full-record edge - the source gives the REASON behind the target decision - tests the rationale_for
+  relation (vs the confusable supports/depends_on) and every primary-edge field.
+source:
+  chunk_id: reason
+  key_claims:
+    - "The legacy auth library is unmaintained and has two open CVEs"
+target:
+  chunk_id: decision
+  key_claims:
+    - "We are migrating off the legacy auth library this quarter"
+expect:
+  primary_relation_in: [rationale_for, supports]
+  expect_relations: [rationale_for]
+  min_edges: 1
+  max_edges: 2
+  confidence_min: 0.5
+  llm_assessment_in: [strong, moderate]
+  reasoning_max_sentences: 2
+judge:
+  reasoning:
+    criteria: [justifies]
+structural_only:
+  - qualifiers
+  - low_confidence_flag
+  - source_claims_referenced
+  - target_claims_referenced

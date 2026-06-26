@@ -17,8 +17,13 @@ const DEFAULT_MODEL = 'granite4';
 export interface Settings {
   /** OpenAI-compatible base URL, e.g. http://host:11434/v1 (no trailing /chat/completions). */
   baseUrl: string;
-  /** One or more model tags to run, in order (`ollama list`). Comma-separated on the CLI/env. */
+  /** One or more model tags to run, in order (`ollama list`). Comma-separated on the CLI/env.
+   *  These are the GRAPH models — the ones under test for analyze_node / classify_edge. */
   models: string[];
+  /** Model used for LLM-as-judge (NL field evaluation), separate from the graph model so we
+   *  can hold the judge fixed while varying the graph model (or vice-versa). Default: undefined,
+   *  meaning "use the same model as the graph call". --judge-model / GRAPH_GOLDEN_JUDGE_MODEL. */
+  judgeModel?: string;
   /** Optional bearer token; omitted for Ollama. */
   apiKey?: string;
   /** Inject the relation vocabulary into the edge prompt (A/B vs. the as-wired prompt). */
@@ -88,6 +93,7 @@ export function resolveSettings(argv: string[]): Settings {
   return {
     baseUrl: flag(argv, 'base-url') ?? env.GRAPH_GOLDEN_BASE_URL ?? DEFAULT_BASE_URL,
     models: models.length ? models : [DEFAULT_MODEL],
+    judgeModel: flag(argv, 'judge-model') ?? env.GRAPH_GOLDEN_JUDGE_MODEL,
     apiKey: flag(argv, 'api-key') ?? env.GRAPH_GOLDEN_API_KEY,
     injectVocabulary: boolFlag(argv, 'inject-vocabulary'),
     injectSchema: boolFlag(argv, 'inject-schema'),

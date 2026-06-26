@@ -1,0 +1,28 @@
+kind: record
+op: node
+input_source: synthetic
+description: >
+  Standards statement citing two RFCs with a dated update - tests multiple external_refs, a temporal
+  marker, durable staleness, and RFC-as-provenance (reinforces the provenance signal across the batch).
+input: |
+  Per RFC 8259, JSON text must be encoded using UTF-8 by default. This was clarified in the 2017
+  update, which superseded the earlier RFC 7159 specification.
+expect:
+  certainty_level: high
+  staleness_risk: low
+  question_status: null
+  question_resolution_present: false
+  provenance_present: true
+  provenance_basis_contains: ["RFC 8259"]
+  external_refs_contains: ["RFC 8259", "RFC 7159"]
+  temporal_markers_min: 1
+judge:
+  key_claims:
+    criteria: [grounded, atomic, complete]
+    must_capture:
+      - "JSON text must be encoded using UTF-8 by default per RFC 8259"
+  chunk_summary:
+    criteria: [grounded, representative, concise]
+structural_only:
+  - reasoning
+  - analyzed_content_hash

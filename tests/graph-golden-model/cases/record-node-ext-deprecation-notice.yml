@@ -1,0 +1,32 @@
+kind: record
+op: node
+input_source: external
+source_note: "rivereditor.com API deprecation notice example"
+description: >
+  External (real deprecation-notice example). Dated sunset notice - tests high staleness from a fixed
+  removal date, multiple temporal markers, standard names in external_refs, and self-contained
+  provenance.
+input: |
+  Status: Deprecated as of January 1, 2026. Removal Date: April 1, 2026 (90 days). Replacement:
+  POST /v2/users. Why this change? The v1 endpoint uses OAuth 1.0 authentication with known security
+  vulnerabilities. The v2 endpoint uses OAuth 2.0 with improved security and performance.
+expect:
+  certainty_level: high
+  staleness_risk: high
+  question_status: null
+  question_resolution_present: false
+  provenance_present: false
+  external_refs_contains: ["OAuth"]
+  temporal_markers_min: 2
+judge:
+  key_claims:
+    criteria: [grounded, atomic, complete]
+    must_capture:
+      - "the v1 endpoint is deprecated"
+      - "the removal date is April 1, 2026"
+      - "the replacement is POST /v2/users"
+  chunk_summary:
+    criteria: [grounded, representative, concise]
+structural_only:
+  - reasoning
+  - analyzed_content_hash

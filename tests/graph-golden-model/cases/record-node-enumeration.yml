@@ -1,0 +1,30 @@
+kind: record
+op: node
+input_source: synthetic
+description: >
+  Stress test for key_claims atomic splitting of an enumeration - each step must become its own claim,
+  not one bundled claim. Durable procedure (staleness low), no refs/dates.
+input: |
+  The deploy runbook has three steps: first, drain traffic from the node; second, apply the database
+  migration; third, restart the service and re-enable traffic.
+expect:
+  certainty_level: high
+  staleness_risk: low
+  question_status: null
+  question_resolution_present: false
+  provenance_present: false
+  external_refs_empty: true
+  temporal_markers_empty: true
+  key_claims_min: 3
+judge:
+  key_claims:
+    criteria: [grounded, atomic, complete]
+    must_capture:
+      - "drain traffic from the node"
+      - "apply the database migration"
+      - "restart the service and re-enable traffic"
+  chunk_summary:
+    criteria: [grounded, representative, concise]
+structural_only:
+  - reasoning
+  - analyzed_content_hash

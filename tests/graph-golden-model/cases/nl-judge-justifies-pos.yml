@@ -1,0 +1,12 @@
+kind: nl
+field: reasoning
+description: >
+  Judge calibration (positive control) for justifies. A sound edge rationale that names the relation
+  and the source-side basis should PASS justifies even though it does not restate the target claim's
+  specific details. Guards against the over-strict reading that failed depends_on/supersedes.
+input: |
+  Source claims: ["After enabling the read-through cache, p95 latency dropped from 800ms to 480ms in the benchmark"]
+  Target claims: ["The read-through cache improves API latency"]
+  Chosen relation: supports
+given: "The source's measured latency drop after enabling the cache backs the target's general claim that the cache improves latency, so the source supports the target."
+criteria: [justifies]

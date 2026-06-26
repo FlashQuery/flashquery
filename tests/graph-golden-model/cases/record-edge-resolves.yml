@@ -1,0 +1,30 @@
+kind: record
+op: edge
+input_source: synthetic
+description: >
+  Full-record edge - the source resolves the problem the target states - tests the resolves relation
+  and every primary-edge field.
+source:
+  chunk_id: fix
+  key_claims:
+    - "We fixed the shutdown memory leak by closing the connection pool during graceful shutdown"
+target:
+  chunk_id: problem
+  key_claims:
+    - "The service leaks memory when it shuts down"
+expect:
+  primary_relation: resolves
+  expect_relations: [resolves]
+  min_edges: 1
+  max_edges: 2
+  confidence_min: 0.5
+  llm_assessment_in: [strong, moderate]
+  reasoning_max_sentences: 2
+judge:
+  reasoning:
+    criteria: [justifies]
+structural_only:
+  - qualifiers
+  - low_confidence_flag
+  - source_claims_referenced
+  - target_claims_referenced

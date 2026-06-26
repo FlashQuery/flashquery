@@ -1,8 +1,8 @@
 # Graph test cases — authoring guide
 
 One YAML file per case. The runner auto-discovers every `*.yml` here, so you grow the suite by
-adding files — no code changes. Name files `node-*` / `edge-*` / `nl-*` for readability (the `kind`
-field is what actually dispatches).
+adding files — no code changes. Name files `node-*` / `edge-*` / `nl-*` / `record-*` for readability
+(the `kind` field is what actually dispatches).
 
 **This is the authoring guide.** The authoritative, complete field reference for all three case
 kinds is **README §6** (`../README.md`). The unique content here is the *design discipline*. Keep
@@ -16,6 +16,9 @@ this file consistent with README §6 and `COVERAGE.md`.
   chained pipeline, matching how node quality bottlenecks edge quality in production (README §6.3).
 - `kind: nl` — natural-language outputs (`key_claims`, `chunk_summary`, edge `reasoning`) scored by
   the LLM judge, incl. `given`-mode calibration controls (README §6.4, §7).
+- `kind: record` — full-record: one production-faithful op call, **every** output field checked
+  (enums via expected-vs-actual, NL via per-field judge) with a coverage guard. The going-forward
+  standard (README §6.6, §14).
 
 YAML note: keep `description` colon-free or quote it — an unquoted `:` breaks the file, and the
 loader reads the whole directory, so one bad file breaks every run.

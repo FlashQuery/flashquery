@@ -1,0 +1,27 @@
+kind: record
+op: edge
+input_source: synthetic
+description: >
+  Full-record edge - NEGATIVE control. The two claims are unrelated, so the model must emit NO edge
+  (false-positive guard). All edge fields are waived since there should be no edge to describe; the
+  real assertion is max_edges 0.
+source:
+  chunk_id: lunch
+  key_claims:
+    - "The office cafeteria serves lunch at noon on weekdays"
+target:
+  chunk_id: api
+  key_claims:
+    - "The API enforces a rate limit of 100 requests per second"
+expect:
+  min_edges: 0
+  max_edges: 0
+structural_only:
+  - relation
+  - reasoning
+  - confidence_score
+  - llm_assessment
+  - qualifiers
+  - low_confidence_flag
+  - source_claims_referenced
+  - target_claims_referenced

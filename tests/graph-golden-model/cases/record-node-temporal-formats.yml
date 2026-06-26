@@ -1,0 +1,33 @@
+kind: record
+op: node
+input_source: synthetic
+description: >
+  Stress test for temporal_markers across many formats (ISO date, quarter, relative day, semantic
+  version, "in N months"). reasoning is format-only (length-capped, NOT judged - its job is to improve
+  the downstream fields, which ARE judged). Reveals whether the temporal_markers instruction + one-shot
+  example captures varied date/version/deadline forms, including semantic versions.
+input: |
+  The data migration begins on 2026-03-14 and must complete by Q3 2026. Version 2.1.0 ships next
+  Friday, and the legacy /v1 API will be sunset after v3.0 is released. Support for the old SDK ends
+  in 18 months.
+expect:
+  certainty_level: high
+  staleness_risk: high
+  question_status: null
+  question_resolution_present: false
+  provenance_present: false
+  temporal_markers_min: 5
+  temporal_markers_contains: ["2.1.0", "3.0"]
+  chunk_summary_nonempty: true
+  reasoning_max_sentences: 2
+judge:
+  key_claims:
+    criteria: [grounded, atomic, complete]
+structural_only:
+  # reasoning: format-only (length-capped above), not judged - its purpose is to improve the fields
+  # that follow, which are the ones we judge.
+  - reasoning
+  # external_refs scope (API paths / version names) is an open product decision - tested in the
+  # dedicated external_refs cases, waived here so this case stays focused on temporal_markers.
+  - external_refs
+  - analyzed_content_hash

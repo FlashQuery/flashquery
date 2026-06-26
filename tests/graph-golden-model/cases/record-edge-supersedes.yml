@@ -1,0 +1,31 @@
+kind: record
+op: edge
+input_source: synthetic
+description: >
+  Full-record edge - a v2 policy replaces v1 as authoritative - tests supersedes (vs the confusable
+  contradicts/duplicates) and every primary-edge field.
+source:
+  chunk_id: v2
+  key_claims:
+    - "Retention Policy v2 replaces Policy v1 and is now the authoritative retention rule"
+target:
+  chunk_id: v1
+  key_claims:
+    - "Retention Policy v1 sets the data retention period at 13 months"
+expect:
+  primary_relation: supersedes
+  expect_relations: [supersedes]
+  min_edges: 1
+  max_edges: 2
+  forbid_relations: [duplicates]
+  confidence_min: 0.5
+  llm_assessment_in: [strong, moderate]
+  reasoning_max_sentences: 2
+judge:
+  reasoning:
+    criteria: [justifies]
+structural_only:
+  - qualifiers
+  - low_confidence_flag
+  - source_claims_referenced
+  - target_claims_referenced

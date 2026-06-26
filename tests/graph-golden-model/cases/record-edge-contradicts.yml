@@ -1,0 +1,30 @@
+kind: record
+op: edge
+input_source: synthetic
+description: >
+  Full-record edge - source revokes what the target still instructs - tests the contradicts relation
+  and every primary-edge field (confidence, assessment, reasoning via judge).
+source:
+  chunk_id: removed
+  key_claims:
+    - "The /v1/search endpoint was removed in v3 and no longer responds"
+target:
+  chunk_id: instruct
+  key_claims:
+    - "Clients should call /v1/search to query the index"
+expect:
+  primary_relation: contradicts
+  expect_relations: [contradicts]
+  min_edges: 1
+  max_edges: 2
+  confidence_min: 0.5
+  llm_assessment_in: [strong, moderate]
+  reasoning_max_sentences: 2
+judge:
+  reasoning:
+    criteria: [justifies]
+structural_only:
+  - qualifiers
+  - low_confidence_flag
+  - source_claims_referenced
+  - target_claims_referenced

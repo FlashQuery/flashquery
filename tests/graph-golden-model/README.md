@@ -163,16 +163,24 @@ The local Ollama box serves several models (e.g. `granite4`, `gemma4:latest`, `n
 Both base URL and model are overridable per run (§5.2).
 
 ### 5.2 Modes and flags
-First positional arg = mode: `node` | `edge` | `nl` | `all` (default `all`).
+First positional arg = mode: `node` | `edge` | `nl` | `record` | `all` (default `all`).
 ```
-npm run all | node | edge | nl
+npm run all | node | edge | nl | record
 npm run selftest                                   # offline mock; wiring check only
 npx tsx src/run.ts edge --only "edge-supports,edge-contradicts" --model granite4
+npx tsx src/run.ts record --model gemma4:latest --judge-model gemma4:latest
 ```
-Flags: `--model a,b` (one or several), `--base-url`, `--api-key`, `--only <substr[,substr...]>`,
-`--temperature`, `--baseline` (use unmodified prod prompts for A/B), `--reasoning-effort
-<none|low|medium|high>` (default `none`, §8), `--extra-body '<json>'`, `--no-cache`, `--clear-cache`,
-`--mock`.
+Flags: `--model a,b` (the GRAPH model(s) under test — one or several), `--judge-model <m>` (the model
+used for LLM-as-judge; default = the graph model), `--base-url`, `--api-key`, `--only
+<substr[,substr...]>`, `--temperature`, `--baseline` (use unmodified prod prompts for A/B),
+`--reasoning-effort <none|low|medium|high>` (default `none`, §8), `--extra-body '<json>'`,
+`--no-cache`, `--clear-cache`, `--mock`.
+
+**Graph vs judge model.** Extraction/classification always uses the graph model; the judge uses
+`--judge-model` (or `GRAPH_GOLDEN_JUDGE_MODEL`) when set, else the same graph model. This holds across
+all kinds (`nl`, `edge` reasoning-judging, and `record`), so you can vary the model under test while
+holding the judge fixed, or vice-versa. A `record` case may also override both per case (`model:` /
+`judge_model:`).
 
 ### 5.3 Resumability, batching, and the NL cost model
 Because of §3.4, slow suites are run in batches (e.g. `--only "edge-a,edge-b"`) or simply re-run —
@@ -191,6 +199,18 @@ progress. Calls are sequential by design — the local server is not set up for 
 ### 5.4 Aggregation
 `npx tsx src/aggregate.ts --model <m>` stitches the latest result per case across all (non-mock)
 reports into one scorecard + edge confusion matrix. Use it to get the numbers for `COVERAGE.md`.
+
+### 5.4a Session failure ledger (aggregate failure analysis)
+`npm run analyze` (`src/analyze-failures.ts`) reads the **latest result per (model, case)** across all
+non-mock reports and writes one regenerated, temporary file `results/SESSION-FAILURES.md` that
+**buckets every failed check by a normalized signature** (literals/numbers genericized) so systematic
+problems surface as counts — e.g. `provenance_basis present — 7× (all got null)` — instead of
+one-off observations. Failures are split into **FIELD** (enum/structural/value mismatches → prompt or
+logic candidates), **JUDGE** (LLM-as-judge criterion verdicts → rule out judge noise before treating
+as a real bug), **COVERAGE** (under-specified record case → fix the case), and **PARSE/SCHEMA**
+(malformed model JSON). Scope with `--kind record` / `--model <m>`. `results/` is gitignored, so the
+ledger is disposable — regenerate after each batch; delete at session end. This is the engine of the
+refinement-session workflow (§14.8).
 
 ### 5.5 Reports
 Every run writes `results/<timestamp>/report.json` (complete) and `report.md` (human-readable). For
@@ -280,6 +300,52 @@ max_claims: 5                   # min_claims / max_claims = precision bounds
 `certainty_level_in`, `staleness_risk_in`, `question_status_in`, `primary_relation_in` accept a set
 of values. Reserve them for axes that are **genuinely ambiguous to a careful human** (§9.5, §9.6) —
 not as a way to launder a flaky test into a pass. Default to strict single-value expectations.
+
+### 6.6 record cases (full-record) — the going-forward standard
+A `record` case mimics a **single production call exactly** and checks **every field** of the
+resulting JSON in one cohesive test: enum/choice/structural fields via expected-vs-actual (the same
+keys as §6.2/§6.3), natural-language fields via a per-field LLM-as-judge `judge:` block, and a
+**coverage guard** that fails the case if any output field has neither an `expect`, a `judge`, nor an
+explicit `structural_only` waiver. This is the realistic "can the model produce the whole object
+correctly, every run" test and the primary feedback mechanism for refining prompts and finding logic
+bugs (§14). The facet kinds (§6.2–§6.4) remain for probing one axis and for judge calibration.
+
+```yaml
+kind: record
+op: node                         # node = analyze_node ; edge = classify_edge
+input_source: external           # INFO-ONLY: synthetic (hand-written) | external (real web/doc text)
+source_note: "example.com/post"  # INFO-ONLY: optional provenance for external text
+description: ...
+input: |                         # op: node — the chunk text (production passes only chunk_content)
+  ...
+# op: edge instead uses source/target (key_claims, or text: to derive claims first) — see §6.3
+expect:                          # enum/choice/structural fields (same keys as §6.2 / §6.3)
+  certainty_level: high
+  staleness_risk: high
+  question_status: null
+  provenance_present: true
+  question_resolution_present: false
+  external_refs_contains: ["RFC-0042"]
+  temporal_markers_min: 1
+  key_claims_min: 2
+judge:                           # one LLM-judge call per NL field (§7)
+  key_claims:    { criteria: [grounded, atomic, complete], must_capture: ["..."] }
+  chunk_summary: { criteria: [grounded, representative, concise] }
+structural_only:                 # fields deliberately not value-checked (waives the guard on purpose)
+  - reasoning                    # non-persisted chain-of-thought; source-grounding criteria don't fit
+  - analyzed_content_hash        # system-filled post-parse
+# optional:
+#   model: <graph-model>         # per-case graph-model override (default: --model)
+#   judge_model: <judge-model>   # per-case judge-model override (default: --judge-model, else graph)
+#   repeat: 5                    # run N times (cache bypassed); ALL must fully pass (every-run proof)
+```
+
+The guard knows the full field set from the production payload schema (node:
+`GraphNodeAnalysisPayloadSchema`; edge: the edge draft + `metadata.*`), so adding a field to the
+schema later forces every record case to address it — coverage stays honest by construction. Keep the
+coverage tables in `src/score.ts` (`NODE_FIELD_COVERAGE` / `EDGE_FIELD_COVERAGE`) in sync with the
+schema. Author input from **real web text** (a paragraph or two on a researched topic), not only
+synthetic chunks, to exercise input variety — write your a-priori expectations, then run (§14).
 
 ---
 
@@ -460,10 +526,18 @@ Status: the planned skill now exists as `flashquery-graph-testgen` at
 The skill lets an agent operate this workbench. It is **thin orchestration over the docs in this
 repo** — it inlines the guardrails and step order, and references the docs for schemas/commands so
 it doesn't drift. Triggers: "create/refine a graph test", "cover `<axis/relation>`", "fill a
-coverage gap", "test analyze_node / classify_edge", "run the graph golden-model". Each workflow
-below is specified as **Purpose / Uses (reads) / Touches (writes) / Produces / Behavior** and is
-mirrored by the skill's workflow-specific reference files. They compose: a typical loop is 11.1 →
-11.2 → (11.3 and, for NL, 11.4) → repeat → 11.5 → 11.6 → eventually 11.7.
+coverage gap", "test analyze_node / classify_edge", "run the graph golden-model", "author a record
+case", "build a record batch", "run web research for test inputs". Each workflow below is specified
+as **Purpose / Uses (reads) / Touches (writes) / Produces / Behavior** and is mirrored by the skill's
+workflow-specific reference files.
+
+Two loops compose from these workflows:
+- **Facet loop** (probe one axis): 11.1 → 11.2 → (11.3 and, for NL, 11.4) → repeat → 11.5 → 11.6 → eventually 11.7.
+- **Record loop** (realistic whole-object regression, the going-forward standard): 11.1R / 11.1W
+  (author a batch) → 11.2 (run the batch) → 11.8 (aggregate the failures) → 11.3 (fix the ONE
+  strongest signal) → re-run + re-aggregate → repeat → 11.6 → 11.7. The record loop is **aggregate-
+  first** (§14.8): never refine a prompt off one case; act on a field that fails the same way across
+  several cases.
 
 ### 11.1 Author a test
 - **Purpose:** turn an uncovered/under-covered axis (or a target the user names) into a runnable,
@@ -479,6 +553,58 @@ mirrored by the skill's workflow-specific reference files. They compose: a typic
   from a model (`src/probe.ts` is investigation-only and its output never becomes an expectation).
   Keep `description` colon-free or quoted; make `must_capture` facts atomic; reserve `*_in`
   tolerance for genuinely ambiguous axes. Does **not** call the model — authoring only.
+
+### 11.1R Author a record (full-record) case
+- **Purpose:** turn one production-faithful input into a `record` case that checks **every** output
+  field at once — the realistic regression standard (README §6.6, §14).
+- **Uses:** README §6.6 (record schema: `op`, `expect`, `judge`, `structural_only`, `input_source`,
+  `repeat`); the coverage tables in `src/score.ts` (`NODE_FIELD_COVERAGE` / `EDGE_FIELD_COVERAGE`) for
+  the full field set; the enum/relation legal values (schema + `prompts/edge-types.yml`); §7 for judge
+  criteria.
+- **Touches:** creates one `cases/record-<op>-<name>.yml`; nothing in `src/` or `prompts/`.
+- **Produces:** a runnable record case where **every** field is addressed by `expect`, a `judge`
+  block, or an explicit `structural_only` waiver (the coverage guard fails the case otherwise).
+- **Behavior:** pick `op` (node = `analyze_node`, edge = `classify_edge`) and give production-faithful
+  input (node: a single chunk; edge: `source`/`target` claims). For EACH field decide its check:
+  enum/choice/structural → `expect` (exact, or `*_in` only when genuinely ambiguous); natural-language
+  (`key_claims`, `chunk_summary`, edge `reasoning`) → a `judge` block with criteria + `must_capture`
+  (atomic facts); fields you deliberately don't value-check (`analyzed_content_hash`, the non-persisted
+  `reasoning`, edge claim-ref arrays / `qualifiers` / `low_confidence_flag` when not the point) →
+  `structural_only`. Write all expectations **a priori from human judgment** (§6.1) — and for external
+  input, never copy the source's own framing as the answer; judge what a correct system *should*
+  emit. Set `input_source` and (for external) `source_note`. Use `repeat: N` for an "every run"
+  determinism check. Validate it loads with `--mock` (coverage guard must be clean) before live runs.
+  Authoring only — no model calls.
+
+### 11.1W Author record inputs from web research
+- **Purpose:** source **non-synthetic** record inputs from real documents so the suite tests realistic
+  text, not only hand-written chunks (`input_source: external`).
+- **Uses:** `WebSearch` + `mcp__workspace__web_fetch` (or `site-utils`); when a fetch is too large,
+  extract via a subagent and return **verbatim** excerpts only (no model-authored expectations).
+- **Touches:** creates `cases/record-<op>-ext-<name>.yml` files (with `source_note` = the URL/doc);
+  nothing in `src/` or `prompts/`.
+- **Produces:** record cases whose `input` is a verbatim excerpt of a real document, each with
+  a-priori expectations written by the author.
+- **Web-research parameters (defaults the skill should use / ask about):**
+  - **Source types / proposed topics** — pick to exercise specific fields: PRDs & product specs
+    (open questions, decisions, goals), research abstracts / arXiv (research-claim certainty, durable
+    staleness, null provenance), RFCs & standards (external_refs, RFC-as-provenance, durable
+    staleness), changelogs / deprecation & sunset notices (high staleness from a dated cutoff, temporal
+    markers), dataset / benchmark / survey reports (dataset provenance, drifting staleness, a
+    statistic), ADRs / postmortems (ratification provenance, resolved/deferred questions). Default a
+    **spread** across these so each run yields many observations per field.
+  - **Excerpt size** — one self-contained chunk, ~**40–130 words** (1–3 sentences or a short
+    paragraph), matching a production chunk. Not a whole page; not a single fragment.
+  - **Verbatim** — copy the published text exactly (light whitespace/markdown cleanup only); never
+    paraphrase, and never let the model summarize the source into the `input`.
+  - **Quantity per batch** — default ~3–4 external among a ~12–18-case batch (rest synthetic), enough
+    for input variety without dominating wall-clock.
+  - **Provenance/attribution** — always set `source_note` to the URL or document name; prefer stable,
+    static pages (arXiv abstracts, rfc-editor, official docs) over JS-heavy marketing pages.
+  - **Selection bias to avoid** — don't pick text engineered to be easy; include ordinary, messy
+    real prose so the model is tested on what production actually ingests.
+- **Behavior:** research first, gather verbatim excerpts, THEN author expectations by hand (§6.1).
+  Keep excerpts short and self-contained. This workflow feeds 11.1R.
 
 ### 11.2 Run & diagnose
 - **Purpose:** execute case(s) and classify any failure.
@@ -571,10 +697,31 @@ mirrored by the skill's workflow-specific reference files. They compose: a typic
   time, re-check that every staged delta fits the current template+renderer; if one doesn't, route it
   to the dev/arch agent as a wiring change.**
 
+### 11.8 Aggregate failures across a batch (record loop)
+- **Purpose:** turn a batch of record runs into one ranked failure view so refinement acts on
+  **systematic** patterns, not single cases (README §5.4a, §14.8).
+- **Uses:** `npm run analyze` (`src/analyze-failures.ts`) with `--kind record` / `--model <m>`; it
+  reads the latest result per (model, case) from `results/`.
+- **Touches:** writes the temporary, gitignored `results/SESSION-FAILURES.md` only.
+- **Produces:** failures bucketed by normalized signature with counts, split into **FIELD** (prompt/
+  logic candidates), **JUDGE** (LLM-as-judge verdicts — rule out judge noise first), **COVERAGE**
+  (under-specified case — fix the case), **PARSE/SCHEMA** (malformed JSON), plus a per-case appendix.
+- **Behavior:** run the whole batch first (11.2), then regenerate the ledger. Read it top-down: a
+  field failing the same way across several cases is a strong signal; a lone miss usually isn't.
+  **Discount JUDGE buckets** until the criterion is cleared with §7.3 controls (a flaky criterion is
+  an LLMaaJ issue, not a model bug); fix COVERAGE buckets in the case. Hand the single strongest FIELD
+  signal to 11.3, change ONE thing, re-run the batch, and regenerate to confirm the bucket cleared and
+  no new bucket appeared. The ledger is disposable working state — delete it when the session's prompt
+  changes are settled and folded into §9 / `PORT_BACK.md`.
+
 Non-negotiables the skill must enforce regardless of what's read: don't touch `src/graph` during
-refinement (only 11.7 touches it, deliberately); `must_capture` facts must be atomic; validate the
-judge with positive+negative controls and re-run them after any criterion edit; re-confirm the whole
-suite after a shared-prompt edit; the production push is a separate, reviewed, one-shot step.
+refinement (only 11.7 touches it, deliberately); `must_capture` facts must be atomic; **author every
+expectation a priori — never derive it from the model or, for external inputs, from the source's own
+framing**; for record cases every output field must have an `expect`/`judge`/`structural_only` entry
+(the coverage guard enforces this); refine prompts **aggregate-first** (a field failing the same way
+across several cases, not one observation); validate the judge with positive+negative controls and
+re-run them after any criterion edit; re-confirm the whole suite after a shared-prompt edit; the
+production push is a separate, reviewed, one-shot step.
 
 ---
 
@@ -648,3 +795,155 @@ Product definition needed so the bucket is unambiguous.
 - Ollama blog — Thinking: https://ollama.com/blog/thinking
 - `reasoning_effort` on the OpenAI-compatible endpoint (maps to Ollama "think"):
   https://github.com/ollama/ollama/issues/14820
+
+---
+
+## 14. Full-record cases — design, decisions, and rationale
+
+This section is the durable record of *why* the `record` kind exists and the choices made building
+it (June 2026), so a future context window can pick up without re-deriving them. The authoring
+reference is §6.6; this is the design intent.
+
+### 14.1 Motivation
+The facet kinds (§6.2–§6.4) each probe one slice: `node`/`edge` assert enums/structure but only
+shallow-check NL fields; `nl` judges one NL field but asserts no enums. Nothing tested a **whole
+production object at once**. We needed a case that mimics one production call exactly and verifies
+**every field on the way out** — enums via expected-vs-actual, NL strings via LLM-as-judge — so we
+can answer the real question: *can the model produce the entire object correctly, every run?* The
+record kind is that test, and it doubles as the continuous feedback signal for refining prompts and
+catching logic bugs (it found one immediately — see 14.7).
+
+### 14.2 Shape and flow
+A `record` case declares `op: node | edge` and production-faithful input (node: `input` chunk text;
+edge: `source`/`target` claims, `text:` to derive). Per case the runner: (1) renders the **production
+prompt** and makes **one** op call on the graph model → parses through the **real** corrector +
+schema + (edge) validator; (2) for each NL field in `judge:`, makes **one** judge call on the judge
+model; (3) scores every enum/structural field (reusing the §6.2/§6.3 logic), runs the coverage guard,
+and scores each judged field; (4) the case passes only if **every** check passes. Cost: node ≈ 1 + N
+judge calls; edge ≈ 1 + 1. Sequential, cache-resumable, reasoning off (§8) — these are deliberately
+not short tests (that was accepted up front).
+
+### 14.3 The coverage guard (the completeness guarantee)
+`src/score.ts` holds `NODE_FIELD_COVERAGE` / `EDGE_FIELD_COVERAGE` — the full output field set and,
+per field, which `expect` keys (or `judge` block) count as covering it. The guard emits one
+`coverage: <field>` check per field and **hard-fails** any field that is covered by neither an
+`expect`, a `judge`, nor an explicit `structural_only` waiver. So "check every field" is enforced by
+construction, and a waiver is an intentional, visible decision rather than a silent omission. Keep the
+tables in sync with the production schemas; adding a schema field forces every record case to address
+it. (Strictness may be selectively relaxed for fields that prove too hard to get right — handled
+case-by-case via `structural_only`, not by weakening the guard.)
+
+### 14.4 Decisions (agreed before building)
+- **New kind, not a retrofit.** `record` is additive; facet/calibration kinds stay; nothing migrated.
+  Record is the going-forward standard, authored fresh from here.
+- **Inputs are all required today** (node `chunk_content`; edge `source_chunk`+`target_chunk`), so no
+  optional-omit variations now. If an optional input ever appears, add variations that omit it.
+- **One judge call per NL field** for now (simple, robust). A single combined per-record judge call
+  is a later optimization if cost demands — not worth the heavier, overload-prone prompt yet.
+- **`repeat: N`** runs a case N times with the **cache bypassed** and requires **all** runs to fully
+  pass — the "every single run" guarantee, since temperature-0 is not perfectly deterministic.
+  Default 1; raise for final acceptance.
+- **Graph vs judge model are separately selectable** across all kinds (§5.2), with per-record
+  overrides. Today both default to the same model; this leaves room to fix the judge while varying
+  the model under test (or vice-versa) later.
+- **Coverage guard hard-fails**; deliberate non-checks are waived via `structural_only`.
+
+### 14.5 Real-vs-synthetic input (authoring + skill)
+Record input does not have to be synthetic. Because we often use AI to author cases, pull a paragraph
+or two of **real text** via web research, write the a-priori expectations from human judgment (never
+reverse-engineered from a model — §6.1), and run it. This exercises input variety the synthetic
+chunks miss. To be wired into the test-authoring skill as an option: "use non-synthetic source text."
+
+Each record case carries an **info-only** `input_source: synthetic | external` (plus optional
+`source_note`). It does not affect scoring — it is captured so runs can be sliced by input provenance
+later (e.g. "how does the model do on real external text vs. synthetic chunks?"). It surfaces in the
+report's case table and in `report.json`.
+
+### 14.6 How it coexists
+Facet cases (§6.2–§6.4) remain the tool for isolating one axis when refining a single field/relation,
+and `nl` `given`-mode remains how the judge is calibrated (§7.3). Record cases are the realistic,
+whole-object regression standard layered on top.
+
+### 14.8 Refinement-session workflow (aggregate, not one-by-one)
+Refine prompts off **aggregate** evidence, never a single case. The loop:
+1. **Author / grow a batch** of record cases spanning the field and relation space (a single case
+   touches every field, so a dozen cases give many observations per field). Mix synthetic and
+   `input_source: external` (real web text) for input variety.
+2. **Run the batch** (`npm run record`, in `--only` sub-batches if needed; cache makes it resumable).
+3. **Aggregate** (`npm run analyze -- --kind record`) → `results/SESSION-FAILURES.md`.
+4. **Read the ledger top-down.** A field failing the same way across many cases (e.g. `provenance_basis
+   present — N× got null`) is a strong prompt/logic signal; a lone failure usually isn't. Triage by
+   category: discount JUDGE buckets until the judge is cleared (a flaky criterion is an LLMaaJ issue,
+   not a model bug — validate with §7.3 controls); fix COVERAGE buckets in the case, not the prompt.
+5. **Make ONE targeted prompt/logic change** for the strongest signal (§6.1 diagnose order); log it in
+   `PORT_BACK.md`.
+6. **Rerun the batch and re-aggregate.** A shared-prompt edit can regress another field/relation
+   (§9.9), so re-confirm the whole suite — the ledger makes a new regression visible as a new bucket.
+7. Repeat. The ledger is temporary working state; delete it when the session's prompt changes are
+   settled and folded into §9 / `PORT_BACK.md`.
+
+### 14.9 Record-batch refinement-session findings (2026-06-25/26, gemma4)
+An 18-case record batch (13 node incl. 4 external, 5 edge) aggregated via `analyze-failures.ts`
+drove these iterations (graph model = judge model = gemma4 unless noted):
+- **`provenance_basis` under-population (dominant FIELD signal, 4 cases).** gemma4 filed a
+  grounding/ratifying RFC/standard/dataset under `external_refs` only, leaving provenance null.
+  Fix: clarified the two fields are not mutually exclusive (PORT_BACK #20). Result: deprecation and
+  standard-refs now pass; residual on "the header is *defined in* RFC X" and an *internal* "our
+  surveys" source — both arguably correct-as-null, i.e. test-expectation calls, not prompt gaps.
+- **`question_status` `deferred`/`resolved` returned null.** gemma4 detected `open` but not a
+  postponed or answered-in-chunk question. Fix: one-shot examples in the field description + "a
+  question may be a weighed decision without a literal '?'" (PORT_BACK #21). Result: both now pass.
+  One-shot examples in the field description are a high-leverage technique on this model.
+- **Judge `consistent` was wrong for edge reasoning** (penalized referencing the target, which an
+  edge must do). Removed it from edge-reasoning judging (workbench-only).
+- **Judge `concise` over-fired on ~1-sentence sources** ("verbatim copy"). Relaxed to not penalize a
+  faithful short summary; still fails genuinely long-winded ones (workbench-only).
+- **Judge `justifies` on edge reasoning is a JUDGE-MODEL ceiling, not a prompt/criterion bug.**
+  gemma4's edge reasoning is source-centric; gemma4-as-judge then fails `justifies` for not tying to
+  the target — and even a relaxed definition AND a near-identical one-shot pass-example did NOT move
+  it. Swapping only the judge to a stronger model (`--judge-model nemotron3:33b`, graph call still
+  gemma4) makes the same case PASS. Lesson: validate the criterion with controls (pos passes / neg
+  fails — it does), then attribute residual edge-reasoning `justifies` failures to judge capacity and
+  run a stronger `--judge-model`, rather than over-tuning the prompt. This is the payoff of the
+  graph-vs-judge model split (§5.2).
+- **Rejected change:** adding a worked example to the `classify_edge` prompt **regressed** edge
+  production (depends-on → `{"edges":[]}`, confirmed cache-bypassed). Reverted per §9.9 (revert a
+  regressing change rather than stack patches). A future, more neutral example would need a full
+  edge-suite re-confirmation before keeping.
+
+### 14.10 Stress findings: thin fields (2026-06-26, gemma4)
+Targeted stress cases for the under-specified fields. What they revealed:
+- **`temporal_markers` partially works, misses version markers.** Got `["2026-03-14","Q3 2026","next
+  Friday","18 months"]` but DROPPED semantic versions (`v2.1.0`, `v3.0`) even though the prompt says
+  "version markers." Format is verbatim/undefined (mix of absolute + relative). **Prompt gap** — the
+  one-line instruction is too thin; needs explicit sub-types (ISO date, quarter, relative, **semantic
+  version**, duration) + a properly-formatted example.
+- **`external_refs` under-extracts (recurring).** Returned `[]` for a chunk citing `/v1`, `v3.0`,
+  "Version 2.1.0"; elsewhere skipped a named survey and "OAuth". Catches `RFC NNNN`-style IDs only.
+  **Prompt gap or product call** — define whether API paths / product+version names / named
+  docs count, then enumerate them with examples.
+- **Qualifier EXTRACTION works; uncertainty PROPAGATION does not.** The conditional ("only when TTL
+  > 60s") and uncertainty ("might… not sure") qualifiers were both extracted. But for the hedged
+  link the model still returned `llm_assessment: strong`, `confidence_score: 0.8`, and
+  `low_confidence_flag: null` — it records the hedge as a qualifier but does NOT carry it into the
+  confidence/assessment/flag. **Prompt gap** — connect hedging to a lower assessment/confidence.
+- **`low_confidence_flag` is not emitted unprompted** (confirms the §9.6/§12.4 deferral): the model
+  left it null on a clearly hedged link. Producing it needs an explicit instruction, which previously
+  regressed relation accuracy — so it stays a measured tradeoff, not a free win.
+- **`reasoning` content is fine; the new `reasoned` judge criterion is mis-calibrated.** The model's
+  reasoning ("…definite plans, so certainty high; specific deadlines make staleness high") is a good
+  ~2-sentence justification, but `reasoned` failed it. The criterion needs pos/neg controls and
+  loosening before it is trusted (§7.3) — reasoning *length* is already fine (~2 sentences).
+- **Test-design note:** a chunk that is a bare pile of disjoint dates makes `chunk_summary`
+  representative/concise unwinnable (no single point). Stress one field per case; don't pile unrelated
+  facts into a chunk that also has to summarize well.
+
+### 14.7 Status and first findings (2026-06-25)
+Implemented and verified end-to-end on gemma4: `record-edge-supports` passes 21/21 live (every primary
+-edge field checked + guard + waivers); `record-node-deprecation` runs clean except a genuine signal —
+gemma4 lists `RFC-0042` in `external_refs` but leaves `provenance_basis` null even when the claim is
+explicitly "ratified in RFC-0042". That provenance-vs-external_refs confusion is a **prompt-refinement
+candidate** (do not paper over by relaxing the expectation). The coverage guard was confirmed to fire
+on an intentionally under-specified case. Open follow-ups: a purpose-fit judge criterion for the
+node `reasoning` field (source-grounding criteria don't suit meta-justification, so it is currently
+`structural_only` in the exemplar); and the provenance prompt refinement above.

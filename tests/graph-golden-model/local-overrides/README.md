@@ -17,8 +17,8 @@ is **removed after the change lands in production**.
 3. Point the relevant workbench import at the override.
 4. Add a row to `PORT_BACK.md` (§1 deltas + §1.5 file map).
 
-**Currently active overrides:**
-- `src/graph/schemas.ts` — node payload schema (optional `reasoning`, relaxed `analyzed_content_hash`).
+**Currently active overrides:** none. (The node-schema override was pushed to production on
+2026-06-26 — PORT_BACK §1.4 — and removed; the workbench imports `src/graph/schemas.ts` directly again.)
 
 When there is more than one override (or you want to switch prod/local without editing imports),
 add the generic `resolveGraphSource()` resolver described in `PORT_BACK.md` §5.1.

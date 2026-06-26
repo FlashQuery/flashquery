@@ -44,6 +44,7 @@ export interface NodeExpect {
   key_claims_min?: number;
   key_claims_contains?: string[];
   temporal_markers_min?: number;
+  temporal_markers_contains?: string[];
   external_refs_contains?: string[];
   // Additional axes (close the coverage matrix).
   chunk_summary_nonempty?: boolean;
@@ -78,6 +79,8 @@ export interface EdgeExpect {
   require_low_confidence_flag?: boolean;
   /** The primary (highest-confidence valid) edge's confidence must be >= this. */
   confidence_min?: number;
+  /** The primary edge's confidence must be <= this (for hedged/weak links). */
+  confidence_max?: number;
   /** Judge the primary edge's natural-language `reasoning` against these criteria
    *  (e.g. [grounded, justifies]) using the source/target claims as the reference. */
   judge_reasoning?: string[];
@@ -135,7 +138,57 @@ export interface NlCase {
   against?: 'source' | 'key_claims';
 }
 
-export type GraphCase = NodeCase | EdgeCase | NlCase;
+/** Per-field LLM-as-judge spec inside a record case (one judge call per field). */
+export interface JudgeSpec {
+  /** Named rubric criteria (defaults per field if omitted — see judge.DEFAULT_CRITERIA). */
+  criteria?: string[];
+  /** Specific facts the field's value must include/represent (judged as captures[...]). */
+  must_capture?: string[];
+}
+
+/**
+ * Full-record case (README §14). One production-faithful input → run the real op ONCE →
+ * verify EVERY field of the resulting JSON: enum/choice/structural fields via expected-vs-actual
+ * (reusing NodeExpect / EdgeExpect), natural-language fields via per-field LLM-as-judge (`judge`).
+ * A coverage guard hard-fails the case if any output field has neither an `expect` nor a `judge`
+ * entry nor an explicit `structural_only` waiver — so nothing is silently unchecked.
+ */
+export interface RecordCase {
+  kind: 'record';
+  /** Which production op to exercise. */
+  op: 'node' | 'edge';
+  name: string;
+  file: string;
+  description?: string;
+  /** INFO-ONLY: whether the input text is hand-written (synthetic) or lifted from a real external
+   *  source (web research, docs, etc.). Does not affect scoring — captured so runs can be sliced by
+   *  input provenance later (e.g. "how does the model do on real vs. synthetic text?"). */
+  input_source?: 'synthetic' | 'external';
+  /** INFO-ONLY: optional note on where external input came from (URL, doc name). */
+  source_note?: string;
+  /** node op input (the chunk text). */
+  input?: string;
+  /** edge op inputs. */
+  source?: CaseSide;
+  target?: CaseSide;
+  /** Enum / choice / structural expectations (same keys as the node/edge facet cases). */
+  expect: NodeExpect & EdgeExpect;
+  /** Per-NL-field judge specs. Node fields: key_claims, chunk_summary, reasoning,
+   *  question_resolution. Edge field: reasoning. */
+  judge?: Record<string, JudgeSpec>;
+  /** Output fields deliberately NOT value-checked (e.g. analyzed_content_hash, claim-ref arrays).
+   *  Listing a field here satisfies the coverage guard intentionally rather than by omission. */
+  structural_only?: string[];
+  /** Per-case graph-model override (defaults to the run's --model). */
+  model?: string;
+  /** Per-case judge-model override (defaults to the run's --judge-model, else the graph model). */
+  judge_model?: string;
+  /** Run the case N times (cache bypassed) and require ALL runs to fully pass — samples
+   *  run-to-run variance for the "every single run" guarantee. Default 1. */
+  repeat?: number;
+}
+
+export type GraphCase = NodeCase | EdgeCase | NlCase | RecordCase;
 
 export function loadCases(only?: string): GraphCase[] {
   if (!fs.existsSync(CASES_DIR)) return [];
@@ -172,8 +225,37 @@ export function loadCases(only?: string): GraphCase[] {
         min_claims: raw.min_claims as number | undefined,
         against: raw.against as 'source' | 'key_claims' | undefined,
       });
+    } else if (kind === 'record') {
+      const op = raw.op;
+      if (op !== 'node' && op !== 'edge')
+        throw new Error(`Case ${file}: kind 'record' requires op: node | edge (got ${JSON.stringify(op)})`);
+      if (op === 'node' && (raw.input === undefined || String(raw.input).trim() === ''))
+        throw new Error(`Case ${file}: record/node requires non-empty 'input'`);
+      if (op === 'edge' && (!raw.source || !raw.target))
+        throw new Error(`Case ${file}: record/edge requires 'source' and 'target'`);
+      const inputSource = raw.input_source as string | undefined;
+      if (inputSource !== undefined && inputSource !== 'synthetic' && inputSource !== 'external')
+        throw new Error(`Case ${file}: input_source must be 'synthetic' or 'external' (got ${JSON.stringify(inputSource)})`);
+      cases.push({
+        kind: 'record',
+        op,
+        name,
+        file,
+        description: raw.description as string,
+        input_source: inputSource as 'synthetic' | 'external' | undefined,
+        source_note: raw.source_note as string | undefined,
+        input: raw.input !== undefined ? String(raw.input) : undefined,
+        source: raw.source as CaseSide | undefined,
+        target: raw.target as CaseSide | undefined,
+        expect: (raw.expect ?? {}) as NodeExpect & EdgeExpect,
+        judge: raw.judge as Record<string, JudgeSpec> | undefined,
+        structural_only: raw.structural_only as string[] | undefined,
+        model: raw.model as string | undefined,
+        judge_model: raw.judge_model as string | undefined,
+        repeat: raw.repeat as number | undefined,
+      });
     } else {
-      throw new Error(`Case ${file}: missing or unknown 'kind' (expected node|edge|nl)`);
+      throw new Error(`Case ${file}: missing or unknown 'kind' (expected node|edge|nl|record)`);
     }
   }
   return cases;

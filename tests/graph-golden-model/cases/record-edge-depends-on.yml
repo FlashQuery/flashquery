@@ -1,0 +1,30 @@
+kind: record
+op: edge
+input_source: synthetic
+description: >
+  Full-record edge - one task requires another to complete first - tests depends_on and every
+  primary-edge field. Qualifiers waived (a temporal/ordering qualifier may or may not be attached).
+source:
+  chunk_id: export
+  key_claims:
+    - "The nightly export job requires the warehouse migration to finish before it can run"
+target:
+  chunk_id: migration
+  key_claims:
+    - "The warehouse migration provisions the analytics schema"
+expect:
+  primary_relation: depends_on
+  expect_relations: [depends_on]
+  min_edges: 1
+  max_edges: 2
+  confidence_min: 0.5
+  llm_assessment_in: [strong, moderate]
+  reasoning_max_sentences: 2
+judge:
+  reasoning:
+    criteria: [justifies]
+structural_only:
+  - qualifiers
+  - low_confidence_flag
+  - source_claims_referenced
+  - target_claims_referenced

@@ -1,0 +1,12 @@
+kind: nl
+field: reasoning
+description: >
+  Judge calibration (negative control) for justifies. Generic filler that gives no rationale for why
+  the relation holds must FAIL justifies — proving the relaxed definition still discriminates.
+input: |
+  Source claims: ["After enabling the read-through cache, p95 latency dropped from 800ms to 480ms in the benchmark"]
+  Target claims: ["The read-through cache improves API latency"]
+  Chosen relation: supports
+given: "This is an important and interesting relationship between the two chunks."
+criteria: [justifies]
+expect_fail: [justifies]

@@ -1,0 +1,30 @@
+kind: record
+op: edge
+input_source: synthetic
+description: >
+  Stress test for the temporal qualifier on an edge. The source bounds its claim to a version window
+  ("as of v2.0 ... before v3.0"), so the edge must record that time/version bound in
+  qualifiers.temporal (asserted, not waived).
+source:
+  chunk_id: bound
+  key_claims:
+    - "As of v2.0 the gateway enforces rate limits, but this behavior is removed again in v3.0"
+target:
+  chunk_id: gen
+  key_claims:
+    - "The gateway enforces rate limits"
+expect:
+  primary_relation_in: [supports, elaborates]
+  min_edges: 1
+  max_edges: 2
+  confidence_min: 0.4
+  llm_assessment_in: [strong, moderate, weak]
+  require_qualifier: temporal
+  reasoning_max_sentences: 2
+judge:
+  reasoning:
+    criteria: [justifies]
+structural_only:
+  - low_confidence_flag
+  - source_claims_referenced
+  - target_claims_referenced

@@ -1,0 +1,31 @@
+kind: record
+op: edge
+input_source: synthetic
+description: >
+  Full-record edge - the two claims state the same fact in different words - tests the duplicates
+  relation (vs the confusable summarizes) and every primary-edge field.
+source:
+  chunk_id: a
+  key_claims:
+    - "When a client is rate limited, the API responds with HTTP status 429"
+target:
+  chunk_id: b
+  key_claims:
+    - "The API returns a 429 status code to clients that exceed the rate limit"
+expect:
+  primary_relation: duplicates
+  expect_relations: [duplicates]
+  forbid_relations: [summarizes]
+  min_edges: 1
+  max_edges: 2
+  confidence_min: 0.5
+  llm_assessment_in: [strong, moderate]
+  reasoning_max_sentences: 2
+judge:
+  reasoning:
+    criteria: [justifies]
+structural_only:
+  - qualifiers
+  - low_confidence_flag
+  - source_claims_referenced
+  - target_claims_referenced

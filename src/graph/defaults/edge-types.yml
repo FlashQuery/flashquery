@@ -20,7 +20,7 @@ relations:
     category: classified
     directionality: directed
     detection_method: classified
-    description: The source chunk provides evidence for the target chunk.
+    description: The source chunk provides EVIDENCE, data, or results that back up the target chunk's claim (not merely more detail).
   - name: contradicts
     category: classified
     directionality: symmetric
@@ -45,7 +45,7 @@ relations:
     category: classified
     directionality: directed
     detection_method: classified
-    description: The source chunk adds detail to the target chunk.
+    description: The source chunk adds explanatory DETAIL to the SAME claim in the target (no new claim, not evidence).
   - name: summarizes
     category: classified
     directionality: directed
@@ -61,7 +61,7 @@ relations:
     category: classified
     directionality: directed
     detection_method: classified
-    description: The source chunk extends the target chunk with a related claim.
+    description: The source chunk adds a NEW, related claim or capability not present in the target (beyond mere detail).
   - name: resolves
     category: classified
     directionality: directed
