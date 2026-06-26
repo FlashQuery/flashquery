@@ -120,22 +120,10 @@ export async function destroyEmbeddingSearchHarness(harness: EmbeddingSearchHarn
   await rm(harness.vaultPath, { recursive: true, force: true }).catch(() => undefined);
 }
 
-export async function resetEmbeddingSearchData(client: pg.Client, instanceId: string, entryNames: string[]): Promise<void> {
+export async function resetEmbeddingSearchData(client: pg.Client, instanceId: string, _entryNames: string[]): Promise<void> {
   await client.query('DELETE FROM fqc_memory WHERE instance_id = $1', [instanceId]);
   await client.query('DELETE FROM fqc_documents WHERE instance_id = $1', [instanceId]);
   await client.query('DELETE FROM fqc_embeddings WHERE instance_id = $1', [instanceId]);
-  for (const name of entryNames) {
-    for (const table of ['fqc_chunks', 'fqc_memory']) {
-      await client.query(`DROP INDEX IF EXISTS idx_${table}_embedding_${name}`);
-      for (const suffix of ['', '_model', '_dimensions', '_provider', '_truncated', '_indexed_at']) {
-        await client.query(
-          `ALTER TABLE ${table} DROP COLUMN IF EXISTS ${pg.escapeIdentifier(`embedding_${name}${suffix}`)} CASCADE`
-        );
-      }
-    }
-    await client.query(`DROP FUNCTION IF EXISTS ${pg.escapeIdentifier(`match_memories_${name}`)}(vector, double precision, integer, text[], text, text, boolean) CASCADE`);
-    await client.query(`DROP FUNCTION IF EXISTS ${pg.escapeIdentifier(`match_documents_${name}`)}(vector, double precision, integer, text, text[], text, boolean) CASCADE`);
-  }
 }
 
 export async function addSearchDocument(input: {
