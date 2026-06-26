@@ -71,6 +71,9 @@ def build_cleanup_sql(plugin_tables: list[str], core_tables: list[str]) -> str:
             f"    RAISE NOTICE '{escaped_table}: % rows deleted', deleted_count;",
         ])
     statements.extend([
+        "    IF dropped_plugin_tables > 0 THEN",
+        "        PERFORM pg_notify('pgrst', 'reload schema');",
+        "    END IF;",
         "    RAISE NOTICE 'FQC_CLEANUP_TOTAL=%', total_deleted;",
         "    RAISE NOTICE 'FQC_CLEANUP_DROPPED_PLUGIN_TABLES=%', dropped_plugin_tables;",
         "END $$;",

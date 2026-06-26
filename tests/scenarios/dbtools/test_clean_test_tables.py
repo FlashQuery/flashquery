@@ -24,6 +24,7 @@ class CleanTestTablesSqlTests(unittest.TestCase):
         self.assertIn('DROP TABLE IF EXISTS "fqcp_example_contacts" CASCADE', sql)
         self.assertIn('DROP TABLE IF EXISTS "fqcp_quote_""_table" CASCADE', sql)
         self.assertIn('DELETE FROM "fqc_documents"', sql)
+        self.assertIn("PERFORM pg_notify('pgrst', 'reload schema');", sql)
         self.assertIn("FQC_CLEANUP_TOTAL=%", sql)
         self.assertIn("FQC_CLEANUP_DROPPED_PLUGIN_TABLES=%", sql)
 

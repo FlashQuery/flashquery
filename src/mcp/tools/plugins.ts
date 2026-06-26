@@ -34,6 +34,95 @@ export const registerPluginInputSchema = {
   embedding_name: z.string().nullable().optional().describe('Resolved embedding catalog entry override. Omit to use the plugin manifest; null opts out.'),
 };
 
+const POSTGREST_SCHEMA_WAIT_MS = 5000;
+const POSTGREST_SCHEMA_RETRY_MS = 100;
+
+interface PluginRestProbe {
+  tableName: string;
+  columns: string[];
+}
+
+interface PostgrestOpenApiSchema {
+  definitions?: Record<string, { properties?: Record<string, unknown> }>;
+}
+
+function addPluginRestProbe(
+  probes: Map<string, Set<string>>,
+  tableName: string,
+  columns: string[] = []
+): void {
+  const existing = probes.get(tableName) ?? new Set<string>();
+  for (const column of columns) {
+    existing.add(column);
+  }
+  probes.set(tableName, existing);
+}
+
+function pluginRestProbeList(probes: Map<string, Set<string>>): PluginRestProbe[] {
+  return Array.from(probes.entries()).map(([tableName, columns]) => ({
+    tableName,
+    columns: Array.from(columns).sort(),
+  }));
+}
+
+async function waitForPluginTablesViaRest(
+  config: FlashQueryConfig,
+  probes: PluginRestProbe[],
+  maxWaitMs = POSTGREST_SCHEMA_WAIT_MS
+): Promise<void> {
+  if (probes.length === 0) return;
+
+  const startTime = Date.now();
+  let lastError: string | null = null;
+
+  while (Date.now() - startTime < maxWaitMs) {
+    try {
+      const response = await fetch(`${config.supabase.url.replace(/\/$/, '')}/rest/v1/`, {
+        headers: {
+          Accept: 'application/openapi+json',
+          apikey: config.supabase.serviceRoleKey,
+          Authorization: `Bearer ${config.supabase.serviceRoleKey}`,
+        },
+      });
+
+      if (!response.ok) {
+        lastError = `OpenAPI schema request failed with HTTP ${response.status}`;
+      } else {
+        const schema = await response.json() as PostgrestOpenApiSchema;
+        let allVisible = true;
+
+        for (const probe of probes) {
+          const properties = schema.definitions?.[probe.tableName]?.properties;
+          if (!properties) {
+            allVisible = false;
+            lastError = `${probe.tableName}: table not present in PostgREST schema cache`;
+            break;
+          }
+
+          const requiredColumns = Array.from(new Set(['id', ...probe.columns]));
+          const missingColumns = requiredColumns.filter((column) => !(column in properties));
+          if (missingColumns.length > 0) {
+            allVisible = false;
+            lastError = `${probe.tableName}: column(s) not present in PostgREST schema cache: ${missingColumns.join(', ')}`;
+            break;
+          }
+        }
+
+        if (allVisible) return;
+      }
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, POSTGREST_SCHEMA_RETRY_MS));
+  }
+
+  throw new Error(
+    `PostgREST schema cache did not expose plugin table(s) within ${maxWaitMs}ms. ` +
+      `Last error: ${lastError ?? 'unknown'}`
+  );
+}
+
 export function validateRegisterPluginEmbeddingOverride(
   embeddingName: string | null | undefined
 ): { ok: true } | { ok: false; message: string } {
@@ -307,6 +396,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
             if (safe.length > 0 || resolvedEmbedding) {
               const pgClient = createPgClientIPv4(config.supabase.databaseUrl);
               let committed = false;
+              const restProbes = new Map<string, Set<string>>();
               try {
                 await pgClient.connect();
                 await pgClient.query('BEGIN');
@@ -321,6 +411,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
                       if (resolvedEmbedding && newTable.embed_fields && newTable.embed_fields.length > 0) {
                         await pgClient.query(buildPluginEmbeddingColumnSetDDL(fullTableName, resolvedEmbedding));
                       }
+                      addPluginRestProbe(restProbes, fullTableName, newTable.columns.map((column) => column.name));
                     }
                   } else if (change.type === 'column_added') {
                     const table = schema.tables.find((t) => t.name === change.table);
@@ -333,6 +424,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
                         const defaultClause = col.default !== undefined ? ` DEFAULT '${String(col.default)}'` : '';
                         const alterDDL = `ALTER TABLE "${fullTableName}" ADD COLUMN IF NOT EXISTS "${col.name}" ${col.type}${defaultClause}${nullabilityClause}`;
                         await pgClient.query(alterDDL);
+                        addPluginRestProbe(restProbes, fullTableName, [col.name]);
                       }
                     }
                   }
@@ -343,6 +435,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
                     if (!table.embed_fields || table.embed_fields.length === 0) continue;
                     const fullTableName = resolveTableName(schema.plugin.id, instanceName, table.name);
                     await pgClient.query(buildPluginEmbeddingColumnSetDDL(fullTableName, resolvedEmbedding));
+                    addPluginRestProbe(restProbes, fullTableName);
                   }
                 }
 
@@ -350,7 +443,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
                 committed = true;
                 // Notify PostgREST to reload schema cache
                 await pgClient.query(`SELECT pg_notify('pgrst', 'reload schema')`);
-                await new Promise((resolve) => setTimeout(resolve, 300));
+                await waitForPluginTablesViaRest(config, pluginRestProbeList(restProbes));
               } catch (err) {
                 if (!committed) {
                   await pgClient.query('ROLLBACK').catch(() => undefined);
@@ -412,6 +505,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
 
         // Step 6: execute DDL for new plugin or same-version re-registration
         const createdTables: string[] = [];
+        const createdRestProbes = new Map<string, Set<string>>();
         const pgClient = createPgClientIPv4(config.supabase.databaseUrl);
         try {
           await pgClient.connect();
@@ -424,12 +518,12 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
               await pgClient.query(buildPluginEmbeddingColumnSetDDL(fullTableName, resolvedEmbedding));
             }
             createdTables.push(table.name);
+            addPluginRestProbe(createdRestProbes, fullTableName, table.columns.map((column) => column.name));
           }
           await pgClient.query('COMMIT');
           // Notify PostgREST to reload schema cache so new tables are immediately accessible.
-          // Brief wait for PostgREST to process the async reload notification.
           await pgClient.query(`SELECT pg_notify('pgrst', 'reload schema')`);
-          await new Promise((resolve) => setTimeout(resolve, 300));
+          await waitForPluginTablesViaRest(config, pluginRestProbeList(createdRestProbes));
         } finally {
           try {
             await pgClient.query('ROLLBACK');
