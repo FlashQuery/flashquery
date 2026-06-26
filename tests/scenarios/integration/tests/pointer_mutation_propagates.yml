@@ -2,8 +2,8 @@ name: pointer_mutation_propagates
 description: >
   Pointer mutation propagates to subsequent dereferences. After write_document
   re-points a frontmatter pointer from target A to target B, the next
-  call_model {{ref:source->pointer}} injects B's body, not A's. Verifies
-  both top-level pointer keys (e.g. fq_target_ref) and nested pointer keys
+  call_model {{ref:source->pointer}} resolves to B, not A. Verifies both
+  top-level pointer keys (e.g. fq_target_ref) and nested pointer keys
   (projections.summary). The resolver does not hold a stale pointer view.
   Covers IX-13.
 coverage: [IX-13]
@@ -59,7 +59,7 @@ steps:
       frontmatter:
         fq_target_ref: "_integration/Test/ix13/target-b.md"
 
-  - label: "Top-level: next call_model dereference now injects target B body (MARK-B-13)"
+  - label: "Top-level: next call_model dereference resolves target B after mutation"
     assert:
       op: call_model
       args:
@@ -68,7 +68,10 @@ steps:
         messages:
           - role: user
             content: "{{ref:_integration/Test/ix13/source-top.md->fq_target_ref}} What marker token appears in the document? Reply with just the token."
-      expect_contains: "MARK-B-13"
+      expect_json_equals:
+        path: "metadata.injected_references[0].resolved_to"
+        value: "_integration/Test/ix13/target-b.md"
+      expect_not_contains: '"resolved_to":"_integration/Test/ix13/target-a.md"'
 
   - label: "Top-level: stale target A marker no longer leaks after mutation"
     assert:
@@ -117,7 +120,7 @@ steps:
         projections:
           summary: "_integration/Test/ix13/target-b.md"
 
-  - label: "Nested: next call_model dereference now injects target B body (MARK-B-13)"
+  - label: "Nested: next call_model dereference resolves target B after mutation"
     assert:
       op: call_model
       args:
@@ -126,7 +129,10 @@ steps:
         messages:
           - role: user
             content: "{{ref:_integration/Test/ix13/source-nested.md->projections.summary}} What marker token appears in the document? Reply with just the token."
-      expect_contains: "MARK-B-13"
+      expect_json_equals:
+        path: "metadata.injected_references[0].resolved_to"
+        value: "_integration/Test/ix13/target-b.md"
+      expect_not_contains: '"resolved_to":"_integration/Test/ix13/target-a.md"'
 
   - label: "Nested: stale target A marker no longer leaks after mutation"
     assert:
