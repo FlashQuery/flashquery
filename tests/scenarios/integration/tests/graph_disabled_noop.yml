@@ -1,8 +1,9 @@
 name: graph_disabled_noop
 description: >
   T-Y-001 / IG-01: with graph absent/disabled, existing search and
-  get_document behavior remains unchanged while query_graph returns the
-  canonical unsupported envelope.
+  default get_document behavior remains unchanged, explicitly requested
+  graph_summary returns a zero/default summary, and query_graph returns
+  the canonical unsupported envelope.
 coverage: [IG-01]
 server_modes: [managed]
 
@@ -43,14 +44,76 @@ steps:
       expect_contains: "Graph disabled no-op content remains visible"
       expect_not_contains: "\"graph_summary\""
 
-  - label: "Disabled graph get_document omits requested graph summary"
+  - label: "Disabled graph get_document returns zero graph summary when explicitly requested"
     assert:
       op: get_document
       args:
         identifiers: "${noop_doc.fq_id}"
         include: [body, graph_summary]
       expect_contains: "Graph disabled no-op content remains visible"
-      expect_not_contains: "\"graph_summary\""
+      expect_json_equals:
+        path: "graph_summary.edge_count"
+        value: 0
+
+  - label: "Disabled graph requested summary has no relation counts"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${noop_doc.fq_id}"
+        include: [graph_summary]
+      expect_json_equals:
+        path: "graph_summary.edge_counts_by_relation"
+        value: {}
+
+  - label: "Disabled graph requested summary has no community labels"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${noop_doc.fq_id}"
+        include: [graph_summary]
+      expect_json_array_length:
+        path: "graph_summary.community_labels"
+        equals: 0
+
+  - label: "Disabled graph requested summary reports no stale edges"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${noop_doc.fq_id}"
+        include: [graph_summary]
+      expect_json_equals:
+        path: "graph_summary.stale_edge_count"
+        value: 0
+
+  - label: "Disabled graph requested summary reports no contradictions"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${noop_doc.fq_id}"
+        include: [graph_summary]
+      expect_json_equals:
+        path: "graph_summary.has_contradictions"
+        value: false
+
+  - label: "Disabled graph requested summary reports no open questions"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${noop_doc.fq_id}"
+        include: [graph_summary]
+      expect_json_equals:
+        path: "graph_summary.has_open_questions"
+        value: false
+
+  - label: "Disabled graph requested summary has zero open question count"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${noop_doc.fq_id}"
+        include: [graph_summary]
+      expect_json_equals:
+        path: "graph_summary.open_question_count"
+        value: 0
 
   - label: "Disabled graph lint is unsupported"
     assert:

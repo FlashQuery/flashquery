@@ -14,7 +14,7 @@ Graph-enhanced document intelligence workflows for disabled/default behavior and
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| IG-01 | Graph-disabled server keeps ordinary `search` and `get_document` behavior unchanged while `query_graph` remains discoverable through a canonical unsupported envelope. | graph_disabled_noop          | 2026-06-26   | 2026-06-24   |
+| IG-01 | Graph-disabled server keeps ordinary `search` and default `get_document` behavior unchanged, returns a zero/default summary for explicit `include:["graph_summary"]`, and keeps `query_graph` discoverable through a canonical unsupported envelope. | graph_disabled_noop          | 2026-06-26   | 2026-06-26   |
 | IG-02 | Graph-enabled managed workflow returns graph-expanded `search` results with graph attribution from semantic seed chunks. | graph_search_expansion       | 2026-06-26   | 2026-06-26   |
 | IG-03 | Mock LLM classification workflow returns a graph contradiction relation and reasoning through public model tooling without production LLM credentials. | graph_mock_llm_classification | 2026-06-26   | 2026-06-26   |
 | IG-04 | Graph lint labels topology-only communities and `query_graph` lists community members through public MCP reads. | graph_lint_communities       | 2026-06-26   | 2026-06-26   |
