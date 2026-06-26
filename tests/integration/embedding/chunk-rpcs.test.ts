@@ -212,8 +212,10 @@ describe.skipIf(!HAS_SUPABASE).sequential('chunk per-entry RPCs', () => {
       embedding_truncated: false,
     });
     expect(Number(result.rows[0].similarity)).toBeCloseTo(1);
-    expect(result.rows[0].embedding_indexed_at).toEqual(expect.any(String));
-    expect(Number.isNaN(Date.parse(result.rows[0].embedding_indexed_at))).toBe(false);
+    const indexedAt = result.rows[0].embedding_indexed_at;
+    expect(typeof indexedAt === 'string' || indexedAt instanceof Date).toBe(true);
+    const indexedAtText = indexedAt instanceof Date ? indexedAt.toISOString() : indexedAt;
+    expect(Number.isNaN(Date.parse(indexedAtText))).toBe(false);
   });
 
   it('T-I-011 wrong-width query vector is rejected by Postgres', async () => {
