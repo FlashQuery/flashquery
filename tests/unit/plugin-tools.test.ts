@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -218,6 +218,25 @@ describe('registerPluginTools', () => {
 describe('register_plugin', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        definitions: {
+          fqcp_crm_default_contacts: {
+            properties: {
+              id: {},
+              full_name: {},
+            },
+          },
+          fqcp_crm_work_contacts: {
+            properties: {
+              id: {},
+              full_name: {},
+            },
+          },
+        },
+      }),
+    }));
 
     // Re-set hoisted mock implementations after clearAllMocks
     mockPgClient.connect.mockResolvedValue(undefined);
@@ -229,6 +248,10 @@ describe('register_plugin', () => {
 
     // Set up default supabase mock
     makeDefaultSupabaseMock();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('registers plugin with inline schema_yaml — creates tables and inserts registry row', async () => {
