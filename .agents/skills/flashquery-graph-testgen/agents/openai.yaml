@@ -1,4 +1,4 @@
 interface:
   display_name: "FlashQuery Graph Testgen"
-  short_description: "Run and refine graph golden-model tests"
-  default_prompt: "Use $flashquery-graph-testgen to create, run, diagnose, and refine FlashQuery graph golden-model tests."
+  short_description: "Create, run, and refine graph record tests"
+  default_prompt: "Use $flashquery-graph-testgen to create, run, diagnose, and refine FlashQuery graph golden-model and record tests."
