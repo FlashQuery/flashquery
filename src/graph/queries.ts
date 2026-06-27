@@ -41,6 +41,16 @@ export interface GraphNodeRow {
   community_id: string | null;
   community_label: string | null;
   community_summary: string | null;
+  key_claims: unknown[] | null;
+  chunk_summary: string | null;
+  certainty_level: string | null;
+  staleness_risk: string | null;
+  external_refs: unknown[] | null;
+  temporal_markers: unknown[] | null;
+  analyzed_content_hash: string | null;
+  analyzed_by_model: string | null;
+  analyzed_at: string | Date | null;
+  content_hash: string | null;
 }
 
 export interface GraphEdgeRow {
@@ -75,6 +85,15 @@ export interface GraphNodePayload {
   community_id: string | null;
   community_label: string | null;
   community_summary: string | null;
+  key_claims: unknown[] | null;
+  chunk_summary: string | null;
+  certainty_level: string | null;
+  staleness_risk: string | null;
+  external_refs: unknown[] | null;
+  temporal_markers: unknown[] | null;
+  analyzed_at: string | null;
+  analyzed_by_model: string | null;
+  stale: boolean;
 }
 
 export interface GraphEdgePayload {
@@ -185,12 +204,22 @@ export function createPgGraphQueryStore(client: PgLikeClient): GraphQueryStore {
           d.status AS document_status,
           c.heading_path,
           c.breadcrumb,
+          c.content_hash,
           n.provenance_basis,
           n.question_status,
           n.question_resolution,
           n.community_id,
           n.community_label,
-          n.community_summary
+          n.community_summary,
+          n.key_claims,
+          n.chunk_summary,
+          n.certainty_level,
+          n.staleness_risk,
+          n.external_refs,
+          n.temporal_markers,
+          n.analyzed_content_hash,
+          n.analyzed_by_model,
+          n.analyzed_at
         FROM fqc_graph_nodes n
         JOIN fqc_chunks c
           ON c.id = n.chunk_id
@@ -378,6 +407,8 @@ async function loadPayloadRows(store: GraphQueryStore, instanceId: string): Prom
 }
 
 function toNodePayload(row: GraphNodeRow): GraphNodePayload {
+  const analyzedHash = row.analyzed_content_hash;
+  const contentHash = row.content_hash;
   return {
     chunk_id: row.chunk_id,
     document: {
@@ -394,7 +425,21 @@ function toNodePayload(row: GraphNodeRow): GraphNodePayload {
     community_id: row.community_id,
     community_label: row.community_label,
     community_summary: row.community_summary,
+    key_claims: row.key_claims,
+    chunk_summary: row.chunk_summary,
+    certainty_level: row.certainty_level,
+    staleness_risk: row.staleness_risk,
+    external_refs: row.external_refs,
+    temporal_markers: row.temporal_markers,
+    analyzed_at: normalizeTimestamp(row.analyzed_at),
+    analyzed_by_model: row.analyzed_by_model,
+    stale: !analyzedHash || analyzedHash !== contentHash,
   };
+}
+
+function normalizeTimestamp(value: string | Date | null): string | null {
+  if (value instanceof Date) return value.toISOString();
+  return value;
 }
 
 function toEdgePayload(

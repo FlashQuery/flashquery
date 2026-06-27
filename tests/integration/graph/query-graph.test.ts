@@ -360,12 +360,72 @@ describe.skipIf(!HAS_SUPABASE).sequential('query_graph public MCP integration', 
   it('T-I-008/T-I-026/T-I-029/T-I-030/T-I-036/T-I-037/T-I-042 returns bounded primitive and compound graph reads', async () => {
     const seeded = await seedGraph(client);
 
-    const node = parseToolJson<{ data: { node: { chunk_id: string; document: { status: string } } } }>(
+    await client.query(
+      `
+      UPDATE fqc_graph_nodes n
+      SET key_claims = '["The root claim is grounded"]'::jsonb,
+          chunk_summary = 'Root analysis summary.',
+          certainty_level = 'high',
+          staleness_risk = 'low',
+          external_refs = '["RFC 8259"]'::jsonb,
+          temporal_markers = '["Q3 2026"]'::jsonb,
+          analyzed_content_hash = c.content_hash,
+          analyzed_by_model = 'mock-node@v1',
+          analyzed_at = '2026-06-23T00:00:00.000Z'::timestamptz
+      FROM fqc_chunks c
+      WHERE n.instance_id = $1 AND n.chunk_id = $2 AND c.id = n.chunk_id
+      `,
+      [TEST_INSTANCE_ID, seeded.root]
+    );
+    await client.query(
+      `
+      UPDATE fqc_graph_nodes
+      SET analyzed_content_hash = 'stale-analysis-hash',
+          analyzed_by_model = 'mock-node@v1',
+          analyzed_at = '2026-06-23T00:01:00.000Z'::timestamptz
+      WHERE instance_id = $1 AND chunk_id = $2
+      `,
+      [TEST_INSTANCE_ID, seeded.claim]
+    );
+
+    const analyzedNode = parseToolJson<{
+      data: {
+        node: {
+          chunk_id: string;
+          key_claims: string[] | null;
+          chunk_summary: string | null;
+          certainty_level: string | null;
+          staleness_risk: string | null;
+          external_refs: string[] | null;
+          temporal_markers: string[] | null;
+          analyzed_at: string | null;
+          analyzed_by_model: string | null;
+          stale: boolean;
+        };
+      };
+    }>(
+      await graph.queryGraph({ action: 'node', chunk_id: seeded.root })
+    );
+    expect(analyzedNode.data.node).toMatchObject({
+      chunk_id: seeded.root,
+      key_claims: ['The root claim is grounded'],
+      chunk_summary: 'Root analysis summary.',
+      certainty_level: 'high',
+      staleness_risk: 'low',
+      external_refs: ['RFC 8259'],
+      temporal_markers: ['Q3 2026'],
+      analyzed_at: '2026-06-23T00:00:00.000Z',
+      analyzed_by_model: 'mock-node@v1',
+      stale: false,
+    });
+
+    const node = parseToolJson<{ data: { node: { chunk_id: string; document: { status: string }; stale: boolean } } }>(
       await graph.queryGraph({ action: 'node', chunk_id: seeded.claim })
     );
     expect(node.data.node).toMatchObject({
       chunk_id: seeded.claim,
       document: { status: 'active' },
+      stale: true,
     });
 
     const edges = parseToolJson<{ data: { edges: Array<{ relation: string; stale: boolean }> } }>(

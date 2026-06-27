@@ -28,6 +28,16 @@ function seedGraph(): GraphQueryStoreSeed {
         community_id: null,
         community_label: null,
         community_summary: null,
+        key_claims: ['A establishes the baseline'],
+        chunk_summary: 'A summarizes the baseline.',
+        certainty_level: 'high',
+        staleness_risk: 'low',
+        external_refs: ['RFC 8259'],
+        temporal_markers: ['Q3 2026'],
+        analyzed_content_hash: 'hash-a',
+        content_hash: 'hash-a',
+        analyzed_by_model: 'mock-node@v1',
+        analyzed_at: '2026-06-23T00:00:00.000Z',
       },
       {
         chunk_id: 'b',
@@ -44,6 +54,16 @@ function seedGraph(): GraphQueryStoreSeed {
         community_id: null,
         community_label: null,
         community_summary: null,
+        key_claims: null,
+        chunk_summary: null,
+        certainty_level: null,
+        staleness_risk: null,
+        external_refs: null,
+        temporal_markers: null,
+        analyzed_content_hash: null,
+        content_hash: 'hash-b',
+        analyzed_by_model: null,
+        analyzed_at: null,
       },
       {
         chunk_id: 'c',
@@ -60,6 +80,16 @@ function seedGraph(): GraphQueryStoreSeed {
         community_id: null,
         community_label: null,
         community_summary: null,
+        key_claims: ['C may change'],
+        chunk_summary: 'C summarizes changing information.',
+        certainty_level: 'medium',
+        staleness_risk: 'high',
+        external_refs: [],
+        temporal_markers: ['v2.1.0'],
+        analyzed_content_hash: 'old-hash-c',
+        content_hash: 'hash-c',
+        analyzed_by_model: 'mock-node@v1',
+        analyzed_at: '2026-06-23T00:01:00.000Z',
       },
       {
         chunk_id: 'other',
@@ -76,6 +106,16 @@ function seedGraph(): GraphQueryStoreSeed {
         community_id: null,
         community_label: null,
         community_summary: null,
+        key_claims: null,
+        chunk_summary: null,
+        certainty_level: null,
+        staleness_risk: null,
+        external_refs: null,
+        temporal_markers: null,
+        analyzed_content_hash: null,
+        content_hash: 'hash-other',
+        analyzed_by_model: null,
+        analyzed_at: null,
       },
     ],
     edges: [
@@ -176,6 +216,68 @@ describe('graph query helpers', () => {
     ]);
     expect(JSON.stringify(payload)).not.toContain('source_chunk_id');
     expect(JSON.stringify(payload)).not.toContain('instance-b');
+  });
+
+  it('T-U-029 exposes node analysis metadata and computed staleness on node drill-down', async () => {
+    const store = createInMemoryGraphQueryStore(seedGraph());
+
+    const fresh = await queryGraph(store, {
+      instance_id: 'instance-a',
+      action: 'node',
+      chunk_id: 'a',
+    });
+    const freshPayload = parseResult(fresh) as {
+      data: {
+        node: {
+          key_claims: string[] | null;
+          chunk_summary: string | null;
+          certainty_level: string | null;
+          staleness_risk: string | null;
+          external_refs: string[] | null;
+          temporal_markers: string[] | null;
+          analyzed_at: string | null;
+          analyzed_by_model: string | null;
+          stale: boolean;
+        };
+      };
+    };
+    expect(freshPayload.data.node).toMatchObject({
+      key_claims: ['A establishes the baseline'],
+      chunk_summary: 'A summarizes the baseline.',
+      certainty_level: 'high',
+      staleness_risk: 'low',
+      external_refs: ['RFC 8259'],
+      temporal_markers: ['Q3 2026'],
+      analyzed_at: '2026-06-23T00:00:00.000Z',
+      analyzed_by_model: 'mock-node@v1',
+      stale: false,
+    });
+
+    const missing = await queryGraph(store, {
+      instance_id: 'instance-a',
+      action: 'node',
+      chunk_id: 'b',
+    });
+    const missingPayload = parseResult(missing) as { data: { node: Record<string, unknown> } };
+    expect(missingPayload.data.node).toMatchObject({
+      key_claims: null,
+      chunk_summary: null,
+      certainty_level: null,
+      staleness_risk: null,
+      external_refs: null,
+      temporal_markers: null,
+      analyzed_at: null,
+      analyzed_by_model: null,
+      stale: true,
+    });
+
+    const stale = await queryGraph(store, {
+      instance_id: 'instance-a',
+      action: 'node',
+      chunk_id: 'c',
+    });
+    const stalePayload = parseResult(stale) as { data: { node: { stale: boolean } } };
+    expect(stalePayload.data.node.stale).toBe(true);
   });
 
   it('T-U-060 terminates traversal over cyclic graphs via visited-set cycle protection', async () => {
