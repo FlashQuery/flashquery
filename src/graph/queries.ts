@@ -1,5 +1,6 @@
 import type { ToolResult } from '../mcp/utils/response-formats.js';
 import { graphExpectedError, graphRuntimeError, graphToolResult } from './response.js';
+import type { GraphExternalRef, GraphKeyClaim, GraphTemporalMarker } from './schemas.js';
 import {
   DEFAULT_GRAPH_RELATIONS,
   type GraphRelationDefinition,
@@ -41,12 +42,12 @@ export interface GraphNodeRow {
   community_id: string | null;
   community_label: string | null;
   community_summary: string | null;
-  key_claims: unknown[] | null;
+  key_claims: GraphKeyClaim[] | null;
   chunk_summary: string | null;
   certainty_level: string | null;
   staleness_risk: string | null;
-  external_refs: unknown[] | null;
-  temporal_markers: unknown[] | null;
+  external_refs: GraphExternalRef[] | null;
+  temporal_markers: GraphTemporalMarker[] | null;
   analyzed_content_hash: string | null;
   analyzed_by_model: string | null;
   analyzed_at: string | Date | null;
@@ -85,12 +86,12 @@ export interface GraphNodePayload {
   community_id: string | null;
   community_label: string | null;
   community_summary: string | null;
-  key_claims: unknown[] | null;
+  key_claims: GraphKeyClaim[] | null;
   chunk_summary: string | null;
   certainty_level: string | null;
   staleness_risk: string | null;
-  external_refs: unknown[] | null;
-  temporal_markers: unknown[] | null;
+  external_refs: GraphExternalRef[] | null;
+  temporal_markers: GraphTemporalMarker[] | null;
   analyzed_at: string | null;
   analyzed_by_model: string | null;
   stale: boolean;

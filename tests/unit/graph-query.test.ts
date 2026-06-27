@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createInMemoryGraphQueryStore,
   queryGraph,
+  type GraphNodePayload,
   type GraphQueryStoreSeed,
 } from '../../src/graph/queries.js';
 import { DEFAULT_GRAPH_RELATIONS } from '../../src/graph/vocabulary.js';
@@ -228,17 +229,18 @@ describe('graph query helpers', () => {
     });
     const freshPayload = parseResult(fresh) as {
       data: {
-        node: {
-          key_claims: string[] | null;
-          chunk_summary: string | null;
-          certainty_level: string | null;
-          staleness_risk: string | null;
-          external_refs: string[] | null;
-          temporal_markers: string[] | null;
-          analyzed_at: string | null;
-          analyzed_by_model: string | null;
-          stale: boolean;
-        };
+        node: Pick<
+          GraphNodePayload,
+          | 'key_claims'
+          | 'chunk_summary'
+          | 'certainty_level'
+          | 'staleness_risk'
+          | 'external_refs'
+          | 'temporal_markers'
+          | 'analyzed_at'
+          | 'analyzed_by_model'
+          | 'stale'
+        >;
       };
     };
     expect(freshPayload.data.node).toMatchObject({

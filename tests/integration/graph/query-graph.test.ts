@@ -7,6 +7,7 @@ import { dirname, resolve } from 'node:path';
 import { loadConfig, type FlashQueryConfig } from '../../../src/config/loader.js';
 import { registerGraphTools } from '../../../src/mcp/tools/graph.js';
 import { processPendingGraphEdges } from '../../../src/graph/pending-worker.js';
+import type { GraphNodePayload } from '../../../src/graph/queries.js';
 import { initLogger } from '../../../src/logging/logger.js';
 import { maintainVault, resetMaintenanceStateForTests } from '../../../src/services/maintenance.js';
 import { initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
@@ -390,18 +391,19 @@ describe.skipIf(!HAS_SUPABASE).sequential('query_graph public MCP integration', 
 
     const analyzedNode = parseToolJson<{
       data: {
-        node: {
-          chunk_id: string;
-          key_claims: string[] | null;
-          chunk_summary: string | null;
-          certainty_level: string | null;
-          staleness_risk: string | null;
-          external_refs: string[] | null;
-          temporal_markers: string[] | null;
-          analyzed_at: string | null;
-          analyzed_by_model: string | null;
-          stale: boolean;
-        };
+        node: Pick<
+          GraphNodePayload,
+          | 'chunk_id'
+          | 'key_claims'
+          | 'chunk_summary'
+          | 'certainty_level'
+          | 'staleness_risk'
+          | 'external_refs'
+          | 'temporal_markers'
+          | 'analyzed_at'
+          | 'analyzed_by_model'
+          | 'stale'
+        >;
       };
     }>(
       await graph.queryGraph({ action: 'node', chunk_id: seeded.root })
