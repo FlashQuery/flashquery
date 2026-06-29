@@ -36,6 +36,7 @@ export interface GraphNodeRow {
   document_status: GraphDocumentStatus;
   heading_path: string;
   breadcrumb: string;
+  content: string | null;
   provenance_basis: string | null;
   question_status: string | null;
   question_resolution: string | null;
@@ -80,6 +81,7 @@ export interface GraphNodePayload {
   document: GraphDocumentPayload;
   heading_path: string;
   breadcrumb: string;
+  content: string | null;
   provenance_basis: string | null;
   question_status: string | null;
   question_resolution: string | null;
@@ -137,6 +139,7 @@ export interface GraphQueryInput {
   max_hops?: number;
   include_stale?: boolean;
   include_resolved?: boolean;
+  include_content?: boolean;
   document_status?: GraphDocumentStatus;
   limit?: number;
   confidence_threshold?: number;
@@ -205,6 +208,7 @@ export function createPgGraphQueryStore(client: PgLikeClient): GraphQueryStore {
           d.status AS document_status,
           c.heading_path,
           c.breadcrumb,
+          c.content,
           c.content_hash,
           n.provenance_basis,
           n.question_status,
@@ -289,38 +293,40 @@ export async function queryGraph(
     const rows = filterLoadedRowsForAction(await loadPayloadRows(store, input.instance_id), action, input);
     const limit = clampLimit(input.limit);
     const relations = context.relations ?? DEFAULT_GRAPH_RELATIONS;
+    const includeContent = input.include_content ?? action === 'node';
+    const result = (data: unknown) => graphToolResult(action, applyNodeContentPolicy(data, includeContent));
 
     switch (action) {
       case 'node':
-        return graphToolResult(action, nodeAction(rows, input));
+        return result(nodeAction(rows, input));
       case 'edges':
-        return graphToolResult(action, edgesAction(rows, input, relations, limit));
+        return result(edgesAction(rows, input, relations, limit));
       case 'neighbors':
-        return graphToolResult(action, traversalAction(rows, input, relations, limit, 'neighbors'));
+        return result(traversalAction(rows, input, relations, limit, 'neighbors'));
       case 'path':
-        return graphToolResult(action, pathAction(rows, input, relations, limit));
+        return result(pathAction(rows, input, relations, limit));
       case 'subgraph':
-        return graphToolResult(action, traversalAction(rows, input, relations, limit, 'subgraph'));
+        return result(traversalAction(rows, input, relations, limit, 'subgraph'));
       case 'stats':
-        return graphToolResult(action, statsAction(rows));
+        return result(statsAction(rows));
       case 'schema':
-        return graphToolResult(action, schemaAction(rows, relations, context));
+        return result(schemaAction(rows, relations, context));
       case 'contradictions':
-        return graphToolResult(action, contradictionsAction(rows, input, relations, limit));
+        return result(contradictionsAction(rows, input, relations, limit));
       case 'impact':
-        return graphToolResult(action, traversalAction(rows, { ...input, direction: 'out' }, relations, limit, 'impact'));
+        return result(traversalAction(rows, { ...input, direction: 'out' }, relations, limit, 'impact'));
       case 'provenance_chain':
-        return graphToolResult(action, provenanceChainAction(rows, input, relations, limit));
+        return result(provenanceChainAction(rows, input, relations, limit));
       case 'weak_paths':
-        return graphToolResult(action, weakPathsAction(rows, input, relations, limit));
+        return result(weakPathsAction(rows, input, relations, limit));
       case 'ungrounded_edges':
-        return graphToolResult(action, ungroundedEdgesAction(rows, input, relations, limit));
+        return result(ungroundedEdgesAction(rows, input, relations, limit));
       case 'community_for':
-        return graphToolResult(action, communityForAction(rows, input));
+        return result(communityForAction(rows, input));
       case 'community_members':
-        return graphToolResult(action, communityMembersAction(rows, input, limit));
+        return result(communityMembersAction(rows, input, limit));
       case 'list_communities':
-        return graphToolResult(action, listCommunitiesAction(rows, input, limit));
+        return result(listCommunitiesAction(rows, input, limit));
     }
   } catch {
     return graphRuntimeError({
@@ -396,7 +402,7 @@ function filterLoadedRowsForAction(
 
 async function loadPayloadRows(store: GraphQueryStore, instanceId: string): Promise<LoadedGraphRows> {
   const nodeRows = await store.listNodes(instanceId);
-  const nodeMap = new Map(nodeRows.map((row) => [row.chunk_id, toNodePayload(row)]));
+  const nodeMap = new Map(nodeRows.map((row) => [row.chunk_id, toNodePayload(row, { includeContent: true })]));
   const edgeRows = await store.listEdges(instanceId);
   const edges = edgeRows.flatMap((row) => {
     const source = nodeMap.get(row.source_chunk_id);
@@ -407,7 +413,10 @@ async function loadPayloadRows(store: GraphQueryStore, instanceId: string): Prom
   return { nodes: [...nodeMap.values()], edges };
 }
 
-function toNodePayload(row: GraphNodeRow): GraphNodePayload {
+export function toNodePayload(
+  row: GraphNodeRow,
+  options: { includeContent?: boolean } = {}
+): GraphNodePayload {
   const analyzedHash = row.analyzed_content_hash;
   const contentHash = row.content_hash;
   return {
@@ -420,6 +429,7 @@ function toNodePayload(row: GraphNodeRow): GraphNodePayload {
     },
     heading_path: row.heading_path,
     breadcrumb: row.breadcrumb,
+    content: options.includeContent === true ? row.content : null,
     provenance_basis: row.provenance_basis,
     question_status: row.question_status,
     question_resolution: row.question_resolution,
@@ -436,6 +446,33 @@ function toNodePayload(row: GraphNodeRow): GraphNodePayload {
     analyzed_by_model: row.analyzed_by_model,
     stale: !analyzedHash || analyzedHash !== contentHash,
   };
+}
+
+function isGraphNodePayload(value: Record<string, unknown>): value is GraphNodePayload {
+  return typeof value.chunk_id === 'string' &&
+    typeof value.document === 'object' &&
+    value.document !== null &&
+    'stale' in value &&
+    'content' in value;
+}
+
+function applyNodeContentPolicy(value: unknown, includeContent: boolean): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => applyNodeContentPolicy(item, includeContent));
+  }
+  if (!value || typeof value !== 'object') return value;
+
+  const record = value as Record<string, unknown>;
+  const mapped = Object.fromEntries(
+    Object.entries(record).map(([key, entry]) => [key, applyNodeContentPolicy(entry, includeContent)])
+  );
+  if (isGraphNodePayload(mapped)) {
+    return {
+      ...mapped,
+      content: includeContent ? mapped.content : null,
+    };
+  }
+  return mapped;
 }
 
 function normalizeTimestamp(value: string | Date | null): string | null {

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   createInMemoryGraphQueryStore,
+  createPgGraphQueryStore,
   queryGraph,
+  toNodePayload,
   type GraphNodePayload,
   type GraphQueryStoreSeed,
 } from '../../src/graph/queries.js';
@@ -23,6 +25,7 @@ function seedGraph(): GraphQueryStoreSeed {
         document_status: 'active',
         heading_path: 'A',
         breadcrumb: 'A',
+        content: '## A\n\nA establishes the baseline.',
         provenance_basis: 'source:a',
         question_status: null,
         question_resolution: null,
@@ -49,6 +52,7 @@ function seedGraph(): GraphQueryStoreSeed {
         document_status: 'active',
         heading_path: 'B',
         breadcrumb: 'B',
+        content: '## B\n\nB references A and supports C.',
         provenance_basis: null,
         question_status: null,
         question_resolution: null,
@@ -75,6 +79,7 @@ function seedGraph(): GraphQueryStoreSeed {
         document_status: 'active',
         heading_path: 'C',
         breadcrumb: 'C',
+        content: '## C\n\nC may change over time.',
         provenance_basis: 'source:c',
         question_status: null,
         question_resolution: null,
@@ -101,6 +106,7 @@ function seedGraph(): GraphQueryStoreSeed {
         document_status: 'active',
         heading_path: 'Other',
         breadcrumb: 'Other',
+        content: '## Other\n\nOther instance content.',
         provenance_basis: null,
         question_status: null,
         question_resolution: null,
@@ -280,6 +286,88 @@ describe('graph query helpers', () => {
     });
     const stalePayload = parseResult(stale) as { data: { node: { stale: boolean } } };
     expect(stalePayload.data.node.stale).toBe(true);
+  });
+
+  it('T-U-005 maps node content only when includeContent is true', () => {
+    const row = seedGraph().nodes[0];
+
+    expect(toNodePayload(row, { includeContent: true }).content).toBe('## A\n\nA establishes the baseline.');
+    expect(toNodePayload(row, { includeContent: false }).content).toBeNull();
+    expect(toNodePayload(row).content).toBeNull();
+  });
+
+  it('T-U-006 applies query_graph content defaults and overrides to top-level and nested nodes', async () => {
+    const store = createInMemoryGraphQueryStore(seedGraph());
+
+    const nodeDefault = await queryGraph(store, {
+      instance_id: 'instance-a',
+      action: 'node',
+      chunk_id: 'a',
+    });
+    const nodeDefaultPayload = parseResult(nodeDefault) as { data: { node: GraphNodePayload } };
+    expect(nodeDefaultPayload.data.node.content).toBe('## A\n\nA establishes the baseline.');
+
+    const nodeSuppressed = await queryGraph(store, {
+      instance_id: 'instance-a',
+      action: 'node',
+      chunk_id: 'a',
+      include_content: false,
+    });
+    const nodeSuppressedPayload = parseResult(nodeSuppressed) as { data: { node: GraphNodePayload } };
+    expect(nodeSuppressedPayload.data.node.content).toBeNull();
+
+    const neighborsDefault = await queryGraph(store, {
+      instance_id: 'instance-a',
+      action: 'neighbors',
+      chunk_id: 'a',
+      max_depth: 1,
+    });
+    const neighborsDefaultPayload = parseResult(neighborsDefault) as {
+      data: { nodes: GraphNodePayload[]; edges: Array<{ source: GraphNodePayload; target: GraphNodePayload }> };
+    };
+    expect(neighborsDefaultPayload.data.nodes.map((node) => node.content)).toEqual([null, null, null]);
+    expect(neighborsDefaultPayload.data.edges.flatMap((edge) => [edge.source.content, edge.target.content])).toEqual([
+      null,
+      null,
+      null,
+      null,
+    ]);
+
+    const neighborsWithContent = await queryGraph(store, {
+      instance_id: 'instance-a',
+      action: 'neighbors',
+      chunk_id: 'a',
+      max_depth: 1,
+      include_content: true,
+    });
+    const neighborsWithContentPayload = parseResult(neighborsWithContent) as {
+      data: { nodes: GraphNodePayload[]; edges: Array<{ source: GraphNodePayload; target: GraphNodePayload }> };
+    };
+    expect(neighborsWithContentPayload.data.nodes.map((node) => [node.chunk_id, node.content]).sort()).toEqual([
+      ['a', '## A\n\nA establishes the baseline.'],
+      ['b', '## B\n\nB references A and supports C.'],
+      ['c', '## C\n\nC may change over time.'],
+    ]);
+    expect(neighborsWithContentPayload.data.edges.flatMap((edge) => [edge.source.content, edge.target.content])).toEqual([
+      '## A\n\nA establishes the baseline.',
+      '## B\n\nB references A and supports C.',
+      '## C\n\nC may change over time.',
+      '## A\n\nA establishes the baseline.',
+    ]);
+  });
+
+  it('T-U-008 selects chunk content in the PostgreSQL graph query store', async () => {
+    const queries: string[] = [];
+    const store = createPgGraphQueryStore({
+      async query(sql) {
+        queries.push(sql);
+        return { rows: [] };
+      },
+    });
+
+    await store.listNodes('instance-a');
+
+    expect(queries[0]).toContain('c.content,');
   });
 
   it('T-U-060 terminates traversal over cyclic graphs via visited-set cycle protection', async () => {
