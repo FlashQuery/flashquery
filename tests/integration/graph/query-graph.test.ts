@@ -591,6 +591,47 @@ describe.skipIf(!HAS_SUPABASE).sequential('query_graph public MCP integration', 
     ]);
   }, 120_000);
 
+  it('T-I-005/T-I-006/T-I-007 applies include_content defaults and overrides against live rows', async () => {
+    const seeded = await seedGraph(client);
+
+    const nodeDefault = parseToolJson<{ data: { node: GraphNodePayload } }>(
+      await graph.queryGraph({ action: 'node', chunk_id: seeded.root })
+    );
+    expect(nodeDefault.data.node.content).toBe('content for Root');
+
+    const nodeSuppressed = parseToolJson<{ data: { node: GraphNodePayload } }>(
+      await graph.queryGraph({ action: 'node', chunk_id: seeded.root, include_content: false })
+    );
+    expect(nodeSuppressed.data.node).toMatchObject({
+      chunk_id: seeded.root,
+      content: null,
+      chunk_summary: null,
+    });
+
+    const neighborsDefault = parseToolJson<{
+      data: { nodes: GraphNodePayload[]; edges: Array<{ source: GraphNodePayload; target: GraphNodePayload }> };
+    }>(
+      await graph.queryGraph({ action: 'neighbors', chunk_id: seeded.root, max_depth: 1 })
+    );
+    expect(neighborsDefault.data.nodes.every((node) => node.content === null)).toBe(true);
+    expect(neighborsDefault.data.edges.flatMap((edge) => [edge.source, edge.target]).every((node) => node.content === null)).toBe(true);
+
+    const neighborsWithContent = parseToolJson<{
+      data: { nodes: GraphNodePayload[]; edges: Array<{ source: GraphNodePayload; target: GraphNodePayload }> };
+    }>(
+      await graph.queryGraph({ action: 'neighbors', chunk_id: seeded.root, max_depth: 1, include_content: true })
+    );
+    expect(neighborsWithContent.data.nodes.map((node) => [node.chunk_id, node.content])).toEqual(
+      expect.arrayContaining([
+        [seeded.root, 'content for Root'],
+        [seeded.child, 'content for Child'],
+      ])
+    );
+    expect(neighborsWithContent.data.edges.flatMap((edge) => [edge.source.content, edge.target.content])).toEqual(
+      expect.arrayContaining(['content for Root', 'content for Child'])
+    );
+  }, 120_000);
+
   it('T-I-009 returns canonical unsupported expected-error envelope when graph is disabled', async () => {
     const disabledGraph = captureGraphServer(configForTest(false));
 

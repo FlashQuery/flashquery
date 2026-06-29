@@ -7,6 +7,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { FM } from '../../../src/constants/frontmatter-fields.js';
 import { computeVersionToken } from '../../../src/mcp/utils/document-version.js';
 import { registerDocumentTools } from '../../../src/mcp/tools/documents.js';
+import { registerGraphTools } from '../../../src/mcp/tools/graph.js';
 import {
   createEmbeddingSearchHarness,
   destroyEmbeddingSearchHarness,
@@ -21,6 +22,10 @@ interface CapturedDocumentServer {
   getDocument(params: Record<string, unknown>): Promise<unknown>;
 }
 
+interface CapturedGraphServer {
+  queryGraph(params: Record<string, unknown>): Promise<unknown>;
+}
+
 function captureDocumentServer(harness: EmbeddingSearchHarness): CapturedDocumentServer {
   const handlers: Record<string, (params: Record<string, unknown>) => Promise<unknown>> = {};
   const server = {
@@ -31,6 +36,19 @@ function captureDocumentServer(harness: EmbeddingSearchHarness): CapturedDocumen
   registerDocumentTools(server, harness.config);
   return {
     getDocument: (params) => handlers.get_document!(params),
+  };
+}
+
+function captureGraphServer(harness: EmbeddingSearchHarness): CapturedGraphServer {
+  const handlers: Record<string, (params: Record<string, unknown>) => Promise<unknown>> = {};
+  const server = {
+    registerTool: (name: string, _cfg: unknown, handler: (params: Record<string, unknown>) => Promise<unknown>) => {
+      handlers[name] = handler;
+    },
+  } as unknown as McpServer;
+  registerGraphTools(server, { ...harness.config, graph: { enabled: true } });
+  return {
+    queryGraph: (params) => handlers.query_graph!(params),
   };
 }
 
@@ -105,11 +123,25 @@ async function insertDocument(input: {
 
 async function addGraphNodeMetadata(
   harness: EmbeddingSearchHarness,
-  input: { chunkId: string; questionStatus?: string | null; communityId?: string | null; communityLabel?: string | null }
+  input: {
+    chunkId: string;
+    questionStatus?: string | null;
+    communityId?: string | null;
+    communityLabel?: string | null;
+    chunkSummary?: string | null;
+    analyzedAt?: string | null;
+    analyzedContentHash?: string | null;
+  }
 ): Promise<void> {
   await harness.client.query(
     `UPDATE fqc_graph_nodes
-     SET question_status = $3, community_id = $4, community_label = $5, community_summary = $5
+     SET question_status = $3,
+         community_id = $4,
+         community_label = $5,
+         community_summary = $5,
+         chunk_summary = $6,
+         analyzed_at = $7::timestamptz,
+         analyzed_content_hash = $8
      WHERE instance_id = $1 AND chunk_id = $2`,
     [
       harness.config.instance.id,
@@ -117,6 +149,9 @@ async function addGraphNodeMetadata(
       input.questionStatus ?? null,
       input.communityId ?? null,
       input.communityLabel ?? null,
+      input.chunkSummary ?? null,
+      input.analyzedAt ?? null,
+      input.analyzedContentHash ?? null,
     ]
   );
 }
@@ -351,6 +386,118 @@ describe.skipIf(!HAS_SUPABASE).sequential('get_document graph output integration
       'Graph.md',
     ]);
     expect(withInactive.connections.overall.find((connection) => connection.target.path === 'Archived.md')?.target.document_status).toBe('archived');
+  }, 120_000);
+
+  it('T-I-001/T-I-002/T-I-003/T-I-004 returns promoted target health fields and community follow-up', async () => {
+    harness = await createEmbeddingSearchHarness({
+      instanceId: 'get-document-graph-health-fields-it',
+      entries: [{ name: ENTRY_PRIMARY }],
+    });
+    const docs = captureDocumentServer(harness);
+    const graph = captureGraphServer(harness);
+    const source = await insertDocument({ harness, path: 'Source.md', title: 'Source', vector: [1, 0, 0] });
+    const fresh = await insertDocument({ harness, path: 'Fresh.md', title: 'Fresh', vector: [0, 1, 0] });
+    const stale = await insertDocument({ harness, path: 'Stale.md', title: 'Stale', vector: [0, 0, 1] });
+    const unanalyzed = await insertDocument({ harness, path: 'Unanalyzed.md', title: 'Unanalyzed', vector: [0.5, 0.5, 0] });
+    const freshHash = `hash-${fresh.chunkId}`;
+
+    await addGraphNodeMetadata(harness, {
+      chunkId: fresh.chunkId,
+      questionStatus: 'open',
+      communityId: 'comm-health',
+      communityLabel: 'Health',
+      chunkSummary: 'Fresh target summary',
+      analyzedAt: '2026-06-29T13:00:00.000Z',
+      analyzedContentHash: freshHash,
+    });
+    await addGraphNodeMetadata(harness, {
+      chunkId: stale.chunkId,
+      questionStatus: 'answered',
+      communityId: 'comm-stale',
+      communityLabel: 'Stale',
+      chunkSummary: 'Stale target summary',
+      analyzedAt: '2026-06-29T14:00:00.000Z',
+      analyzedContentHash: 'old-analysis-hash',
+    });
+    await addGraphEdge(harness, {
+      sourceChunkId: source.chunkId,
+      targetChunkId: fresh.chunkId,
+      relation: 'supports',
+      confidenceScore: 0.93,
+      reasoning: 'fresh health target',
+    });
+    await addGraphEdge(harness, {
+      sourceChunkId: source.chunkId,
+      targetChunkId: stale.chunkId,
+      relation: 'references',
+      confidenceScore: 0.82,
+      reasoning: 'stale health target',
+    });
+    await addGraphEdge(harness, {
+      sourceChunkId: source.chunkId,
+      targetChunkId: unanalyzed.chunkId,
+      relation: 'mentions',
+      confidenceScore: 0.71,
+      reasoning: 'unanalyzed health target',
+    });
+
+    const payload = parseToolJson<{
+      connections: {
+        overall: Array<{
+          relation?: string;
+          stale?: boolean;
+          question_status?: string | null;
+          community_label?: string | null;
+          target: {
+            chunk_id: string;
+            path: string;
+            content?: string;
+            chunk_summary?: string | null;
+            stale?: boolean;
+            analyzed_at?: string | null;
+            community_id?: string | null;
+          };
+        }>;
+      };
+    }>(await docs.getDocument({
+      identifiers: 'Source.md',
+      include: ['connections'],
+      connections: { graph_limit_per_chunk: 10, embedding_names: [ENTRY_PRIMARY] },
+    }));
+
+    const byPath = new Map(payload.connections.overall.map((connection) => [connection.target.path, connection]));
+    expect(byPath.get('Fresh.md')).toMatchObject({
+      relation: 'supports',
+      stale: false,
+      question_status: 'open',
+      community_label: 'Health',
+      target: {
+        chunk_id: fresh.chunkId,
+        content: 'Body for Fresh',
+        chunk_summary: 'Fresh target summary',
+        stale: false,
+        analyzed_at: '2026-06-29T13:00:00+00:00',
+        community_id: 'comm-health',
+      },
+    });
+    expect(byPath.get('Stale.md')?.target).toMatchObject({
+      chunk_summary: 'Stale target summary',
+      stale: true,
+      analyzed_at: '2026-06-29T14:00:00+00:00',
+      community_id: 'comm-stale',
+    });
+    expect(byPath.get('Unanalyzed.md')?.target).toMatchObject({
+      chunk_summary: null,
+      stale: true,
+      analyzed_at: null,
+      community_id: null,
+    });
+
+    const members = parseToolJson<{ data: { community_id: string | null; members: Array<{ chunk_id: string }> } }>(
+      await graph.queryGraph({ action: 'community_members', community_id: byPath.get('Fresh.md')?.target.community_id })
+    );
+    expect(members.data).toMatchObject({ community_id: 'comm-health' });
+    expect(members.data.members.map((member) => member.chunk_id)).toContain(fresh.chunkId);
   }, 120_000);
 
   it('T-I-027/T-I-039 preserves legacy limit_per_chunk unless graph-aware options are present', async () => {
