@@ -11,6 +11,10 @@ interface DocumentConnectionTarget {
   heading_path?: string;
   content?: string;
   document_status?: string;
+  chunk_summary?: string | null;
+  stale?: boolean;
+  analyzed_at?: string | null;
+  community_id?: string | null;
 }
 
 interface DocumentConnection {
@@ -83,6 +87,10 @@ interface GraphTargetForConnection extends DocumentConnectionTarget {
   document_status: string;
   question_status: string | null;
   community_label: string | null;
+  chunk_summary: string | null;
+  stale: boolean;
+  analyzed_at: string | null;
+  community_id: string | null;
 }
 
 type SourceChunkMetadata = {
@@ -313,6 +321,10 @@ export function buildGraphPrimaryConnections(input: {
         path: target.path,
         title: target.title,
         document_status: target.document_status,
+        chunk_summary: target.chunk_summary,
+        stale: target.stale,
+        analyzed_at: target.analyzed_at,
+        community_id: target.community_id,
         ...(target.heading_path ? { heading_path: target.heading_path } : {}),
         ...(target.content ? { content: target.content } : {}),
       },
@@ -585,7 +597,7 @@ async function buildGraphDocumentConnections(input: {
   if (targetChunkIds.length > 0) {
     const { data: targetRows, error: targetError } = await input.supabase
       .from('fqc_chunks')
-      .select('id, document_id, heading_path, content')
+      .select('id, document_id, heading_path, content, content_hash')
       .eq('instance_id', input.config.instance.id)
       .in('id', targetChunkIds) as {
         data: Array<Record<string, unknown>> | null;
@@ -618,10 +630,17 @@ async function buildGraphDocumentConnections(input: {
       }
     }
 
-    const nodeMetadata = new Map<string, { question_status: string | null; community_label: string | null }>();
+    const nodeMetadata = new Map<string, {
+      question_status: string | null;
+      community_label: string | null;
+      chunk_summary: string | null;
+      community_id: string | null;
+      analyzed_at: string | null;
+      analyzed_content_hash: string | null;
+    }>();
     const { data: nodeRows, error: nodeError } = await input.supabase
       .from('fqc_graph_nodes')
-      .select('chunk_id, question_status, community_label')
+      .select('chunk_id, question_status, community_label, chunk_summary, community_id, analyzed_at, analyzed_content_hash')
       .eq('instance_id', input.config.instance.id)
       .in('chunk_id', targetChunkIds) as {
         data: Array<Record<string, unknown>> | null;
@@ -635,6 +654,10 @@ async function buildGraphDocumentConnections(input: {
       nodeMetadata.set(chunkId, {
         question_status: typeof row.question_status === 'string' ? row.question_status : null,
         community_label: typeof row.community_label === 'string' ? row.community_label : null,
+        chunk_summary: typeof row.chunk_summary === 'string' ? row.chunk_summary : null,
+        community_id: typeof row.community_id === 'string' ? row.community_id : null,
+        analyzed_at: typeof row.analyzed_at === 'string' ? row.analyzed_at : null,
+        analyzed_content_hash: typeof row.analyzed_content_hash === 'string' ? row.analyzed_content_hash : null,
       });
     }
 
@@ -644,6 +667,8 @@ async function buildGraphDocumentConnections(input: {
       const document = docs.get(documentId);
       if (!chunkId || !documentId || !document) continue;
       const metadata = nodeMetadata.get(chunkId);
+      const contentHash = typeof row.content_hash === 'string' ? row.content_hash : null;
+      const analyzedContentHash = metadata?.analyzed_content_hash ?? null;
       targets.set(chunkId, {
         chunk_id: chunkId,
         document_id: documentId,
@@ -652,6 +677,10 @@ async function buildGraphDocumentConnections(input: {
         document_status: document.status,
         question_status: metadata?.question_status ?? null,
         community_label: metadata?.community_label ?? null,
+        chunk_summary: metadata?.chunk_summary ?? null,
+        stale: !analyzedContentHash || analyzedContentHash !== contentHash,
+        analyzed_at: metadata?.analyzed_at ?? null,
+        community_id: metadata?.community_id ?? null,
         ...(typeof row.heading_path === 'string' ? { heading_path: row.heading_path } : {}),
         ...(typeof row.content === 'string' ? { content: row.content } : {}),
       });

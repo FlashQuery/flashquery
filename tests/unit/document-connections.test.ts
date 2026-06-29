@@ -18,7 +18,9 @@ function resolvedQuery(data: unknown) {
   const query = {
     select: vi.fn(() => query),
     eq: vi.fn(() => query),
+    in: vi.fn(() => query),
     not: vi.fn(() => query),
+    or: vi.fn(() => query),
     then: (resolve: (value: unknown) => void) => Promise.resolve({ data, error: null }).then(resolve),
   };
   return query;
@@ -171,6 +173,10 @@ describe('document connection builder', () => {
           document_status: 'active',
           question_status: 'open',
           community_label: 'Claims',
+          chunk_summary: 'Active claim summary',
+          stale: false,
+          analyzed_at: '2026-06-29T10:00:00.000Z',
+          community_id: 'community-claims',
         }],
         ['target-archived', {
           chunk_id: 'target-archived',
@@ -196,10 +202,171 @@ describe('document connection builder', () => {
       question_status: 'open',
       community_label: 'Claims',
       target: {
+        chunk_id: 'target-active',
+        document_id: 'doc-active',
+        path: 'Active.md',
+        title: 'Active',
+        heading_path: 'Active Heading',
+        content: 'active body',
         document_status: 'active',
+        chunk_summary: 'Active claim summary',
+        stale: false,
+        analyzed_at: '2026-06-29T10:00:00.000Z',
+        community_id: 'community-claims',
       },
     });
     expect(result.source_chunks[0]?.connections).toHaveLength(1);
+  });
+
+  it('degrades graph-primary target health fields for unanalyzed targets', () => {
+    const result = buildGraphPrimaryConnections({
+      sourceChunkIds: ['source-a'],
+      sourceChunkMetadata: new Map(),
+      edges: [
+        {
+          id: 'edge-unanalyzed',
+          source_chunk_id: 'source-a',
+          target_chunk_id: 'target-unanalyzed',
+          relation: 'references',
+          confidence_score: 0.71,
+          reasoning: 'nearby note',
+          status: 'active',
+        },
+      ],
+      targets: new Map([
+        ['target-unanalyzed', {
+          chunk_id: 'target-unanalyzed',
+          document_id: 'doc-unanalyzed',
+          path: 'Unanalyzed.md',
+          title: 'Unanalyzed',
+          document_status: 'active',
+          question_status: null,
+          community_label: null,
+          chunk_summary: null,
+          stale: true,
+          analyzed_at: null,
+          community_id: null,
+        }],
+      ]),
+      options: { graph_limit_per_chunk: 5 },
+    });
+
+    expect(result.overall[0]?.target).toMatchObject({
+      chunk_id: 'target-unanalyzed',
+      chunk_summary: null,
+      stale: true,
+      analyzed_at: null,
+      community_id: null,
+    });
+  });
+
+  it('assembles target health fields from graph node metadata and content hashes', async () => {
+    const sourceChunksQuery = resolvedQuery([
+      { id: 'source-a', heading_path: 'Source', breadcrumb: 'Source' },
+    ]);
+    const edgesQuery = resolvedQuery([
+      {
+        id: 'edge-fresh',
+        source_chunk_id: 'source-a',
+        target_chunk_id: 'target-fresh',
+        relation: 'supports',
+        confidence_score: 0.9,
+        reasoning: 'fresh analysis',
+        status: 'active',
+      },
+      {
+        id: 'edge-stale',
+        source_chunk_id: 'source-a',
+        target_chunk_id: 'target-stale',
+        relation: 'references',
+        confidence_score: 0.8,
+        reasoning: 'changed analysis',
+        status: 'active',
+      },
+      {
+        id: 'edge-missing',
+        source_chunk_id: 'source-a',
+        target_chunk_id: 'target-missing',
+        relation: 'mentions',
+        confidence_score: 0.7,
+        reasoning: null,
+        status: 'active',
+      },
+    ]);
+    const targetChunksQuery = resolvedQuery([
+      { id: 'target-fresh', document_id: 'doc-fresh', heading_path: 'Fresh', content: 'fresh body', content_hash: 'hash-fresh' },
+      { id: 'target-stale', document_id: 'doc-stale', heading_path: 'Stale', content: 'stale body', content_hash: 'hash-current' },
+      { id: 'target-missing', document_id: 'doc-missing', heading_path: 'Missing', content: 'missing body', content_hash: 'hash-missing' },
+    ]);
+    const documentsQuery = resolvedQuery([
+      { id: 'doc-fresh', path: 'Fresh.md', title: 'Fresh', status: 'active' },
+      { id: 'doc-stale', path: 'Stale.md', title: 'Stale', status: 'active' },
+      { id: 'doc-missing', path: 'Missing.md', title: 'Missing', status: 'active' },
+    ]);
+    const nodeMetadataQuery = resolvedQuery([
+      {
+        chunk_id: 'target-fresh',
+        question_status: 'answered',
+        community_label: 'Evidence',
+        chunk_summary: 'fresh summary',
+        community_id: 'community-fresh',
+        analyzed_at: '2026-06-29T11:00:00.000Z',
+        analyzed_content_hash: 'hash-fresh',
+      },
+      {
+        chunk_id: 'target-stale',
+        question_status: 'open',
+        community_label: 'References',
+        chunk_summary: 'stale summary',
+        community_id: 'community-stale',
+        analyzed_at: '2026-06-29T12:00:00.000Z',
+        analyzed_content_hash: 'hash-old',
+      },
+    ]);
+
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'fqc_chunks') {
+          const call = supabase.from.mock.calls.filter(([calledTable]) => calledTable === 'fqc_chunks').length;
+          return call === 1 ? sourceChunksQuery : targetChunksQuery;
+        }
+        if (table === 'fqc_graph_edges') return edgesQuery;
+        if (table === 'fqc_documents') return documentsQuery;
+        if (table === 'fqc_graph_nodes') return nodeMetadataQuery;
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    };
+
+    const result = await buildDocumentConnections({
+      supabase: supabase as never,
+      config: makeConfig(),
+      sourceDocumentId: 'source-doc',
+      options: { graph_limit_per_chunk: 10 },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(targetChunksQuery.select).toHaveBeenCalledWith('id, document_id, heading_path, content, content_hash');
+    expect(nodeMetadataQuery.select).toHaveBeenCalledWith('chunk_id, question_status, community_label, chunk_summary, community_id, analyzed_at, analyzed_content_hash');
+
+    const byChunkId = new Map(result.result?.overall.map((connection) => [connection.target.chunk_id, connection]));
+    expect(byChunkId.get('target-fresh')?.target).toMatchObject({
+      chunk_summary: 'fresh summary',
+      stale: false,
+      analyzed_at: '2026-06-29T11:00:00.000Z',
+      community_id: 'community-fresh',
+    });
+    expect(byChunkId.get('target-stale')?.target).toMatchObject({
+      chunk_summary: 'stale summary',
+      stale: true,
+      analyzed_at: '2026-06-29T12:00:00.000Z',
+      community_id: 'community-stale',
+    });
+    expect(byChunkId.get('target-missing')?.target).toMatchObject({
+      chunk_summary: null,
+      stale: true,
+      analyzed_at: null,
+      community_id: null,
+    });
   });
 
   it('appends embedding-only neighbors only when include_embedding_only is enabled', () => {
