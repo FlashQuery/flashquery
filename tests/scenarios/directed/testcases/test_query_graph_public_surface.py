@@ -9,7 +9,7 @@ Scenario:
     4. Verify invalid parameter combinations return expected-error envelopes.
     Cleanup is automatic.
 
-Coverage points: D-GR-02, T-S-002
+Coverage points: D-GR-02, D-GR-07, T-S-002, T-S-001
 """
 from __future__ import annotations
 
@@ -248,6 +248,36 @@ def run_test(args: argparse.Namespace) -> TestRun:
             passed=all_actions_ok and all(data_checks.values()),
             detail="" if all_actions_ok and all(data_checks.values()) else json.dumps({"actions": action_results, "checks": data_checks}, sort_keys=True),
             timing_ms=sum(getattr(result, "timing_ms", 0) for result in raw_results),
+        )
+
+        node_default = ctx.client.call_tool("query_graph", action="node", chunk_id=chunks["Alpha"])
+        node_default_payload = _payload(node_default)
+        node_suppressed = ctx.client.call_tool("query_graph", action="node", chunk_id=chunks["Alpha"], include_content=False)
+        node_suppressed_payload = _payload(node_suppressed)
+        neighbors_default = ctx.client.call_tool("query_graph", action="neighbors", chunk_id=chunks["Alpha"], max_depth=1)
+        neighbors_default_payload = _payload(neighbors_default)
+        neighbors_with_content = ctx.client.call_tool("query_graph", action="neighbors", chunk_id=chunks["Alpha"], max_depth=1, include_content=True)
+        neighbors_with_content_payload = _payload(neighbors_with_content)
+        default_nodes = neighbors_default_payload.get("data", {}).get("nodes", [])
+        content_nodes = neighbors_with_content_payload.get("data", {}).get("nodes", [])
+        content_checks = {
+            "node default includes content": node_default_payload.get("data", {}).get("node", {}).get("content") == f"Alpha content {run.run_id}",
+            "node false suppresses content": node_suppressed_payload.get("data", {}).get("node", {}).get("content") is None,
+            "bulk default suppresses content": bool(default_nodes) and all(node.get("content") is None for node in default_nodes),
+            "bulk true includes content": any(node.get("content") == f"Alpha content {run.run_id}" for node in content_nodes)
+            and any(node.get("content") == f"Beta content {run.run_id}" for node in content_nodes),
+        }
+        run.step(
+            "D-GR-07 query_graph content defaults and overrides are public through MCP",
+            passed=node_default.ok and node_suppressed.ok and neighbors_default.ok and neighbors_with_content.ok and all(content_checks.values()),
+            detail="" if all(content_checks.values()) else json.dumps({
+                "checks": content_checks,
+                "node_default": node_default_payload,
+                "node_suppressed": node_suppressed_payload,
+                "neighbors_default": neighbors_default_payload,
+                "neighbors_with_content": neighbors_with_content_payload,
+            }, sort_keys=True),
+            timing_ms=node_default.timing_ms + node_suppressed.timing_ms + neighbors_default.timing_ms + neighbors_with_content.timing_ms,
         )
 
         invalid = ctx.client.call_tool("query_graph", action="neighbors")

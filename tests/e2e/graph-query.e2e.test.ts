@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { startMcpServerFixture, stopMcpServerFixture } from '../helpers/mcp-server-fixture.js';
@@ -9,6 +10,7 @@ import { HAS_SUPABASE } from '../helpers/test-env.js';
 
 const E2E_INSTANCE_ID = 'e2e-shutdown-test';
 const VAULT_E2E = resolve(process.cwd(), 'tests/fixtures/vault-e2e');
+const GRAPH_CONFIG = resolve(process.cwd(), 'tests/fixtures/flashquery.graph.e2e.yaml');
 
 let client: Client;
 let transport: StdioClientTransport;
@@ -92,4 +94,87 @@ describe.skipIf(!HAS_SUPABASE).sequential('graph query MCP E2E', () => {
     expect(result.isError).not.toBe(true);
     expectBoundedPublicPayload(payload);
   }, 30_000);
+});
+
+describe.skipIf(!HAS_SUPABASE).sequential('graph query MCP E2E with graph rows', () => {
+  let graphClient: Client;
+  let graphTransport: StdioClientTransport;
+
+  beforeAll(async () => {
+    await rm(VAULT_E2E, { recursive: true, force: true });
+    await cleanupTestRows(await setupTestSupabase(), E2E_INSTANCE_ID);
+    const fixture = await startMcpServerFixture({ configPath: GRAPH_CONFIG });
+    graphClient = fixture.client;
+    graphTransport = fixture.transport;
+  }, 60_000);
+
+  afterAll(async () => {
+    if (graphClient && graphTransport) {
+      await stopMcpServerFixture(graphClient, graphTransport);
+    }
+    await rm(VAULT_E2E, { recursive: true, force: true }).catch(() => undefined);
+    await cleanupTestRows(await setupTestSupabase(), E2E_INSTANCE_ID).catch(() => undefined);
+  });
+
+  it('T-E-002 returns node content defaults and bulk include_content overrides through MCP transport', async () => {
+    const pgClient = await setupTestSupabase();
+    const sourceDoc = randomUUID();
+    const targetDoc = randomUUID();
+    const sourceChunk = randomUUID();
+    const targetChunk = randomUUID();
+    await pgClient.query(
+      `INSERT INTO fqc_documents (id, instance_id, path, title, tags, status)
+       VALUES ($1, $2, 'GraphNode.md', 'Graph Node', ARRAY['graph-e2e'], 'active'),
+              ($3, $2, 'GraphNeighbor.md', 'Graph Neighbor', ARRAY['graph-e2e'], 'active')`,
+      [sourceDoc, E2E_INSTANCE_ID, targetDoc]
+    );
+    await pgClient.query(
+      `INSERT INTO fqc_chunks (id, instance_id, document_id, heading_path, heading_level, breadcrumb, content, content_hash, chunk_index)
+       VALUES ($1, $2, $3, 'Graph Node', 1, 'Graph Node', 'E2E graph node content', 'hash-node', 0),
+              ($4, $2, $5, 'Graph Neighbor', 1, 'Graph Neighbor', 'E2E graph neighbor content', 'hash-neighbor', 0)`,
+      [sourceChunk, E2E_INSTANCE_ID, sourceDoc, targetChunk, targetDoc]
+    );
+    await pgClient.query(
+      `INSERT INTO fqc_graph_nodes (chunk_id, instance_id, provenance_basis, analyzed_content_hash, analyzed_at)
+       VALUES ($1, $2, 'source:e2e', 'hash-node', '2026-06-29T00:00:00Z'::timestamptz),
+              ($3, $2, 'source:e2e-neighbor', 'hash-neighbor', '2026-06-29T00:00:00Z'::timestamptz)`,
+      [sourceChunk, E2E_INSTANCE_ID, targetChunk]
+    );
+    await pgClient.query(
+      `INSERT INTO fqc_graph_edges (instance_id, source_chunk_id, target_chunk_id, relation, confidence, confidence_score, status)
+       VALUES ($1, $2, $3, 'references', 'EXTRACTED', 1, 'active')`,
+      [E2E_INSTANCE_ID, sourceChunk, targetChunk]
+    );
+    await pgClient.end().catch(() => undefined);
+
+    const node = await graphClient.callTool({
+      name: 'query_graph',
+      arguments: { action: 'node', chunk_id: sourceChunk },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    const nodePayload = parseToolJson<{ data: { node: { content: string | null } } }>(node);
+    expect(nodePayload.data.node.content).toBe('E2E graph node content');
+
+    const nodeSuppressed = await graphClient.callTool({
+      name: 'query_graph',
+      arguments: { action: 'node', chunk_id: sourceChunk, include_content: false },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(parseToolJson<{ data: { node: { content: string | null } } }>(nodeSuppressed).data.node.content).toBeNull();
+
+    const neighborsDefault = await graphClient.callTool({
+      name: 'query_graph',
+      arguments: { action: 'neighbors', chunk_id: sourceChunk, max_depth: 1 },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    const defaultPayload = parseToolJson<{ data: { nodes: Array<{ content: string | null }> } }>(neighborsDefault);
+    expect(defaultPayload.data.nodes.every((entry) => entry.content === null)).toBe(true);
+
+    const neighborsWithContent = await graphClient.callTool({
+      name: 'query_graph',
+      arguments: { action: 'neighbors', chunk_id: sourceChunk, max_depth: 1, include_content: true },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    const contentPayload = parseToolJson<{ data: { nodes: Array<{ content: string | null }> } }>(neighborsWithContent);
+    expect(contentPayload.data.nodes.map((entry) => entry.content)).toEqual(
+      expect.arrayContaining(['E2E graph node content', 'E2E graph neighbor content'])
+    );
+    expectBoundedPublicPayload(contentPayload);
+  }, 60_000);
 });

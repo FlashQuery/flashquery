@@ -23,6 +23,8 @@ Directed public graph workflows for Phase 173 hardening.
 | D-GR-04 | `get_document` returns graph summary, graph-primary connections, and chunk drill-down IDs. | test_graph_get_document_summary | 2026-06-24 | 2026-06-24 |
 | D-GR-05 | Public `fq_processing` transitions keep graph summaries bounded for full, embedded, and none levels. | test_graph_processing_levels | 2026-06-24 | 2026-06-24 |
 | D-GR-06 | Disabled graph and Tier 1-only graph degrade cleanly with discoverable warnings/remediation. | test_graph_disabled_and_partial | 2026-06-24 | 2026-06-24 |
+| D-GR-07 | Public `query_graph` content defaults and `include_content` overrides are visible through MCP. | test_query_graph_public_surface | 2026-06-29 | 2026-06-29 |
+| D-GR-08 | Public `get_document` connection targets expose promoted health fields and returned `community_id` works in `query_graph`. | test_graph_get_document_summary | 2026-06-29 | 2026-06-29 |
 
 ## Phase 128 Legacy Surface Final Audit
 

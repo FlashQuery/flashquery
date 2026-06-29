@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
-"""Directed get_document graph summary and connections coverage (D-GR-04)."""
+"""Directed get_document graph summary and connections coverage (D-GR-04, D-GR-08)."""
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
+
+try:
+    import psycopg
+except Exception:  # pragma: no cover
+    psycopg = None  # type: ignore[assignment]
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
@@ -37,6 +43,98 @@ def _graph_config() -> dict[str, Any]:
         ],
         "graph": {"enabled": True, "embedding_name": embedding_name},
     }
+
+
+def _database_url() -> str:
+    value = os.environ.get("DATABASE_URL")
+    if not value:
+        env_path = Path(__file__).resolve().parents[4] / ".env.test"
+        if env_path.exists():
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                if line.startswith("DATABASE_URL="):
+                    value = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+    if not value:
+        raise RuntimeError("DATABASE_URL is required for graph scenario verification")
+    return value
+
+
+def _seed_promoted_connection(source_id: str, target_id: str, run_id: str) -> dict[str, str]:
+    if psycopg is None:
+        raise RuntimeError("psycopg is required for graph scenario verification")
+    with psycopg.connect(_database_url()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id::text, instance_id
+                FROM fqc_chunks
+                WHERE document_id = %s::uuid
+                ORDER BY chunk_index
+                LIMIT 1
+                """,
+                (source_id,),
+            )
+            source_row = cur.fetchone()
+            cur.execute(
+                """
+                SELECT id::text, instance_id, content_hash
+                FROM fqc_chunks
+                WHERE document_id = %s::uuid
+                ORDER BY chunk_index
+                LIMIT 1
+                """,
+                (target_id,),
+            )
+            target_row = cur.fetchone()
+            if source_row is None or target_row is None:
+                raise RuntimeError("Expected source and target chunks after sync")
+            source_chunk, instance_id = str(source_row[0]), str(source_row[1])
+            target_chunk, target_instance_id, target_hash = str(target_row[0]), str(target_row[1]), str(target_row[2])
+            if instance_id != target_instance_id:
+                raise RuntimeError("Source and target chunks belong to different instances")
+            cur.execute(
+                """
+                INSERT INTO fqc_graph_nodes (
+                  chunk_id, instance_id, question_status, community_id, community_label,
+                  chunk_summary, analyzed_content_hash, analyzed_at
+                )
+                VALUES
+                  (%s, %s, NULL, NULL, NULL, NULL, NULL, NULL),
+                  (%s, %s, 'open', %s, 'Directed Cluster', %s, %s, '2026-06-29T00:00:00Z'::timestamptz)
+                ON CONFLICT (chunk_id) DO UPDATE
+                SET question_status = EXCLUDED.question_status,
+                    community_id = EXCLUDED.community_id,
+                    community_label = EXCLUDED.community_label,
+                    chunk_summary = EXCLUDED.chunk_summary,
+                    analyzed_content_hash = EXCLUDED.analyzed_content_hash,
+                    analyzed_at = EXCLUDED.analyzed_at
+                """,
+                (
+                    source_chunk,
+                    instance_id,
+                    target_chunk,
+                    instance_id,
+                    f"comm-directed-{run_id}",
+                    f"Directed target summary {run_id}",
+                    target_hash,
+                ),
+            )
+            cur.execute(
+                """
+                INSERT INTO fqc_graph_edges (
+                  instance_id, source_chunk_id, target_chunk_id, relation,
+                  confidence, confidence_score, reasoning, model, status
+                )
+                VALUES (%s, %s, %s, 'supports', 'INFERRED', 0.88, 'directed promoted fields', 'mock', 'active')
+                """,
+                (instance_id, source_chunk, target_chunk),
+            )
+            conn.commit()
+            return {
+                "source_chunk": source_chunk,
+                "target_chunk": target_chunk,
+                "community_id": f"comm-directed-{run_id}",
+            }
 
 
 def _track(ctx: TestContext, path: str, payload: dict[str, Any]) -> None:
@@ -96,6 +194,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
         scan = ctx.client.call_tool("maintain_vault", action="sync", background=False)
         run.step("sync structural graph state", scan.ok, expectation_detail(scan) or scan.error or scan.text, scan.timing_ms, scan)
 
+        seeded: dict[str, str] = {}
+        try:
+            seeded = _seed_promoted_connection(source_id, str(target_payload.get("fq_id") or ""), run.run_id)
+            run.step("seed promoted graph connection target", passed=True, detail=json.dumps(seeded, sort_keys=True))
+        except Exception as exc:
+            run.step("seed promoted graph connection target", passed=False, detail=f"Exception: {exc}")
+            run.record_cleanup(ctx.cleanup_errors)
+            return run
+
         doc = ctx.client.call_tool(
             "get_document",
             identifiers=source_id,
@@ -118,6 +225,34 @@ def run_test(args: argparse.Namespace) -> TestRun:
             detail="" if all(checks.values()) else json.dumps({"checks": checks, "payload": doc_payload}, sort_keys=True),
             timing_ms=doc.timing_ms,
             tool_result=doc,
+        )
+
+        promoted_targets = [
+            connection.get("target", {})
+            for connection in connections.get("overall", [])
+            if isinstance(connection, dict)
+        ]
+        promoted = next((target for target in promoted_targets if target.get("chunk_id") == seeded.get("target_chunk")), {})
+        follow_up = ctx.client.call_tool("query_graph", action="community_members", community_id=promoted.get("community_id"))
+        follow_up_payload = _payload(follow_up)
+        members = follow_up_payload.get("data", {}).get("members", [])
+        promoted_checks = {
+            "chunk_summary": promoted.get("chunk_summary") == f"Directed target summary {run.run_id}",
+            "stale false": promoted.get("stale") is False,
+            "analyzed_at present": isinstance(promoted.get("analyzed_at"), str),
+            "community_id": promoted.get("community_id") == seeded.get("community_id"),
+            "community follow-up": any(member.get("chunk_id") == seeded.get("target_chunk") for member in members if isinstance(member, dict)),
+        }
+        run.step(
+            "D-GR-08 get_document promoted target fields and community follow-up are public through MCP",
+            passed=doc.ok and follow_up.ok and all(promoted_checks.values()),
+            detail="" if all(promoted_checks.values()) else json.dumps({
+                "checks": promoted_checks,
+                "promoted": promoted,
+                "follow_up": follow_up_payload,
+            }, sort_keys=True),
+            timing_ms=doc.timing_ms + follow_up.timing_ms,
+            tool_result=follow_up,
         )
 
         if ctx.server:

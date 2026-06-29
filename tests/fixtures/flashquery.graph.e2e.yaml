@@ -1,0 +1,47 @@
+instance:
+  id: 'e2e-shutdown-test'
+  name: 'E2E Graph Test'
+  vault:
+    path: vault-e2e
+    markdownExtensions:
+      - .md
+
+mcp:
+  transport: stdio
+  port: 3112
+
+supabase:
+  url: ${SUPABASE_URL}
+  service_role_key: ${SUPABASE_SERVICE_ROLE_KEY}
+  database_url: ${DATABASE_URL}
+
+llm:
+  providers:
+    - name: local-ollama
+      type: ollama
+      endpoint: http://localhost:11434
+  models: []
+  purposes: []
+
+graph:
+  enabled: true
+  embedding_name: graph_e2e_primary
+
+embeddings:
+  - name: graph_e2e_primary
+    dimensions: 768
+    endpoints:
+      - provider_name: local-ollama
+        model: nomic-embed-text
+
+git:
+  autoCommit: false
+  autoPush: false
+  remote: origin
+  branch: main
+
+logging:
+  level: info
+
+locking:
+  enabled: false
